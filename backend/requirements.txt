@@ -26,6 +26,13 @@ pytesseract==0.3.13
 Pillow==11.0.0
 pdf2image==1.17.0
 
+# PaddleOCR (Better Chinese OCR)
+# 版本鎖定以避免 ARM64 Docker 兼容性問題
+paddlepaddle==2.6.2
+paddleocr==2.8.1
+numpy<2.0.0
+opencv-python-headless>=4.5.0  # headless 版本避免 GUI 依賴問題
+
 # Utilities
 python-dotenv==1.0.1
 python-jose[cryptography]==3.3.0

@@ -10,7 +10,7 @@ import time
 from app.models.document import Document
 from app.models.ocr_result import DocumentOcrResult
 from app.models.ai_result import DocumentAiResult
-from app.lib.s3_service import upload_file_to_s3
+from app.lib.storage_service import storage_service
 from app.lib.ocr_service import extract_text_from_document
 from app.lib.ai_service import classify_document, extract_fields, generate_summary
 from app.config import settings
@@ -37,8 +37,8 @@ async def upload_document(file: UploadFile, db: Session) -> Document:
             detail=f"File size exceeds {settings.MAX_FILE_SIZE} bytes"
         )
 
-    # Upload to S3
-    file_url = await upload_file_to_s3(file.filename, file_content)
+    # Upload to storage (local or S3)
+    file_url = await storage_service.upload_file(file.filename, file_content)
 
     # Create document record
     document = Document(
@@ -72,13 +72,14 @@ async def process_document(document_id: UUID, db: Session) -> Document:
     try:
         # Step 1: OCR
         start_time = time.time()
-        ocr_text = await extract_text_from_document(document.file_url)
+        ocr_text, page_count = await extract_text_from_document(document.file_url)
         ocr_time = int((time.time() - start_time) * 1000)
 
         # Save OCR result
         ocr_result = DocumentOcrResult(
             document_id=document.id,
             raw_text=ocr_text,
+            page_count=page_count,
             ocr_service=settings.OCR_SERVICE,
             processing_time=ocr_time
         )
@@ -133,6 +134,13 @@ async def get_ai_result(document_id: UUID, db: Session) -> DocumentAiResult:
     """Get AI result for document"""
     return db.query(DocumentAiResult).filter(
         DocumentAiResult.document_id == document_id
+    ).first()
+
+
+async def get_ocr_result(document_id: UUID, db: Session) -> DocumentOcrResult:
+    """Get OCR result for document"""
+    return db.query(DocumentOcrResult).filter(
+        DocumentOcrResult.document_id == document_id
     ).first()
 
 

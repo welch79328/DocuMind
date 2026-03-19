@@ -78,6 +78,21 @@ async def get_ai_result(
     return result
 
 
+@router.get("/{document_id}/ocr-result")
+async def get_ocr_result(
+    document_id: UUID,
+    db: Session = Depends(get_db)
+):
+    """Get OCR result for a document"""
+    result = await document_service.get_ocr_result(document_id, db)
+    if not result:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="OCR result not found"
+        )
+    return result
+
+
 @router.get("/", response_model=DocumentListResponse)
 async def list_documents(
     skip: int = 0,

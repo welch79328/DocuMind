@@ -8,7 +8,7 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: ai_doc_demo
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -59,13 +59,14 @@ services:
       DEBUG: "true"
       PORT: 8000
     ports:
-      - "8000:8000"
+      - "8003:8000"
     depends_on:
       postgres:
         condition: service_healthy
     volumes:
       - ./backend:/app
       - /app/venv  # Exclude venv from mount
+      - ./uploads:/app/uploads  # Mount for local file storage
     networks:
       - ai-doc-network
     command: >

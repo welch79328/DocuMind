@@ -6,9 +6,10 @@ from pydantic import BaseModel, Field
 from datetime import datetime
 from typing import Optional
 from uuid import UUID
+from enum import Enum
 
 
-class DocumentStatus(BaseModel):
+class DocumentStatus(str, Enum):
     """Document status enum"""
 
     UPLOADED = "uploaded"

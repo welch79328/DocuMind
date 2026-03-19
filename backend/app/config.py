@@ -55,6 +55,10 @@ class Settings(BaseSettings):
     # Server
     PORT: int = 8000
 
+    # Storage Configuration
+    STORAGE_TYPE: str = "local"  # "local" or "s3"
+    LOCAL_STORAGE_PATH: str = "/app/uploads"  # Path for local storage
+
     class Config:
         env_file = ".env"
         case_sensitive = True

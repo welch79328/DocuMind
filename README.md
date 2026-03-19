@@ -101,7 +101,7 @@
 ```bash
 # 1. Clone 專案
 git clone <repo-url>
-cd AIDemo
+cd DocuMind
 
 # 2. 設定環境變數
 cp .env.docker.example .env
@@ -116,9 +116,9 @@ docker-compose up -d
 
 **訪問應用：**
 - 🎨 **前端**: http://localhost:3000
-- 🔗 **API 文檔**: http://localhost:8000/api/docs
-- 📊 **後端 API**: http://localhost:8000
-- 🗄️ **PostgreSQL**: localhost:5432
+- 🔗 **API 文檔**: http://localhost:8003/api/docs
+- 📊 **後端 API**: http://localhost:8003
+- 🗄️ **PostgreSQL**: localhost:5433
 
 **常用命令：**
 ```bash
@@ -149,7 +149,7 @@ make clean       # 清理所有容器和數據
 
 ```bash
 git clone <repo-url>
-cd AIDemo
+cd DocuMind
 ```
 
 #### 2. 設定後端 (Python + FastAPI)
@@ -179,15 +179,11 @@ alembic upgrade head
 uvicorn app.main:app --reload --port 8000
 ```
 
-#### 3. 設定前端 (Next.js)
+#### 3. 設定前端 (Vue 3)
 
 ```bash
 cd frontend
 npm install
-
-# 設定環境變數
-cp .env.local.example .env.local
-# 編輯 .env.local
 
 # 啟動前端
 npm run dev
@@ -196,61 +192,62 @@ npm run dev
 #### 4. 訪問應用
 
 - **前端**: http://localhost:3000
-- **後端 API**: http://localhost:8000/api
-- **API 文檔**: http://localhost:8000/api/docs
+- **後端 API**: http://localhost:8003/api
+- **API 文檔**: http://localhost:8003/api/docs
 
 ---
 
 ## 📋 環境變數
 
-### 後端 (.env)
+### 快速設定（推薦）
+
+**Docker 部署只需一個檔案：**
 
 ```bash
-# 資料庫
-DATABASE_URL="postgresql://postgres:postgres@localhost:5432/ai_doc_demo"
+# 1. 複製範例檔案
+cp .env.example .env
 
-# AWS S3 / Cloudflare R2
-S3_BUCKET="your-bucket-name"
-S3_REGION="us-east-1"
-S3_ACCESS_KEY="your-access-key"
-S3_SECRET_KEY="your-secret-key"
-S3_ENDPOINT_URL=""  # For Cloudflare R2
+# 2. 編輯設定（最小配置）
+nano .env
 
-# OpenAI
-OPENAI_API_KEY="sk-..."
-OPENAI_MODEL="gpt-4o"
-OPENAI_MODEL_MINI="gpt-4o-mini"
+# 只需填入以下內容即可啟動：
+STORAGE_TYPE=local          # 本地儲存（無需 S3）
+OCR_SERVICE=pytesseract     # 免費 OCR
+OPENAI_API_KEY=             # 留空（無法使用 AI 功能）
 
-# AWS Textract
-AWS_ACCESS_KEY_ID="your-aws-key"
-AWS_SECRET_ACCESS_KEY="your-aws-secret"
-AWS_REGION="us-east-1"
-
-# OCR Service
-OCR_SERVICE="textract"  # or "pytesseract"
-
-# Server
-PORT=8000
+# 3. 啟動服務
+docker-compose up -d
 ```
 
-### 前端 (.env.local)
-
+**完整功能需要 OpenAI API Key：**
 ```bash
-NEXT_PUBLIC_API_URL="http://localhost:8000/api"
+OPENAI_API_KEY=sk-proj-xxxxxxxx  # 取得：https://platform.openai.com/api-keys
 ```
+
+**詳細說明請參考：[ENV_GUIDE.md](./ENV_GUIDE.md)**
+
+---
+
+### 環境變數檔案說明
+
+| 檔案 | 用途 | 是否必需 |
+|------|------|---------|
+| `.env` | Docker 部署的唯一配置檔 | ✅ 必需 |
+| `.env.example` | 範例檔案 | 📄 參考 |
 
 ---
 
 ## 📂 專案結構
 
 ```
-AIDemo/
-├── frontend/                 # Next.js 前端
+DocuMind/
+├── frontend/                 # Vue 3 前端
 │   ├── src/
-│   │   ├── app/             # 頁面路由
-│   │   ├── components/      # React 元件
-│   │   ├── lib/             # 工具函式
-│   │   └── types/           # TypeScript 型別
+│   │   ├── views/           # 頁面組件
+│   │   ├── components/      # Vue 元件
+│   │   ├── router/          # 路由設定
+│   │   ├── assets/          # 靜態資源
+│   │   └── main.ts          # 應用入口
 │   └── package.json
 │
 ├── backend/                  # Python FastAPI 後端
