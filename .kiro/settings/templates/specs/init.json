@@ -1,0 +1,20 @@
+{
+  "name": "{{FEATURE_NAME}}",
+  "description": "{{PROJECT_DESCRIPTION}}",
+  "language": "zh-TW",
+  "created_at": "{{TIMESTAMP}}",
+  "updated_at": "{{TIMESTAMP}}",
+  "phase": "init",
+  "status": "draft",
+  "files": {
+    "requirements": "requirements.md",
+    "design": "design.md",
+    "tasks": "tasks.md",
+    "research": "research.md"
+  },
+  "implementation": {
+    "completed_tasks": [],
+    "in_progress_tasks": [],
+    "pending_tasks": []
+  }
+}

@@ -18,6 +18,11 @@ const router = createRouter({
       path: '/document/:id',
       name: 'document',
       component: () => import('../views/DocumentView.vue')
+    },
+    {
+      path: '/ocr-test',
+      name: 'ocr-test',
+      component: () => import('../views/OcrTestView.vue')
     }
   ]
 })

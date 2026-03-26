@@ -1,0 +1,46 @@
+{
+  "benchmark_date": "2026-03-25 (Placeholder)",
+  "status": "placeholder",
+  "note": "此為預置檔案。實際基準測試需要在有 OCR 工具的環境中執行 python tests/run_baseline_benchmark.py",
+  "system_info": {
+    "platform": "macOS",
+    "platform_version": "Darwin Kernel Version 23.2.0",
+    "platform_release": "23.2.0",
+    "architecture": "arm64",
+    "processor": "arm",
+    "python_version": "3.9.6",
+    "cpu": "Apple M1/M2 (需實際測試確認)",
+    "ocr_engines": {
+      "tesseract": "Not yet tested",
+      "paddleocr": "Not yet tested"
+    }
+  },
+  "ocr_service": "pytesseract (預設)",
+  "results": [
+    {
+      "file": "file:///app/data/建物謄本.jpg",
+      "status": "pending",
+      "note": "需要在有 OCR 環境中執行測試"
+    },
+    {
+      "file": "file:///app/data/建物土地謄本-杭州南路一段.pdf",
+      "status": "pending",
+      "note": "需要在有 OCR 環境中執行測試，並且需要先完成 PDF 的 ground truth 標註"
+    }
+  ],
+  "summary": {
+    "total_tests": 0,
+    "successful_tests": 0,
+    "failed_tests": 0,
+    "skipped_tests": 2,
+    "average_accuracy": 0.0,
+    "total_processing_time_seconds": 0.0
+  },
+  "instructions": {
+    "step_1": "確保 OCR 工具已安裝 (pip install paddleocr pytesseract pdf2image)",
+    "step_2": "確保 Tesseract 繁體中文語言包已安裝 (brew install tesseract tesseract-lang 或 apt-get install tesseract-ocr tesseract-ocr-chi-tra)",
+    "step_3": "完成 PDF 文件的 ground truth 標註",
+    "step_4": "執行: python tests/run_baseline_benchmark.py",
+    "step_5": "此檔案將被實際測試結果覆蓋"
+  }
+}

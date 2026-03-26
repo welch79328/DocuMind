@@ -5,7 +5,7 @@ Main application entry point
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api.v1 import documents, chat
+from app.api.v1 import documents, chat, ocr_test
 from app.config import settings
 
 # Create FastAPI app instance
@@ -29,6 +29,7 @@ app.add_middleware(
 # Include routers
 app.include_router(documents.router, prefix="/api/v1/documents", tags=["documents"])
 app.include_router(chat.router, prefix="/api/v1/chat", tags=["chat"])
+app.include_router(ocr_test.router, prefix="/api/v1/ocr", tags=["ocr-test"])
 
 
 @app.get("/")
