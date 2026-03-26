@@ -77,3 +77,8 @@ alembic/versions/*.pyc
 coverage/
 *.cover
 .hypothesis/
+
+# Temporary test data and results (root directory only)
+# Note: backend/data/ is kept for example files
+/data/
+/tests/
