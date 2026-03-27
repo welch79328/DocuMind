@@ -4,11 +4,9 @@ LLM Postprocessor Module
 使用 LLM (Claude/GPT) 進行智能 OCR 錯誤修正
 """
 
-import os
 import re
-import json
 from typing import Optional, Literal
-import asyncio
+from app.lib.llm_service import LLMService
 
 
 class LLMPostprocessor:
@@ -32,63 +30,21 @@ class LLMPostprocessor:
             model: 模型名稱，None 使用預設
             api_key: API 金鑰，None 從環境變數讀取
         """
+        # 使用統一的 LLMService
+        self.llm_service = LLMService(
+            provider=provider,
+            model=model,
+            api_key=api_key
+        )
+
+        # 保持向後兼容
         self.provider = provider
-        self.api_key = api_key or self._get_api_key()
+        self.model = self.llm_service.model
 
-        # 選擇模型
-        if model:
-            self.model = model
-        else:
-            self.model = self._get_default_model()
-
-        # 初始化客戶端
-        self.client = None
-        self._init_client()
-
-        # 統計
-        self.stats = {
-            "llm_calls": 0,
-            "tokens_used": 0,
-            "estimated_cost": 0.0
-        }
-
-    def _get_api_key(self) -> str:
-        """從環境變數獲取 API 金鑰"""
-        if self.provider == "anthropic":
-            key = os.getenv("ANTHROPIC_API_KEY")
-            if not key:
-                raise ValueError("ANTHROPIC_API_KEY 環境變數未設定")
-            return key
-        elif self.provider == "openai":
-            key = os.getenv("OPENAI_API_KEY")
-            if not key:
-                raise ValueError("OPENAI_API_KEY 環境變數未設定")
-            return key
-        else:
-            raise ValueError(f"不支援的提供商: {self.provider}")
-
-    def _get_default_model(self) -> str:
-        """獲取預設模型"""
-        if self.provider == "anthropic":
-            return "claude-3-5-haiku-20241022"  # 最便宜且快速
-        elif self.provider == "openai":
-            return "gpt-4o"  # 更強大的模型，準確率更高（成本約 15 倍，但效果顯著提升）
-        return ""
-
-    def _init_client(self):
-        """初始化 LLM 客戶端"""
-        try:
-            if self.provider == "anthropic":
-                from anthropic import Anthropic
-                self.client = Anthropic(api_key=self.api_key)
-            elif self.provider == "openai":
-                from openai import OpenAI
-                self.client = OpenAI(api_key=self.api_key)
-        except ImportError as e:
-            raise ImportError(
-                f"請安裝 {self.provider} SDK: "
-                f"pip install {'anthropic' if self.provider == 'anthropic' else 'openai'}"
-            )
+    @property
+    def stats(self):
+        """獲取統計資料（向後兼容）"""
+        return self.llm_service.get_stats()
 
     async def correct_full_text(
         self,
@@ -107,11 +63,18 @@ class LLMPostprocessor:
         Returns:
             (修正後文字, 統計資訊)
         """
+        # 使用詳細的提示詞（保持原有的高品質 prompt）
         prompt = self._build_full_text_prompt(ocr_text, doc_type)
 
-        corrected_text = await self._call_llm(prompt, max_tokens=3000, image_data=image_data)
+        # 調用 LLMService
+        corrected_text = await self.llm_service.call(
+            prompt=prompt,
+            image_data=image_data,
+            max_tokens=3000,
+            temperature=0.1
+        )
 
-        return corrected_text, self.stats.copy()
+        return corrected_text, self.stats
 
     async def correct_fields(
         self,
@@ -217,7 +180,7 @@ OCR 結果: "{candidate}"
 請直接輸出修正後的地號，格式為 XXXX-XXXX，不要解釋。
 如果無法修正，輸出 "INVALID"。"""
 
-        result = await self._call_llm(prompt, max_tokens=50)
+        result = await self.llm_service.call(prompt, max_tokens=50)
         result = result.strip().replace(" ", "")
 
         # 驗證格式
@@ -240,7 +203,7 @@ OCR 結果: "{candidate}"
 
 請直接輸出修正後的日期，不要解釋。"""
 
-        result = await self._call_llm(prompt, max_tokens=50)
+        result = await self.llm_service.call(prompt, max_tokens=50)
         return result.strip()
 
     async def _correct_owner(self, candidate: str) -> str:
@@ -256,7 +219,7 @@ OCR 結果: "{candidate}"
 
 請直接輸出修正後的姓名，不要解釋。"""
 
-        result = await self._call_llm(prompt, max_tokens=30)
+        result = await self.llm_service.call(prompt, max_tokens=30)
         return result.strip()
 
     async def _correct_area(self, candidate: str) -> str:
@@ -270,7 +233,7 @@ OCR 結果: "{candidate}"
 
 請直接輸出修正後的面積，不要解釋。"""
 
-        result = await self._call_llm(prompt, max_tokens=50)
+        result = await self.llm_service.call(prompt, max_tokens=50)
         return result.strip()
 
     def _apply_corrections(self, text: str, corrections: dict) -> str:
@@ -360,117 +323,6 @@ OCR 結果: "{candidate}"
 
         return prompt
 
-    async def _call_llm(self, prompt: str, max_tokens: int = 2000, image_data: Optional[str] = None) -> str:
-        """
-        調用 LLM API
-
-        Args:
-            prompt: 提示詞
-            max_tokens: 最大輸出 token 數
-            image_data: base64 編碼的圖片資料（可選）
-
-        Returns:
-            LLM 回應文字
-        """
-        self.stats["llm_calls"] += 1
-
-        try:
-            if self.provider == "anthropic":
-                # 構建消息內容
-                if image_data:
-                    # 多模態輸入（圖片 + 文字）
-                    content = [
-                        {
-                            "type": "image",
-                            "source": {
-                                "type": "base64",
-                                "media_type": "image/png",
-                                "data": image_data
-                            }
-                        },
-                        {
-                            "type": "text",
-                            "text": prompt
-                        }
-                    ]
-                else:
-                    # 純文字輸入
-                    content = prompt
-
-                response = self.client.messages.create(
-                    model=self.model,
-                    max_tokens=max_tokens,
-                    messages=[{
-                        "role": "user",
-                        "content": content
-                    }]
-                )
-
-                # 更新統計
-                self.stats["tokens_used"] += response.usage.input_tokens + response.usage.output_tokens
-
-                # 計算成本（Haiku: $0.25/1M input, $1.25/1M output）
-                cost = (response.usage.input_tokens * 0.25 / 1_000_000 +
-                       response.usage.output_tokens * 1.25 / 1_000_000)
-                self.stats["estimated_cost"] += cost
-
-                return response.content[0].text
-
-            elif self.provider == "openai":
-                # 構建消息內容
-                if image_data:
-                    # 多模態輸入（圖片 + 文字）
-                    content = [
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": f"data:image/png;base64,{image_data}"
-                            }
-                        },
-                        {
-                            "type": "text",
-                            "text": prompt
-                        }
-                    ]
-                else:
-                    # 純文字輸入
-                    content = prompt
-
-                response = self.client.chat.completions.create(
-                    model=self.model,
-                    messages=[{
-                        "role": "user",
-                        "content": content
-                    }],
-                    max_tokens=max_tokens
-                )
-
-                # 更新統計
-                self.stats["tokens_used"] += response.usage.total_tokens
-
-                # 計算成本（根據模型動態調整）
-                if "gpt-4o-mini" in self.model:
-                    # GPT-4o-mini: $0.150/1M input, $0.600/1M output
-                    input_cost = 0.150
-                    output_cost = 0.600
-                elif "gpt-4o" in self.model:
-                    # GPT-4o: $2.50/1M input, $10.00/1M output
-                    input_cost = 2.50
-                    output_cost = 10.00
-                else:
-                    # 預設使用 GPT-4o-mini 價格
-                    input_cost = 0.150
-                    output_cost = 0.600
-
-                cost = (response.usage.prompt_tokens * input_cost / 1_000_000 +
-                       response.usage.completion_tokens * output_cost / 1_000_000)
-                self.stats["estimated_cost"] += cost
-
-                return response.choices[0].message.content
-
-        except Exception as e:
-            print(f"LLM 調用失敗: {e}")
-            return ""  # 失敗時返回空字串
 
 
 # ============================================================================

@@ -1,48 +1,272 @@
 """
-OCR Testing and Validation API Routes
-用於測試和驗證 OCR 效果的專用 API
+OCR 辨識測試與驗證 API
+
+提供 OCR 辨識效果的測試、對比與驗證功能
 """
 
-from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi import APIRouter, UploadFile, File, HTTPException, Query
 from fastapi.responses import JSONResponse
 from PIL import Image
 import fitz
 from io import BytesIO
 import os
-from typing import Optional, List
+from typing import Optional, List, Literal
 
 from app.lib.ocr_enhanced.preprocessor import TranscriptPreprocessor
 from app.lib.ocr_enhanced.config import PreprocessConfig
 from app.lib.ocr_enhanced.engine_manager import EngineManager
 from app.lib.ocr_enhanced.postprocessor import TranscriptPostprocessor
+from app.lib.multi_type_ocr.processor_factory import ProcessorFactory
 
 router = APIRouter()
 
 
-@router.post("/test")
+@router.post(
+    "/test",
+    responses={
+        200: {
+            "description": "OCR 辨識成功",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "transcript": {
+                            "summary": "謄本辨識範例",
+                            "value": {
+                                "file_name": "transcript.pdf",
+                                "total_pages": 1,
+                                "document_type": "transcript",
+                                "pages": [{
+                                    "page_number": 1,
+                                    "original_image": "data:image/png;base64,...",
+                                    "ocr_raw": {
+                                        "text": "土地登記謄本...",
+                                        "confidence": 0.8543
+                                    },
+                                    "rule_postprocessed": {
+                                        "text": "土地登記謄本...",
+                                        "stats": {"typo_fixes": 12}
+                                    },
+                                    "llm_postprocessed": None,
+                                    "structured_data": {},
+                                    "processing_steps": {
+                                        "1_ocr_engine": "Tesseract",
+                                        "2_rule_processing": "✓ 完成",
+                                        "3_llm_processing": "⊗ 未使用"
+                                    }
+                                }]
+                            }
+                        },
+                        "contract": {
+                            "summary": "合約辨識範例",
+                            "value": {
+                                "file_name": "contract.pdf",
+                                "total_pages": 1,
+                                "document_type": "contract",
+                                "pages": [{
+                                    "page_number": 1,
+                                    "original_image": "data:image/png;base64,...",
+                                    "ocr_raw": {
+                                        "text": "買賣契約書...",
+                                        "confidence": 0.8234
+                                    },
+                                    "rule_postprocessed": {
+                                        "text": "買賣契約書...",
+                                        "stats": {"typo_fixes": 8}
+                                    },
+                                    "llm_postprocessed": None,
+                                    "structured_data": {
+                                        "contract_metadata": {
+                                            "contract_number": "ABC-2024-001",
+                                            "signing_date": "2024-01-15",
+                                            "effective_date": "2024-02-01"
+                                        },
+                                        "parties": {
+                                            "party_a": "甲方公司",
+                                            "party_b": "乙方公司",
+                                            "party_a_address": None,
+                                            "party_b_address": None
+                                        },
+                                        "financial_terms": {
+                                            "contract_amount": "1000000",
+                                            "currency": "TWD",
+                                            "payment_method": None,
+                                            "payment_deadline": None
+                                        },
+                                        "extraction_confidence": 0.72
+                                    },
+                                    "processing_steps": {
+                                        "1_ocr_engine": "Tesseract",
+                                        "2_rule_processing": "✓ 完成",
+                                        "3_llm_processing": "⊗ 未使用"
+                                    }
+                                }]
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        400: {
+            "description": "參數錯誤",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "unsupported_type": {
+                            "summary": "不支援的文件類型",
+                            "value": {
+                                "detail": "不支援的文件類型: invoice。支援的類型: transcript, contract"
+                            }
+                        },
+                        "invalid_page": {
+                            "summary": "無效的頁碼",
+                            "value": {
+                                "detail": "無效的頁碼。PDF 共有 3 頁，請選擇 1-3 之間的頁碼"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        500: {
+            "description": "處理失敗",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": "OCR 測試失敗: 處理過程發生錯誤"
+                    }
+                }
+            }
+        }
+    }
+)
 async def test_ocr(
-    file: UploadFile = File(...),
-    enable_llm: bool = True,
-    ground_truth: Optional[str] = None,
-    page_number: Optional[int] = None  # None = 處理所有頁面
+    file: UploadFile = File(..., description="PDF 或圖片檔案（支援 .pdf, .jpg, .jpeg, .png）"),
+    enable_llm: bool = Query(
+        default=True,
+        description="是否啟用 LLM 視覺修正（true: 使用 GPT-4o 看圖修正，false: 只使用規則後處理）"
+    ),
+    ground_truth: Optional[str] = Query(
+        default=None,
+        description="標準答案文字，用於計算準確率"
+    ),
+    page_number: Optional[int] = Query(
+        default=None,
+        description="指定處理的頁碼（null 或不提供則處理所有頁面）",
+        ge=1
+    ),
+    document_type: Literal["transcript", "contract"] = Query(
+        default="transcript",
+        description="文件類型（transcript: 謄本文件, contract: 合約文件）"
+    )
 ):
     """
-    測試 OCR 效果並返回對比結果
+    ## OCR 辨識測試
 
-    Args:
-        file: PDF 或圖片檔案
-        enable_llm: 是否啟用 LLM 後處理
-        ground_truth: 可選的標準答案（用於計算準確率）
-        page_number: 頁碼（None = 處理所有頁，預設）
+    上傳 PDF 或圖片進行 OCR 辨識測試，並返回對比結果。
 
-    Returns:
+    ### 功能特色
+    - ✅ **多頁處理**: 自動處理 PDF 所有頁面
+    - ✅ **視覺修正**: 使用 LLM 看圖修正 OCR 錯誤
+    - ✅ **準確率對比**: 對比原始 OCR、規則後處理、LLM 修正的效果
+    - ✅ **成本追蹤**: 顯示 LLM 處理成本
+
+    ### 參數說明
+    - **file** (必填): PDF 或圖片檔案
+      - 支援格式: `.pdf`, `.jpg`, `.jpeg`, `.png`
+      - 大小限制: 20MB
+      - 多頁 PDF 會自動處理所有頁面
+
+    - **document_type** (選填, 預設="transcript"): 文件類型
+      - `transcript`: 謄本文件（預設）
+      - `contract`: 合約文件
+      - 不同文件類型會使用對應的處理器與欄位提取
+
+    - **enable_llm** (選填, 預設=true): 是否啟用 LLM 視覺修正
+      - `true`: 使用 GPT-4o 看圖修正（成本約 $0.02-0.03/頁）
+      - `false`: 只使用規則後處理（免費）
+
+    - **ground_truth** (選填): 標準答案文字
+      - 用於計算準確率
+      - 提供後會在結果中顯示各處理方式的準確率
+
+    - **page_number** (選填): 指定處理的頁碼
+      - `null` 或不提供: 處理所有頁面（預設）
+      - 數字 (1-N): 只處理指定頁
+
+    ### 返回結果
+    ```json
+    {
+      "file_name": "檔案名稱.pdf",
+      "total_pages": 3,
+      "pages": [
         {
-            "file_name": "檔案名稱",
-            "total_pages": 3,
-            "pages": [頁面結果列表]
+          "page_number": 1,
+          "original_image": "data:image/png;base64,...",
+          "ocr_raw": {
+            "text": "原始 OCR 文字",
+            "confidence": 0.7943
+          },
+          "rule_postprocessed": {
+            "text": "規則後處理文字",
+            "stats": {
+              "typo_fixes": 25,
+              "format_corrections": 4
+            }
+          },
+          "llm_postprocessed": {
+            "text": "LLM 修正後文字",
+            "stats": {
+              "llm_used": true,
+              "llm_cost": 0.025
+            },
+            "used": true
+          },
+          "accuracy": {
+            "raw": 65.75,
+            "rule": 67.01,
+            "llm": 77.84
+          },
+          "processing_steps": {
+            "1_ocr_engine": "Tesseract",
+            "2_rule_processing": "✓ 完成",
+            "3_llm_processing": "✓ 完成（視覺修正）"
+          }
         }
+      ]
+    }
+    ```
+
+    ### 使用範例
+
+    **基本使用**（只做 OCR，不使用 LLM）:
+    ```bash
+    curl -X POST "http://localhost:8003/api/v1/ocr/test" \\
+      -F "file=@document.pdf" \\
+      -F "enable_llm=false"
+    ```
+
+    **完整測試**（含 LLM 視覺修正和準確率計算）:
+    ```bash
+    curl -X POST "http://localhost:8003/api/v1/ocr/test" \\
+      -F "file=@document.pdf" \\
+      -F "enable_llm=true" \\
+      -F "ground_truth=正確的文字內容..."
+    ```
+
+    ### 注意事項
+    - LLM 修正需要設定 `OPENAI_API_KEY` 環境變數
+    - 大文件處理時間較長，建議分批處理
+    - 智能策略: OCR 信心度 < 85% 才使用 LLM（節省成本）
     """
     try:
+        # 驗證 document_type 參數
+        supported_types = ProcessorFactory.supported_types()
+        if document_type not in supported_types:
+            raise HTTPException(
+                status_code=400,
+                detail=f"不支援的文件類型: {document_type}。支援的類型: {', '.join(supported_types)}"
+            )
+
         # 讀取檔案內容
         contents = await file.read()
 
@@ -77,7 +301,8 @@ async def test_ocr(
                 total_pages,
                 enable_llm,
                 ground_truth,
-                is_pdf
+                is_pdf,
+                document_type
             )
             results.append(page_result)
 
@@ -85,6 +310,7 @@ async def test_ocr(
         return {
             "file_name": file.filename,
             "total_pages": total_pages,
+            "document_type": document_type,
             "pages": results
         }
 
@@ -99,69 +325,44 @@ async def _process_single_page(
     total_pages: int,
     enable_llm: bool,
     ground_truth: Optional[str],
-    is_pdf: bool
+    is_pdf: bool,
+    document_type: str
 ) -> dict:
-    """處理單一頁面的 OCR"""
+    """處理單一頁面的 OCR
+
+    使用 ProcessorFactory 獲取對應的文件處理器，調用統一的 process() 方法。
+    保持向後兼容性，支援 ground_truth 準確率計算。
+    """
     import base64
     import difflib
 
-    # 提取圖片
+    # 步驟 1: 提取單頁圖片內容
     if is_pdf:
-        pil_image, _ = await _extract_pdf_page(file_contents, page_number)
+        # PDF 需要提取指定頁面
+        doc = fitz.open(stream=file_contents, filetype="pdf")
+        page = doc[page_number - 1]  # 轉換為 0-based index
+        mat = fitz.Matrix(300/72, 300/72)  # 300 DPI
+        pix = page.get_pixmap(matrix=mat)
+        img_data = pix.tobytes("png")
+        page_contents = img_data
+        doc.close()
     else:
-        pil_image = Image.open(BytesIO(file_contents))
+        # 圖片直接使用原始內容
+        page_contents = file_contents
 
-    # 步驟 1: 預處理
-    config = PreprocessConfig()
-    preprocessor = TranscriptPreprocessor(config)
-    processed, _ = await preprocessor.preprocess(pil_image)
+    # 步驟 2: 使用 ProcessorFactory 獲取處理器
+    processor = ProcessorFactory.get_processor(document_type)
 
-    # 步驟 2: OCR 辨識
-    engine_manager = EngineManager(engines=["tesseract"], parallel=False)
-    raw_text, confidence, _ = await engine_manager.extract_text_multi_engine(processed)
-
-    # 步驟 3: 規則後處理
-    rule_postprocessor = TranscriptPostprocessor(
-        enable_typo_fix=True,
-        enable_format_correction=True,
-        enable_llm=False
+    # 步驟 3: 調用處理器的統一處理方法
+    result = await processor.process(
+        file_contents=page_contents,
+        filename=filename,
+        page_number=page_number,
+        total_pages=total_pages,
+        enable_llm=enable_llm
     )
-    rule_text, rule_stats = await rule_postprocessor.postprocess(raw_text, confidence)
 
-    # 步驟 4: LLM 後處理（可選，支援視覺修正）
-    llm_text = None
-    llm_stats = None
-    llm_used = False
-
-    if enable_llm:
-        openai_key = os.getenv("OPENAI_API_KEY")
-        anthropic_key = os.getenv("ANTHROPIC_API_KEY")
-
-        if openai_key or anthropic_key:
-            llm_provider = "openai" if openai_key else "anthropic"
-            llm_postprocessor = TranscriptPostprocessor(
-                enable_typo_fix=True,
-                enable_format_correction=True,
-                enable_llm=True,
-                llm_provider=llm_provider,
-                llm_strategy="auto"
-            )
-
-            # 將圖片轉換為 base64（供 LLM 視覺修正使用）
-            buffered_for_llm = BytesIO()
-            pil_image.save(buffered_for_llm, format="PNG")
-            img_base64_for_llm = base64.b64encode(buffered_for_llm.getvalue()).decode()
-
-            # 調用 LLM 修正（傳入圖片）
-            llm_text, llm_stats = await llm_postprocessor.postprocess(
-                raw_text,
-                confidence,
-                image_data=img_base64_for_llm
-            )
-            llm_used = llm_stats.get("llm_used", False)
-
-    # 步驟 5: 計算準確率
-    accuracy = None
+    # 步驟 4: 如果提供了 ground_truth，計算準確率（向後兼容）
     if ground_truth:
         def calc_accuracy(gt: str, text: str) -> float:
             gt_clean = ''.join(gt.split())
@@ -169,45 +370,30 @@ async def _process_single_page(
             matcher = difflib.SequenceMatcher(None, gt_clean, text_clean)
             return matcher.ratio() * 100
 
+        raw_text = result["ocr_raw"]["text"]
+        rule_text = result["rule_postprocessed"]["text"]
+
+        # 取前 1/3 的文字進行比對（與原邏輯一致）
         raw_portion = raw_text[:len(raw_text)//3]
         rule_portion = rule_text[:len(rule_text)//3]
-        llm_portion = llm_text[:len(llm_text)//3] if llm_text else None
 
         accuracy = {
             "raw": round(calc_accuracy(ground_truth, raw_portion), 2),
-            "rule": round(calc_accuracy(ground_truth, rule_portion), 2),
-            "llm": round(calc_accuracy(ground_truth, llm_portion), 2) if llm_portion else None
+            "rule": round(calc_accuracy(ground_truth, rule_portion), 2)
         }
 
-    # 步驟 6: 轉換圖片為 base64
-    buffered = BytesIO()
-    pil_image.save(buffered, format="PNG")
-    img_base64 = base64.b64encode(buffered.getvalue()).decode()
+        # 如果有 LLM 修正結果，也計算 LLM 準確率
+        if result.get("llm_postprocessed") and result["llm_postprocessed"].get("used"):
+            llm_text = result["llm_postprocessed"]["text"]
+            llm_portion = llm_text[:len(llm_text)//3]
+            accuracy["llm"] = round(calc_accuracy(ground_truth, llm_portion), 2)
+        else:
+            accuracy["llm"] = None
 
-    # 返回結果
-    return {
-        "page_number": page_number,
-        "original_image": f"data:image/png;base64,{img_base64}",
-        "ocr_raw": {
-            "text": raw_text,
-            "confidence": round(confidence, 4)
-        },
-        "rule_postprocessed": {
-            "text": rule_text,
-            "stats": rule_stats
-        },
-        "llm_postprocessed": {
-            "text": llm_text,
-            "stats": llm_stats,
-            "used": llm_used
-        } if enable_llm and llm_text else None,
-        "accuracy": accuracy,
-        "processing_steps": {
-            "1_ocr_engine": "Tesseract",
-            "2_rule_processing": "✓ 完成",
-            "3_llm_processing": "✓ 完成" if (enable_llm and llm_used) else "⊗ 未使用"
-        }
-    }
+        # 將準確率加入結果
+        result["accuracy"] = accuracy
+
+    return result
 
 
 async def _extract_pdf_page(pdf_bytes: bytes, page_number: int = 1) -> tuple[Image.Image, int]:

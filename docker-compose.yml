@@ -57,6 +57,7 @@ services:
 
       # App
       DEBUG: "true"
+      LOG_LEVEL: "INFO"
       PORT: 8000
     ports:
       - "8003:8000"
@@ -67,6 +68,7 @@ services:
       - ./backend:/app
       - /app/venv  # Exclude venv from mount
       - ./uploads:/app/uploads  # Mount for local file storage
+      - ./data:/data  # Mount test data directory
     networks:
       - ai-doc-network
     command: >
@@ -76,7 +78,7 @@ services:
         echo 'Running migrations...' &&
         alembic upgrade head &&
         echo 'Starting server...' &&
-        uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+        uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --log-level info
       "
 
   # Frontend - Vue 3 + Vite

@@ -7,6 +7,7 @@ const result = ref<any>(null)
 const groundTruth = ref('')
 const enableLlm = ref(true)
 const currentPageIndex = ref(0)  // 當前查看的頁面索引（0-based）
+const documentType = ref<'transcript' | 'contract'>('transcript')  // 文件類型選擇
 
 // 合併所有頁面的最終文字
 const mergedText = computed(() => {
@@ -37,12 +38,26 @@ const totalStats = computed(() => {
   let totalFormatCorrections = 0
 
   result.value.pages.forEach((page: any) => {
+    // 檢查 OCR 後處理 LLM 使用
+    let llmUsedForThisPage = false
+
     if (page.llm_postprocessed && page.llm_postprocessed.used) {
-      llmUsedCount++
+      llmUsedForThisPage = true
       if (page.llm_postprocessed.stats && page.llm_postprocessed.stats.llm_cost) {
         totalCost += page.llm_postprocessed.stats.llm_cost
       }
     }
+
+    // 檢查合約欄位提取 LLM 使用
+    if (page.structured_data && page.structured_data.llm_used_for_extraction) {
+      llmUsedForThisPage = true
+      // 欄位提取 LLM 成本（若有的話，目前未實作）
+    }
+
+    if (llmUsedForThisPage) {
+      llmUsedCount++
+    }
+
     if (page.rule_postprocessed && page.rule_postprocessed.stats) {
       totalTypoFixes += page.rule_postprocessed.stats.typo_fixes || 0
       totalFormatCorrections += page.rule_postprocessed.stats.format_corrections || 0
@@ -75,12 +90,17 @@ const testOcr = async () => {
   try {
     const formData = new FormData()
     formData.append('file', file.value)
-    formData.append('enable_llm', enableLlm.value.toString())
     if (groundTruth.value.trim()) {
       formData.append('ground_truth', groundTruth.value.trim())
     }
 
-    const response = await fetch('/api/v1/ocr/test', {
+    // enable_llm 和 document_type 必須通過 URL 查詢參數傳遞
+    const queryParams = new URLSearchParams({
+      enable_llm: enableLlm.value.toString(),
+      document_type: documentType.value
+    })
+
+    const response = await fetch(`/api/v1/ocr/test?${queryParams}`, {
       method: 'POST',
       body: formData
     })
@@ -117,6 +137,23 @@ const copyToClipboard = async () => {
     <!-- 上傳區塊 -->
     <div class="bg-white rounded-lg shadow p-6 mb-8">
       <h3 class="text-lg font-semibold mb-4">上傳測試檔案</h3>
+
+      <!-- 文件類型選擇 -->
+      <div class="mb-4">
+        <label class="block text-sm font-medium text-gray-700 mb-2">
+          文件類型
+        </label>
+        <select
+          v-model="documentType"
+          class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+        >
+          <option value="transcript">謄本</option>
+          <option value="contract">合約</option>
+        </select>
+        <p class="mt-1 text-xs text-gray-500">
+          💡 不同文件類型會使用對應的處理器與欄位提取
+        </p>
+      </div>
 
       <div class="mb-4">
         <label class="block text-sm font-medium text-gray-700 mb-2">
@@ -183,6 +220,127 @@ const copyToClipboard = async () => {
 
     <!-- 測試結果 -->
     <div v-if="result && result.pages && result.pages.length > 0" class="space-y-6">
+      <!-- 合約結構化欄位顯示 -->
+      <div v-if="result.document_type === 'contract'" class="bg-white rounded-lg shadow p-6">
+        <h3 class="text-xl font-semibold mb-4">📋 合約欄位提取結果</h3>
+
+        <div v-for="(page, index) in result.pages" :key="index" class="mb-6 last:mb-0">
+          <div v-if="page.structured_data" class="border border-gray-200 rounded-lg p-4">
+            <div class="flex items-center justify-between mb-4">
+              <h4 class="text-lg font-medium text-gray-900">第 {{ page.page_number }} 頁</h4>
+              <div class="flex items-center">
+                <span class="text-sm text-gray-600 mr-2">提取信心度:</span>
+                <span
+                  :class="{
+                    'text-green-600 font-semibold': page.structured_data.extraction_confidence >= 0.7,
+                    'text-yellow-600 font-semibold': page.structured_data.extraction_confidence >= 0.5 && page.structured_data.extraction_confidence < 0.7,
+                    'text-red-600 font-semibold': page.structured_data.extraction_confidence < 0.5
+                  }"
+                >
+                  {{ (page.structured_data.extraction_confidence * 100).toFixed(1) }}%
+                </span>
+              </div>
+            </div>
+
+            <!-- 合約元資訊 -->
+            <div class="mb-4">
+              <h5 class="text-sm font-semibold text-gray-700 mb-2 border-b pb-1">合約元資訊</h5>
+              <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div>
+                  <div class="text-xs text-gray-500">合約編號</div>
+                  <div class="text-sm font-medium mt-1">
+                    {{ page.structured_data.contract_metadata?.contract_number || '未提取' }}
+                  </div>
+                </div>
+                <div>
+                  <div class="text-xs text-gray-500">簽訂日期</div>
+                  <div class="text-sm font-medium mt-1">
+                    {{ page.structured_data.contract_metadata?.signing_date || '未提取' }}
+                  </div>
+                </div>
+                <div>
+                  <div class="text-xs text-gray-500">生效日期</div>
+                  <div class="text-sm font-medium mt-1">
+                    {{ page.structured_data.contract_metadata?.effective_date || '未提取' }}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 雙方資訊 -->
+            <div class="mb-4">
+              <h5 class="text-sm font-semibold text-gray-700 mb-2 border-b pb-1">雙方資訊</h5>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <div class="text-xs text-gray-500">甲方</div>
+                  <div class="text-sm font-medium mt-1">
+                    {{ page.structured_data.parties?.party_a || '未提取' }}
+                  </div>
+                  <div v-if="page.structured_data.parties?.party_a_address" class="text-xs text-gray-500 mt-1">
+                    地址: {{ page.structured_data.parties.party_a_address }}
+                  </div>
+                </div>
+                <div>
+                  <div class="text-xs text-gray-500">乙方</div>
+                  <div class="text-sm font-medium mt-1">
+                    {{ page.structured_data.parties?.party_b || '未提取' }}
+                  </div>
+                  <div v-if="page.structured_data.parties?.party_b_address" class="text-xs text-gray-500 mt-1">
+                    地址: {{ page.structured_data.parties.party_b_address }}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 財務條款 -->
+            <div>
+              <h5 class="text-sm font-semibold text-gray-700 mb-2 border-b pb-1">財務條款</h5>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <div class="text-xs text-gray-500">合約金額</div>
+                  <div class="text-sm font-medium mt-1">
+                    <span v-if="page.structured_data.financial_terms?.contract_amount">
+                      {{ page.structured_data.financial_terms.currency || 'TWD' }}
+                      {{ Number(page.structured_data.financial_terms.contract_amount).toLocaleString() }}
+                    </span>
+                    <span v-else>未提取</span>
+                  </div>
+                </div>
+                <div>
+                  <div class="text-xs text-gray-500">付款方式</div>
+                  <div class="text-sm font-medium mt-1">
+                    {{ page.structured_data.financial_terms?.payment_method || '未提取' }}
+                  </div>
+                </div>
+                <div>
+                  <div class="text-xs text-gray-500">付款期限</div>
+                  <div class="text-sm font-medium mt-1">
+                    {{ page.structured_data.financial_terms?.payment_deadline || '未提取' }}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 低信心度警告 -->
+            <div v-if="page.structured_data.extraction_confidence < 0.7" class="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded">
+              <div class="flex items-start">
+                <svg class="h-5 w-5 text-yellow-600 mr-2 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                  <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+                </svg>
+                <div class="text-sm text-yellow-800">
+                  <strong>提取信心度較低</strong> - 建議啟用 LLM 輔助提升準確率
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 無結構化資料時顯示 -->
+          <div v-else class="border border-gray-200 rounded-lg p-4 text-center text-gray-500">
+            <p>第 {{ page.page_number }} 頁未提取到結構化欄位</p>
+          </div>
+        </div>
+      </div>
+
       <!-- 總覽資訊 -->
       <div class="bg-white rounded-lg shadow p-6">
         <div class="flex items-center justify-between mb-4">
