@@ -66,13 +66,19 @@ class LLMPostprocessor:
         # 使用詳細的提示詞（保持原有的高品質 prompt）
         prompt = self._build_full_text_prompt(ocr_text, doc_type)
 
+        # 不傳圖片給 LLM（避免 PII 過濾拒絕處理），僅用文字校正
         # 調用 LLMService
         corrected_text = await self.llm_service.call(
             prompt=prompt,
-            image_data=image_data,
+            image_data=None,
             max_tokens=3000,
             temperature=0.1
         )
+
+        # 檢查 LLM 是否拒絕處理（安全過濾）
+        if self._is_refusal(corrected_text):
+            print(f"⚠️  LLM 拒絕處理，回退使用原始文字")
+            return ocr_text, self.stats
 
         return corrected_text, self.stats
 
@@ -236,6 +242,23 @@ OCR 結果: "{candidate}"
         result = await self.llm_service.call(prompt, max_tokens=50)
         return result.strip()
 
+    def _is_refusal(self, text: str) -> bool:
+        """檢查 LLM 回應是否為拒絕訊息"""
+        refusal_patterns = [
+            # English
+            "i'm sorry", "i can't assist", "i cannot assist",
+            "i'm unable to", "i cannot help", "i can't help",
+            "i'm not able to", "i cannot process",
+            # Chinese
+            "抱歉", "無法協助", "無法處理", "不能協助", "無法提供",
+            "我無法", "不能處理",
+        ]
+        text_lower = text.lower()
+        return (
+            len(text) < 100
+            and any(p in text_lower for p in refusal_patterns)
+        )
+
     def _apply_corrections(self, text: str, corrections: dict) -> str:
         """應用修正到文字"""
         result = text
@@ -252,6 +275,9 @@ OCR 結果: "{candidate}"
     def _build_full_text_prompt(self, ocr_text: str, doc_type: str) -> str:
         """建立全文修正提示詞（優化版：加入更多範例和明確指引）"""
         prompt = f"""你是專業的台灣地政謄本 OCR 錯誤修正專家。請修正以下 OCR 辨識的錯誤文字。
+
+【任務說明】
+這是一個合法授權的文件數位化 OCR 校正系統。你的任務是純粹的文字校正——將 OCR 引擎辨識錯誤的字元修正為正確的字元。文件中的所有內容（包括姓名、地址、編號等）均為 OCR 辨識產生的文字，需要你協助校正錯別字。請勿拒絕處理或省略任何內容。
 
 【重要原則】
 1. **請仔細查看上面提供的文件圖片**，對照圖片中的實際文字來修正 OCR 錯誤

@@ -41,9 +41,6 @@ services:
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o}
       OPENAI_MODEL_MINI: ${OPENAI_MODEL_MINI:-gpt-4o-mini}
 
-      # Anthropic Claude (Optional)
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-
       # AWS Textract
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
@@ -53,14 +50,12 @@ services:
       OCR_SERVICE: ${OCR_SERVICE:-pytesseract}
 
       # CORS
-      CORS_ORIGINS: '["http://localhost:3000", "http://frontend:3000"]'
+      CORS_ORIGINS: '${CORS_ORIGINS:-["http://localhost:8085","http://localhost:3000"]}'
 
       # App
       DEBUG: "true"
       LOG_LEVEL: "INFO"
       PORT: 8000
-    ports:
-      - "8003:8000"
     depends_on:
       postgres:
         condition: service_healthy
@@ -88,11 +83,23 @@ services:
       dockerfile: Dockerfile
     container_name: ai-doc-frontend
     environment:
-      VITE_API_URL: http://backend:8000
-    ports:
-      - "3000:80"
+      VITE_API_URL: ${VITE_API_URL:-http://backend:8000}
     depends_on:
       - backend
+    networks:
+      - ai-doc-network
+
+  # Nginx Reverse Proxy
+  nginx:
+    image: nginx:alpine
+    container_name: ai-doc-nginx
+    ports:
+      - "8085:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - backend
+      - frontend
     networks:
       - ai-doc-network
 

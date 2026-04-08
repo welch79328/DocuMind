@@ -105,14 +105,17 @@ const testOcr = async () => {
       body: formData
     })
 
-    if (!response.ok) throw new Error('OCR test failed')
+    if (!response.ok) {
+      const err = await response.json().catch(() => null)
+      throw new Error(err?.detail || `HTTP ${response.status}`)
+    }
 
     const data = await response.json()
     result.value = data
     currentPageIndex.value = 0  // 重置到第一頁
-  } catch (error) {
+  } catch (error: any) {
     console.error('OCR test error:', error)
-    alert('OCR 測試失敗，請稍後再試')
+    alert(`OCR 測試失敗：${error.message}`)
   } finally {
     testing.value = false
   }

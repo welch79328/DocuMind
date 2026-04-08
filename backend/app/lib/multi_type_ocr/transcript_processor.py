@@ -63,14 +63,9 @@ class TranscriptProcessor(DocumentProcessor):
             fusion_method="best"
         )
 
-        # 初始化後處理器
-        self.postprocessor = TranscriptPostprocessor(
-            enable_typo_fix=True,
-            enable_format_correction=True,
-            enable_llm=False,  # 將由 process() 方法的 enable_llm 參數控制
-            llm_provider="openai",
-            llm_strategy="auto"
-        )
+        # 初始化後處理器（LLM 由 process() 的 enable_llm 參數動態控制）
+        self.llm_provider = "openai"
+        self.llm_strategy = "auto"
 
         logger.info("TranscriptProcessor 初始化完成")
 
@@ -187,8 +182,18 @@ class TranscriptProcessor(DocumentProcessor):
         logger.debug("開始後處理文字")
 
         try:
+            # 根據是否傳入 image_data 決定啟用 LLM
+            enable_llm = image_data is not None
+            postprocessor = TranscriptPostprocessor(
+                enable_typo_fix=True,
+                enable_format_correction=True,
+                enable_llm=enable_llm,
+                llm_provider=self.llm_provider,
+                llm_strategy=self.llm_strategy
+            )
+
             # 調用 TranscriptPostprocessor
-            processed_text, stats = await self.postprocessor.postprocess(
+            processed_text, stats = await postprocessor.postprocess(
                 text,
                 ocr_confidence=confidence,
                 image_data=image_data

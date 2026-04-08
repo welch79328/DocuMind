@@ -38,11 +38,13 @@ class TestTranscriptProcessorStructure:
         assert hasattr(processor, 'engine_manager')
         assert processor.engine_manager is not None
 
-    def test_transcript_processor_has_postprocessor(self):
-        """驗證 TranscriptProcessor 有 postprocessor 屬性"""
+    def test_transcript_processor_has_llm_config(self):
+        """驗證 TranscriptProcessor 有 LLM 配置屬性"""
         processor = TranscriptProcessor()
-        assert hasattr(processor, 'postprocessor')
-        assert processor.postprocessor is not None
+        assert hasattr(processor, 'llm_provider')
+        assert hasattr(processor, 'llm_strategy')
+        assert processor.llm_provider == "openai"
+        assert processor.llm_strategy == "auto"
 
 
 class TestPreprocessMethod:
@@ -178,68 +180,59 @@ class TestPostprocessMethod:
     """測試 postprocess 方法"""
 
     @pytest.mark.asyncio
-    async def test_postprocess_calls_transcript_postprocessor(self):
-        """驗證 postprocess 調用 TranscriptPostprocessor"""
-        processor = TranscriptProcessor()
-
-        test_text = "測試文字"
-        test_confidence = 0.85
-
-        # Mock postprocessor
-        processor.postprocessor.postprocess = AsyncMock(
-            return_value=("修正後文字", {"typo_fixes": 5})
-        )
-
-        # 執行
-        result_text, stats = await processor.postprocess(test_text, test_confidence)
-
-        # 驗證調用（接受關鍵字參數）
-        processor.postprocessor.postprocess.assert_called_once()
-        call_args, call_kwargs = processor.postprocessor.postprocess.call_args
-
-        # 驗證參數值
-        assert call_args[0] == test_text
-        assert call_kwargs.get('ocr_confidence') == test_confidence
-        assert call_kwargs.get('image_data') is None
-
-    @pytest.mark.asyncio
     async def test_postprocess_returns_text_and_stats(self):
         """驗證 postprocess 返回文字和統計資訊"""
         processor = TranscriptProcessor()
 
-        expected_text = "修正後的謄本文字"
-        expected_stats = {"typo_fixes": 3, "format_corrections": 2}
+        # 不傳 image_data → 不啟用 LLM，純規則修正
+        result_text, stats = await processor.postprocess("測試文字", 0.9)
 
-        processor.postprocessor.postprocess = AsyncMock(
-            return_value=(expected_text, expected_stats)
-        )
-
-        result_text, stats = await processor.postprocess("原始文字", 0.9)
-
-        assert result_text == expected_text
-        assert stats == expected_stats
+        assert isinstance(result_text, str)
+        assert isinstance(stats, dict)
 
     @pytest.mark.asyncio
-    async def test_postprocess_passes_image_data(self):
-        """驗證 postprocess 正確傳遞 image_data 參數"""
+    async def test_postprocess_enables_llm_when_image_data_provided(self):
+        """驗證 postprocess 在提供 image_data 時啟用 LLM"""
         processor = TranscriptProcessor()
 
-        test_image_data = "data:image/png;base64,iVBORw0KGgoAAAANS..."
+        with patch('app.lib.multi_type_ocr.transcript_processor.TranscriptPostprocessor') as MockPostprocessor:
+            mock_instance = MockPostprocessor.return_value
+            mock_instance.postprocess = AsyncMock(
+                return_value=("修正後文字", {"typo_fixes": 5, "llm_used": True})
+            )
 
-        processor.postprocessor.postprocess = AsyncMock(
-            return_value=("text", {})
-        )
+            await processor.postprocess("text", 0.7, "base64_image_data")
 
-        await processor.postprocess("text", 0.9, test_image_data)
+            # 驗證建立 postprocessor 時 enable_llm=True
+            MockPostprocessor.assert_called_once_with(
+                enable_typo_fix=True,
+                enable_format_correction=True,
+                enable_llm=True,
+                llm_provider="openai",
+                llm_strategy="auto"
+            )
 
-        # 驗證 image_data 被傳遞
-        call_args = processor.postprocessor.postprocess.call_args[0]
-        call_kwargs = processor.postprocessor.postprocess.call_args[1]
-        # image_data 可能作為位置參數或關鍵字參數傳遞
-        if len(call_args) > 2:
-            assert call_args[2] == test_image_data
-        else:
-            assert call_kwargs.get('image_data') == test_image_data
+    @pytest.mark.asyncio
+    async def test_postprocess_disables_llm_when_no_image_data(self):
+        """驗證 postprocess 在未提供 image_data 時不啟用 LLM"""
+        processor = TranscriptProcessor()
+
+        with patch('app.lib.multi_type_ocr.transcript_processor.TranscriptPostprocessor') as MockPostprocessor:
+            mock_instance = MockPostprocessor.return_value
+            mock_instance.postprocess = AsyncMock(
+                return_value=("修正後文字", {"typo_fixes": 5})
+            )
+
+            await processor.postprocess("text", 0.9)
+
+            # 驗證建立 postprocessor 時 enable_llm=False
+            MockPostprocessor.assert_called_once_with(
+                enable_typo_fix=True,
+                enable_format_correction=True,
+                enable_llm=False,
+                llm_provider="openai",
+                llm_strategy="auto"
+            )
 
 
 class TestExtractFieldsMethod:
@@ -287,13 +280,12 @@ class TestProcessorConfiguration:
         assert processor.engine_manager.engines is not None
         assert isinstance(processor.engine_manager.engines, list)
 
-    def test_postprocessor_has_correct_settings(self):
-        """驗證 postprocessor 有正確的設定"""
+    def test_postprocessor_config_has_correct_settings(self):
+        """驗證後處理器配置正確"""
         processor = TranscriptProcessor()
 
-        # 驗證後處理器設定
-        assert processor.postprocessor.enable_typo_fix is True
-        assert processor.postprocessor.enable_format_correction is True
+        assert processor.llm_provider == "openai"
+        assert processor.llm_strategy == "auto"
 
 
 class TestProcessTemplateMethod:

@@ -11,7 +11,7 @@
 """
 
 import pytest
-from unittest.mock import Mock, AsyncMock
+from unittest.mock import Mock, AsyncMock, patch
 from PIL import Image
 import numpy as np
 from app.lib.multi_type_ocr.contract_processor import ContractProcessor
@@ -39,11 +39,13 @@ class TestContractProcessorStructure:
         assert hasattr(processor, 'engine_manager')
         assert processor.engine_manager is not None
 
-    def test_contract_processor_has_postprocessor(self):
-        """驗證 ContractProcessor 有 postprocessor 屬性"""
+    def test_contract_processor_has_llm_config(self):
+        """驗證 ContractProcessor 有 LLM 配置屬性"""
         processor = ContractProcessor()
-        assert hasattr(processor, 'postprocessor')
-        assert processor.postprocessor is not None
+        assert hasattr(processor, 'llm_provider')
+        assert hasattr(processor, 'llm_strategy')
+        assert processor.llm_provider == "openai"
+        assert processor.llm_strategy == "auto"
 
 
 class TestPreprocessorConfiguration:
@@ -159,37 +161,35 @@ class TestPostprocessMethod:
     """測試 postprocess 方法"""
 
     @pytest.mark.asyncio
-    async def test_postprocess_calls_postprocessor(self):
-        """驗證 postprocess 調用 TranscriptPostprocessor"""
-        processor = ContractProcessor()
-
-        test_text = "合約測試文字"
-        test_confidence = 0.85
-
-        processor.postprocessor.postprocess = AsyncMock(
-            return_value=("修正後文字", {"typo_fixes": 2})
-        )
-
-        result_text, stats = await processor.postprocess(test_text, test_confidence)
-
-        processor.postprocessor.postprocess.assert_called_once()
-
-    @pytest.mark.asyncio
     async def test_postprocess_returns_text_and_stats(self):
         """驗證 postprocess 返回文字和統計資訊"""
         processor = ContractProcessor()
 
-        expected_text = "修正後的合約文字"
-        expected_stats = {"typo_fixes": 1, "format_corrections": 0}
+        result_text, stats = await processor.postprocess("合約測試文字", 0.9)
 
-        processor.postprocessor.postprocess = AsyncMock(
-            return_value=(expected_text, expected_stats)
-        )
+        assert isinstance(result_text, str)
+        assert isinstance(stats, dict)
 
-        result_text, stats = await processor.postprocess("原始文字", 0.9)
+    @pytest.mark.asyncio
+    async def test_postprocess_enables_llm_when_image_data_provided(self):
+        """驗證 postprocess 在提供 image_data 時啟用 LLM"""
+        processor = ContractProcessor()
 
-        assert result_text == expected_text
-        assert stats == expected_stats
+        with patch('app.lib.multi_type_ocr.contract_processor.TranscriptPostprocessor') as MockPostprocessor:
+            mock_instance = MockPostprocessor.return_value
+            mock_instance.postprocess = AsyncMock(
+                return_value=("修正後文字", {"typo_fixes": 2, "llm_used": True})
+            )
+
+            await processor.postprocess("text", 0.7, "base64_image_data")
+
+            MockPostprocessor.assert_called_once_with(
+                enable_typo_fix=True,
+                enable_format_correction=True,
+                enable_llm=True,
+                llm_provider="openai",
+                llm_strategy="auto"
+            )
 
 
 class TestExtractFieldsMethod:
@@ -269,9 +269,9 @@ class TestProcessorConfiguration:
         assert processor.engine_manager.engines is not None
         assert isinstance(processor.engine_manager.engines, list)
 
-    def test_postprocessor_has_correct_settings(self):
-        """驗證 postprocessor 有正確的設定"""
+    def test_postprocessor_config_has_correct_settings(self):
+        """驗證後處理器配置正確"""
         processor = ContractProcessor()
 
-        assert processor.postprocessor.enable_typo_fix is True
-        assert processor.postprocessor.enable_format_correction is True
+        assert processor.llm_provider == "openai"
+        assert processor.llm_strategy == "auto"

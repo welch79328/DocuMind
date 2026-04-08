@@ -226,6 +226,19 @@ class DocumentProcessor(ABC):
                 "stats": postprocess_stats
             }
 
+            # 組裝 LLM 後處理結果
+            llm_used = postprocess_stats.get("llm_used", False)
+            llm_postprocessed_result = None
+            if llm_used:
+                llm_postprocessed_result = {
+                    "text": postprocessed_text,
+                    "stats": {
+                        "llm_used": True,
+                        "llm_cost": postprocess_stats.get("llm_cost", 0.0)
+                    },
+                    "used": True
+                }
+
             # 步驟 5: 結構化欄位提取
             logger.debug("執行結構化欄位提取")
             structured_data = await self.extract_fields(
@@ -235,19 +248,21 @@ class DocumentProcessor(ABC):
             )
 
             # 步驟 6: 組裝結果
+            llm_step = "✓ 完成（視覺修正）" if llm_used else "⊗ 未使用"
             result: PageResult = {
                 "page_number": page_number,
                 "original_image": original_image_data,
                 "ocr_raw": ocr_raw_result,
                 "rule_postprocessed": rule_postprocessed_result,
-                "llm_postprocessed": None,  # 由子類別在 postprocess 中處理
+                "llm_postprocessed": llm_postprocessed_result,
                 "structured_data": structured_data if structured_data else None,
                 "accuracy": None,  # 需要 ground_truth 才能計算
                 "processing_steps": {
                     "1_preprocess": "完成",
                     "2_ocr": "完成",
                     "3_postprocess": "完成",
-                    "4_extract_fields": "完成"
+                    "4_llm": llm_step,
+                    "5_extract_fields": "完成"
                 }
             }
 

@@ -314,6 +314,8 @@ async def test_ocr(
             "pages": results
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"OCR 測試失敗: {str(e)}")
 
