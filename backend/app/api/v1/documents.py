@@ -21,11 +21,11 @@ async def upload_document(
     db: Session = Depends(get_db)
 ):
     """
-    Upload a new document
+    上傳新文件
 
-    - Validates file type and size
-    - Uploads to S3/R2
-    - Creates document record in database
+    - 驗證檔案類型與大小
+    - 上傳至 S3/R2 儲存
+    - 建立文件記錄至資料庫
     """
     return await document_service.upload_document(file, db)
 
@@ -36,14 +36,14 @@ async def process_document(
     db: Session = Depends(get_db)
 ):
     """
-    Trigger AI processing for a document
+    觸發文件 AI 處理
 
-    Steps:
-    1. OCR processing
-    2. AI classification
-    3. Field extraction
-    4. Summary generation
-    5. Risk detection
+    處理步驟：
+    1. OCR 文字辨識
+    2. AI 文件分類
+    3. 欄位提取
+    4. 摘要生成
+    5. 風險偵測
     """
     return await document_service.process_document(document_id, db)
 
@@ -53,7 +53,7 @@ async def get_document(
     document_id: UUID,
     db: Session = Depends(get_db)
 ):
-    """Get document by ID with all related data"""
+    """依 ID 取得文件及所有關聯資料"""
     document = await document_service.get_document(document_id, db)
     if not document:
         raise HTTPException(
@@ -68,7 +68,7 @@ async def get_ai_result(
     document_id: UUID,
     db: Session = Depends(get_db)
 ):
-    """Get AI processing result for a document"""
+    """取得文件的 AI 處理結果"""
     result = await document_service.get_ai_result(document_id, db)
     if not result:
         raise HTTPException(
@@ -83,7 +83,7 @@ async def get_ocr_result(
     document_id: UUID,
     db: Session = Depends(get_db)
 ):
-    """Get OCR result for a document"""
+    """取得文件的 OCR 辨識結果"""
     result = await document_service.get_ocr_result(document_id, db)
     if not result:
         raise HTTPException(
@@ -99,7 +99,7 @@ async def list_documents(
     limit: int = 20,
     db: Session = Depends(get_db)
 ):
-    """List all documents with pagination"""
+    """取得文件列表（支援分頁）"""
     return await document_service.list_documents(skip, limit, db)
 
 
@@ -108,7 +108,7 @@ async def delete_document(
     document_id: UUID,
     db: Session = Depends(get_db)
 ):
-    """Delete a document and all related data"""
+    """刪除文件及所有關聯資料"""
     success = await document_service.delete_document(document_id, db)
     if not success:
         raise HTTPException(

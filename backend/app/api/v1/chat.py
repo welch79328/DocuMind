@@ -20,12 +20,11 @@ async def chat_with_document(
     db: Session = Depends(get_db)
 ):
     """
-    Ask questions about a document
+    針對文件進行 AI 問答
 
-    - Loads document context (OCR text + extracted fields)
-    - Sends question to AI with context
-    - Returns AI answer
-    - Optionally saves chat log
+    - 載入文件上下文（OCR 文字 + 提取欄位）
+    - 將問題與上下文一起傳送給 AI
+    - 回傳 AI 回答
     """
     try:
         return await chat_service.chat_with_document(

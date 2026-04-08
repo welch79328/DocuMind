@@ -17,12 +17,13 @@ import { RouterView, RouterLink } from 'vue-router'
             >
               首頁
             </RouterLink>
-            <RouterLink
-              to="/upload"
+            <a
+              href="/api/docs"
+              target="_blank"
               class="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium"
             >
-              上傳文件
-            </RouterLink>
+              API 文件
+            </a>
             <RouterLink
               to="/ocr-test"
               class="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium bg-blue-50 text-blue-700 hover:bg-blue-100"
