@@ -6,7 +6,7 @@ Main application entry point
 import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api.v1 import documents, chat, ocr_test
+from app.api.v1 import documents, chat, ocr_test, analyze
 from app.config import settings
 
 # 配置日誌級別為 INFO
@@ -62,12 +62,13 @@ app.add_middleware(
 )
 
 # Include routers
-app.include_router(documents.router, prefix="/api/v1/documents", tags=["📁 文件管理"])
-app.include_router(chat.router, prefix="/api/v1/chat", tags=["💬 智能對話"])
-app.include_router(ocr_test.router, prefix="/api/v1/ocr", tags=["📄 OCR 辨識"])
+app.include_router(documents.router, prefix="/api/v1/documents", tags=["📁 文件管理"], include_in_schema=False)
+app.include_router(chat.router, prefix="/api/v1/chat", tags=["💬 智能對話"], include_in_schema=False)
+app.include_router(ocr_test.router, prefix="/api/v1/ocr", tags=["📄 OCR 辨識"], include_in_schema=False)
+app.include_router(analyze.router, prefix="/api/v1", tags=["🔍 統一分析"])
 
 
-@app.get("/", tags=["系統"])
+@app.get("/", tags=["系統"], include_in_schema=False)
 async def root():
     """
     ## 根路徑
@@ -83,7 +84,7 @@ async def root():
     }
 
 
-@app.get("/api/health", tags=["系統"])
+@app.get("/api/health", tags=["系統"], include_in_schema=False)
 async def health_check():
     """
     ## 健康檢查

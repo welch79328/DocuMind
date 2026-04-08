@@ -3,7 +3,7 @@ Application configuration
 """
 
 from pydantic_settings import BaseSettings
-from typing import List
+from typing import List, Optional
 
 
 class Settings(BaseSettings):
@@ -24,7 +24,8 @@ class Settings(BaseSettings):
     S3_REGION: str = "us-east-1"
     S3_ACCESS_KEY: str = ""
     S3_SECRET_KEY: str = ""
-    S3_ENDPOINT_URL: str | None = None  # For Cloudflare R2
+    S3_ENDPOINT_URL: Optional[str] = None  # For Cloudflare R2
+    S3_CDN_URL: Optional[str] = None  # CloudFront CDN URL
 
     # OpenAI
     OPENAI_API_KEY: str = ""

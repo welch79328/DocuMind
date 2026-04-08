@@ -29,12 +29,16 @@ services:
       # Database
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/ai_doc_demo
 
-      # AWS S3 / Cloudflare R2
-      S3_BUCKET: ${S3_BUCKET:-your-bucket-name}
-      S3_REGION: ${S3_REGION:-us-east-1}
-      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-your-access-key}
-      S3_SECRET_KEY: ${S3_SECRET_KEY:-your-secret-key}
+      # AWS S3
+      S3_BUCKET: ${S3_BUCKET:-}
+      S3_REGION: ${S3_REGION:-ap-northeast-1}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-}
       S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-}
+      S3_CDN_URL: ${S3_CDN_URL:-}
+
+      # Storage
+      STORAGE_TYPE: ${STORAGE_TYPE:-s3}
 
       # OpenAI
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}

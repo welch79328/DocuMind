@@ -25,44 +25,66 @@ def get_s3_client():
     return boto3.client(**client_config)
 
 
-async def upload_file_to_s3(filename: str, file_content: bytes) -> str:
+async def upload_file_to_s3(
+    filename: str,
+    file_content: bytes,
+    path_prefix: str = "uploads",
+    acl: str = "public-read"
+) -> str:
     """
-    Upload file to S3/R2 and return URL
+    上傳檔案至 S3 並回傳 URL
+
+    Args:
+        filename: 原始檔名
+        file_content: 檔案內容
+        path_prefix: S3 路徑前綴（例如 uploads/ocr_transcripts）
+        acl: 存取權限（public-read 或 private）
+
+    Returns:
+        檔案的 CDN URL 或 S3 URL
     """
     s3_client = get_s3_client()
 
-    # Generate unique filename
-    file_extension = filename.split(".")[-1]
-    unique_filename = f"{uuid.uuid4()}.{file_extension}"
+    # 產生唯一檔名
+    file_extension = filename.rsplit(".", 1)[-1] if "." in filename else ""
+    unique_filename = f"{uuid.uuid4()}.{file_extension}" if file_extension else str(uuid.uuid4())
 
-    # Upload file
-    s3_client.put_object(
-        Bucket=settings.S3_BUCKET,
-        Key=unique_filename,
-        Body=file_content
-    )
+    # 組合完整 S3 key
+    s3_key = f"{path_prefix}/{unique_filename}"
 
-    # Generate URL
-    if settings.S3_ENDPOINT_URL:
-        # Cloudflare R2 URL
-        file_url = f"{settings.S3_ENDPOINT_URL}/{settings.S3_BUCKET}/{unique_filename}"
+    # 上傳
+    put_params = {
+        "Bucket": settings.S3_BUCKET,
+        "Key": s3_key,
+        "Body": file_content,
+    }
+    if acl:
+        put_params["ACL"] = acl
+
+    s3_client.put_object(**put_params)
+
+    # 回傳 URL
+    if settings.S3_CDN_URL:
+        return f"{settings.S3_CDN_URL.rstrip('/')}/{s3_key}"
+    elif settings.S3_ENDPOINT_URL:
+        return f"{settings.S3_ENDPOINT_URL}/{settings.S3_BUCKET}/{s3_key}"
     else:
-        # AWS S3 URL
-        file_url = f"https://{settings.S3_BUCKET}.s3.{settings.S3_REGION}.amazonaws.com/{unique_filename}"
-
-    return file_url
+        return f"https://{settings.S3_BUCKET}.s3.{settings.S3_REGION}.amazonaws.com/{s3_key}"
 
 
 async def download_file_from_s3(file_url: str) -> bytes:
     """
-    Download file from S3/R2
+    從 S3 下載檔案
     """
     s3_client = get_s3_client()
 
-    # Extract key from URL
-    key = file_url.split("/")[-1]
+    # 從 URL 提取 key
+    # 支援 CDN URL 和 S3 URL
+    if settings.S3_CDN_URL and file_url.startswith(settings.S3_CDN_URL):
+        key = file_url.replace(settings.S3_CDN_URL.rstrip('/') + '/', '')
+    else:
+        key = file_url.split("/", 3)[-1] if "/" in file_url else file_url
 
-    # Download file
     response = s3_client.get_object(
         Bucket=settings.S3_BUCKET,
         Key=key
