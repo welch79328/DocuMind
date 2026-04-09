@@ -195,6 +195,9 @@ class TranscriptPostprocessor:
         Returns:
             策略名稱 (full/fields/none)
         """
+        if not self.enable_llm:
+            return "none"
+
         if self.llm_strategy == "none":
             return "none"
 
