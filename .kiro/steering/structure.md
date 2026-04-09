@@ -65,7 +65,7 @@ backend/
 │   │   │   ├── preprocessor.py     # 圖像預處理（去浮水印、二值化）
 │   │   │   ├── engine_manager.py   # OCR 引擎管理（多引擎融合）
 │   │   │   ├── postprocessor.py    # 規則後處理（錯別字、格式）
-│   │   │   ├── llm_postprocessor.py # LLM 後處理（視覺修正）
+│   │   │   ├── llm_postprocessor.py # LLM 後處理（LLM 文字校正）
 │   │   │   ├── quality_assessor.py # 品質評估與重試決策
 │   │   │   ├── typo_dict.py        # 錯別字對照表
 │   │   │   └── image_utils.py      # 圖像工具函數
@@ -204,7 +204,7 @@ ocr_enhanced/
 ├── preprocessor.py          # TranscriptPreprocessor - 圖像預處理
 ├── engine_manager.py        # EngineManager - OCR 引擎管理
 ├── postprocessor.py         # TranscriptPostprocessor - 後處理協調器
-├── llm_postprocessor.py     # LLMPostprocessor - LLM 視覺修正
+├── llm_postprocessor.py     # LLMPostprocessor - LLM LLM 文字校正
 ├── quality_assessor.py      # QualityAssessor - 品質評估
 │
 ├── typo_dict.py             # 錯別字對照表（台灣地政用語）
@@ -229,7 +229,7 @@ EngineManager (OCR 引擎)
     ↓
 TranscriptPostprocessor (後處理)
     ├─ 規則修正（錯別字、格式）
-    └─ LLM 修正（可選，視覺修正）
+    └─ LLM 修正（可選，LLM 文字校正）
     ↓
 最終結果
 ```

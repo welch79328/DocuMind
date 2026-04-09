@@ -248,7 +248,7 @@ class DocumentProcessor(ABC):
             )
 
             # 步驟 6: 組裝結果
-            llm_step = "✓ 完成（視覺修正）" if llm_used else "⊗ 未使用"
+            llm_step = "✓ 完成（LLM 文字校正）" if llm_used else "⊗ 未使用"
             result: PageResult = {
                 "page_number": page_number,
                 "original_image": original_image_data,

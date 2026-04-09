@@ -145,7 +145,7 @@ frontend/src/
 | 預處理器 | `preprocessor.py` | 去浮水印、二值化、去噪 |
 | 引擎管理器 | `engine_manager.py` | 多引擎融合、重試邏輯 |
 | 規則後處理器 | `postprocessor.py` | 錯別字修正、格式校正 |
-| LLM 後處理器 | `llm_postprocessor.py` | 視覺修正、智能校正 |
+| LLM 後處理器 | `llm_postprocessor.py` | LLM 文字校正、智能校正 |
 | 品質評估器 | `quality_assessor.py` | 信心度評估、重試決策 |
 
 ### 可擴展性設計
@@ -323,7 +323,7 @@ const uploadDocument = async (file: File): Promise<DocumentResponse> => {
 
 - **智能策略**: OCR 信心度 < 85% 才使用 LLM
 - **模型選擇**: 簡單任務用 GPT-4o-mini，複雜任務用 GPT-4o
-- **視覺修正成本**: $0.02-0.03/頁
+- **LLM 文字校正成本**: $0.02-0.03/頁
 
 ### 儲存成本
 

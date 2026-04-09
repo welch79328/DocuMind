@@ -148,7 +148,7 @@ class LLMService:
 
         Args:
             prompt: 提示詞
-            image_data: base64 編碼的圖像資料（可選，用於視覺任務）
+            image_data: base64 編碼的圖像資料（可選，用於圖像分析任務）
             max_tokens: 最大輸出 token 數
             temperature: 溫度參數 (0.0-1.0)
 

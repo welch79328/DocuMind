@@ -51,7 +51,7 @@ class LlmPostprocessedResult(TypedDict):
     """
     LLM 後處理結果
 
-    使用 LLM 視覺修正後的結果
+    使用 LLM 文字校正後的結果
 
     Attributes:
         text: LLM 修正後的文字

@@ -751,10 +751,10 @@ class OcrTestResponse(TypedDict):
 │  └─────────────────────────────────┘   │
 │          ↓                              │
 │  ┌─────────────────────────────────┐   │
-│  │ 4. LLM Postprocess (視覺修正)   │   │
+│  │ 4. LLM Postprocess (LLM 文字校正)   │   │
 │  │    - 若 enable_llm=true         │   │
 │  │    - 傳入圖像 + OCR 文字         │   │
-│  │    - GPT-4o 視覺修正             │   │
+│  │    - GPT-4o LLM 文字校正             │   │
 │  └─────────────────────────────────┘   │
 │          ↓                              │
 │  ┌─────────────────────────────────┐   │
@@ -777,7 +777,7 @@ class OcrTestResponse(TypedDict):
 1. **步驟 1 - Preprocess**: 處理器根據文件類型執行專門的預處理（謄本去浮水印，合約加強去噪）
 2. **步驟 2 - Extract Text**: 使用 EngineManager 進行 OCR 辨識，返回文字與信心度
 3. **步驟 3 - Rule Postprocess**: 應用規則修正（錯別字、格式），統計修正次數
-4. **步驟 4 - LLM Postprocess**: 若啟用 LLM，傳入圖像與文字進行視覺修正
+4. **步驟 4 - LLM Postprocess**: 若啟用 LLM，傳入圖像與文字進行LLM 文字校正
 5. **步驟 5 - Extract Fields**: 謄本提取地號等，合約提取合約編號、雙方、金額等
 
 **錯誤處理**:

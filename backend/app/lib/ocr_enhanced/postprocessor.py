@@ -85,7 +85,7 @@ class TranscriptPostprocessor:
         Args:
             text: OCR 原始文字
             ocr_confidence: OCR 信心度 (0-1)，用於智能策略
-            image_data: base64 編碼的圖片資料（可選，提供給 LLM 用於視覺修正）
+            image_data: base64 編碼的圖片資料（可選，目前未傳送給 LLM）
 
         Returns:
             (處理後文字, 統計資訊)

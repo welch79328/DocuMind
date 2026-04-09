@@ -143,7 +143,7 @@ async def test_ocr(
     file: UploadFile = File(..., description="PDF 或圖片檔案（支援 .pdf, .jpg, .jpeg, .png）"),
     enable_llm: bool = Query(
         default=True,
-        description="是否啟用 LLM 視覺修正（true: 使用 GPT-4o 看圖修正，false: 只使用規則後處理）"
+        description="是否啟用 LLM 文字校正（true: 使用 GPT-4o 智能校正，false: 只使用規則後處理）"
     ),
     ground_truth: Optional[str] = Query(
         default=None,
@@ -166,7 +166,7 @@ async def test_ocr(
 
     ### 功能特色
     - ✅ **多頁處理**: 自動處理 PDF 所有頁面
-    - ✅ **視覺修正**: 使用 LLM 看圖修正 OCR 錯誤
+    - ✅ **LLM 文字校正**: 使用 LLM 智能校正 OCR 錯誤
     - ✅ **準確率對比**: 對比原始 OCR、規則後處理、LLM 修正的效果
     - ✅ **成本追蹤**: 顯示 LLM 處理成本
 
@@ -181,8 +181,8 @@ async def test_ocr(
       - `contract`: 合約文件
       - 不同文件類型會使用對應的處理器與欄位提取
 
-    - **enable_llm** (選填, 預設=true): 是否啟用 LLM 視覺修正
-      - `true`: 使用 GPT-4o 看圖修正（成本約 $0.02-0.03/頁）
+    - **enable_llm** (選填, 預設=true): 是否啟用 LLM 文字校正
+      - `true`: 使用 GPT-4o 智能校正（成本約 $0.02-0.03/頁）
       - `false`: 只使用規則後處理（免費）
 
     - **ground_truth** (選填): 標準答案文字
@@ -229,7 +229,7 @@ async def test_ocr(
           "processing_steps": {
             "1_ocr_engine": "Tesseract",
             "2_rule_processing": "✓ 完成",
-            "3_llm_processing": "✓ 完成（視覺修正）"
+            "3_llm_processing": "✓ 完成（LLM 文字校正）"
           }
         }
       ]
@@ -245,7 +245,7 @@ async def test_ocr(
       -F "enable_llm=false"
     ```
 
-    **完整測試**（含 LLM 視覺修正和準確率計算）:
+    **完整測試**（含 LLM 文字校正和準確率計算）:
     ```bash
     curl -X POST "http://localhost:8003/api/v1/ocr/test" \\
       -F "file=@document.pdf" \\

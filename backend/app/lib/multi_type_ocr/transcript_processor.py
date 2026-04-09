@@ -164,7 +164,7 @@ class TranscriptProcessor(DocumentProcessor):
         後處理文字
 
         委派給 TranscriptPostprocessor 進行錯別字修正、格式校正。
-        可選擇性使用 LLM 進行視覺修正。
+        可選擇性使用 LLM 進行文字校正。
 
         Args:
             text: 原始 OCR 文字
