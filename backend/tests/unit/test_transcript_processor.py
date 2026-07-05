@@ -239,26 +239,27 @@ class TestExtractFieldsMethod:
     """測試 extract_fields 方法"""
 
     @pytest.mark.asyncio
-    async def test_extract_fields_returns_empty_dict(self):
-        """驗證 extract_fields 返回空字典（未來實作）"""
+    async def test_extract_fields_returns_structured_with_confidences(self):
+        """驗證 extract_fields 回傳含信心度的結構化欄位(任務 10.2 已實作)"""
         processor = TranscriptProcessor()
 
         result = await processor.extract_fields("謄本文字內容")
 
         assert isinstance(result, dict)
-        assert len(result) == 0
+        assert "field_confidences" in result
+        assert "needs_confirmation" in result
 
     @pytest.mark.asyncio
-    async def test_extract_fields_accepts_text_parameter(self):
-        """驗證 extract_fields 接受文字參數"""
+    async def test_extract_fields_extracts_key_fields(self):
+        """驗證 extract_fields 抽取謄本關鍵欄位"""
         processor = TranscriptProcessor()
 
-        # 不應拋出異常
-        test_text = "建物謄本\n地號：1234\n面積：100平方公尺"
+        test_text = "建物謄本\n地號：1234\n面積：100平方公尺\n所有權人：王小明"
         result = await processor.extract_fields(test_text)
 
-        # 目前應返回空字典
-        assert result == {}
+        assert result["land_number"] == "1234"
+        assert result["owner"] == "王小明"
+        assert result["field_confidences"]["owner"] >= 0.8
 
 
 class TestProcessorConfiguration:
@@ -338,7 +339,8 @@ class TestProcessTemplateMethod:
         processor.extract_fields.assert_called_once_with(
             mock_postprocessed_text,
             image_data=None,
-            enable_llm=False
+            enable_llm=False,
+            few_shot=None
         )
 
         # 驗證返回結果結構

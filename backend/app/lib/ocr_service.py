@@ -2,7 +2,6 @@
 OCR Service - AWS Textract / PaddleOCR / pytesseract
 """
 
-import boto3
 from PIL import Image
 import io
 from app.config import settings
@@ -35,6 +34,10 @@ async def extract_text_with_textract(file_url: str) -> tuple[str, int]:
     """
     # Download file from storage
     file_bytes = await storage_service.download_file(file_url)
+
+    # 惰性匯入 boto3(僅 Textract 需要),與 pytesseract/paddleocr 一致,
+    # 避免在未安裝 boto3 的環境匯入整個 services 套件時失敗
+    import boto3
 
     # Create Textract client
     textract_client = boto3.client(

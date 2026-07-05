@@ -7,9 +7,12 @@
 import logging
 from typing import Dict, Type
 
+from app.lib.document_types import DocumentType
 from .processor import DocumentProcessor
 from .transcript_processor import TranscriptProcessor
 from .contract_processor import ContractProcessor
+from .bill_processor import BillProcessor
+from .repair_photo_processor import RepairPhotoProcessor
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +62,10 @@ class ProcessorFactory:
             >>> isinstance(processor, DocumentProcessor)
             True
         """
+        # 接受權威列舉成員:轉為其字串值以查詢字串鍵的映射表
+        if isinstance(document_type, DocumentType):
+            document_type = document_type.value
+
         processor_class = cls._processors.get(document_type)
 
         if processor_class is None:
@@ -122,3 +129,5 @@ class ProcessorFactory:
 # 預設註冊支援的處理器
 ProcessorFactory.register_processor("transcript", TranscriptProcessor)
 ProcessorFactory.register_processor("contract", ContractProcessor)
+ProcessorFactory.register_processor("bill", BillProcessor)
+ProcessorFactory.register_processor("repair_photo", RepairPhotoProcessor)

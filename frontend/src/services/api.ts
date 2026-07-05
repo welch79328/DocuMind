@@ -1,4 +1,5 @@
 import axios from 'axios'
+import type { ReviewItem, ReviewQueueResponse, ReviewStatus, SubmitDiff } from '@/types/review'
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api'
 
@@ -29,5 +30,23 @@ api.interceptors.response.use(
     return Promise.reject(error)
   }
 )
+
+// 人工複核 API
+export const reviewApi = {
+  getQueue: (status?: ReviewStatus) =>
+    api.get<ReviewQueueResponse>('/v1/review/queue', {
+      params: status ? { status } : {},
+    }),
+  getItem: (id: string) => api.get<ReviewItem>(`/v1/review/${id}`),
+  claim: (id: string, reviewer: string) =>
+    api.post<{ claimed: boolean }>(`/v1/review/${id}/claim`, { reviewer }),
+  release: (id: string, reviewer: string) =>
+    api.post<{ status: string }>(`/v1/review/${id}/release`, { reviewer }),
+  submit: (id: string, reviewer: string, corrected_fields: Record<string, unknown>) =>
+    api.post<{ status: string; diff: SubmitDiff }>(`/v1/review/${id}/submit`, {
+      reviewer,
+      corrected_fields,
+    }),
+}
 
 export default api

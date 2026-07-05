@@ -11,7 +11,7 @@
 
 import pytest
 from app.lib.multi_type_ocr.processor_factory import ProcessorFactory
-from app.lib.multi_type_ocr.processor import DocumentProcessor
+from app.lib.multi_type_ocr.processor import DocumentProcessor, OcrDocumentProcessor
 from PIL import Image
 from typing import Dict, Any, Optional
 
@@ -47,7 +47,7 @@ class TestGetProcessor:
     def setup_test_processors(self):
         """每個測試前設置測試用處理器"""
         # 創建測試用處理器類別
-        class TestProcessor(DocumentProcessor):
+        class TestProcessor(OcrDocumentProcessor):
             async def preprocess(self, image):
                 return image
 
@@ -123,7 +123,7 @@ class TestRegisterProcessor:
 
     def test_register_processor_adds_new_type(self):
         """驗證 register_processor 能註冊新類型"""
-        class NewProcessor(DocumentProcessor):
+        class NewProcessor(OcrDocumentProcessor):
             async def preprocess(self, image):
                 return image
 
@@ -142,7 +142,7 @@ class TestRegisterProcessor:
 
     def test_register_processor_allows_retrieval(self):
         """驗證註冊後可以通過 get_processor 取得"""
-        class CustomProcessor(DocumentProcessor):
+        class CustomProcessor(OcrDocumentProcessor):
             async def preprocess(self, image):
                 return image
 
@@ -161,7 +161,7 @@ class TestRegisterProcessor:
 
     def test_register_processor_overwrites_existing(self):
         """驗證 register_processor 可以覆蓋既有類型"""
-        class OriginalProcessor(DocumentProcessor):
+        class OriginalProcessor(OcrDocumentProcessor):
             async def preprocess(self, image):
                 return image
 
@@ -174,7 +174,7 @@ class TestRegisterProcessor:
             async def extract_fields(self, text):
                 return {}
 
-        class ReplacementProcessor(DocumentProcessor):
+        class ReplacementProcessor(OcrDocumentProcessor):
             async def preprocess(self, image):
                 return image
 
@@ -200,7 +200,7 @@ class TestSupportedTypes:
     @pytest.fixture(autouse=True)
     def setup_known_processors(self):
         """設置已知的處理器集合"""
-        class ProcessorA(DocumentProcessor):
+        class ProcessorA(OcrDocumentProcessor):
             async def preprocess(self, image):
                 return image
 
@@ -213,7 +213,7 @@ class TestSupportedTypes:
             async def extract_fields(self, text):
                 return {}
 
-        class ProcessorB(DocumentProcessor):
+        class ProcessorB(OcrDocumentProcessor):
             async def preprocess(self, image):
                 return image
 
@@ -257,7 +257,7 @@ class TestSupportedTypes:
 
     def test_supported_types_updates_after_registration(self):
         """驗證註冊新類型後 supported_types 更新"""
-        class NewProcessor(DocumentProcessor):
+        class NewProcessor(OcrDocumentProcessor):
             async def preprocess(self, image):
                 return image
 

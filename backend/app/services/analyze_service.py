@@ -7,11 +7,10 @@
 import logging
 from typing import Optional, List, Tuple
 
-import fitz
-
 from app.lib.storage_service import storage_service
 from app.lib.multi_type_ocr.processor_factory import ProcessorFactory
 from app.lib.ai_service import answer_question
+from app.lib.pdf_text_layer import has_text_layer, extract_text_layer_pages
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +57,7 @@ class AnalyzeService:
         filename: str,
         document_type: str,
         enable_llm: bool,
+        few_shot: Optional[List[dict]] = None,
     ) -> Tuple[List[dict], int]:
         """
         執行 OCR 處理
@@ -67,7 +67,15 @@ class AnalyzeService:
         """
         is_pdf = filename.lower().endswith(".pdf")
 
+        # 合約 PDF 且含文字層 → 直接抽取文字並分段,略過 OCR(省成本)
+        if is_pdf and document_type == "contract" and has_text_layer(file_contents):
+            logger.info("合約 PDF 含文字層,直接抽取文字並分段(略過 OCR)")
+            pages = extract_text_layer_pages(file_contents)
+            return pages, len(pages)
+
+        # 惰性匯入 PyMuPDF(僅 PDF 處理需要),避免未安裝環境匯入 app 失敗
         if is_pdf:
+            import fitz
             doc = fitz.open(stream=file_contents, filetype="pdf")
             total_pages = len(doc)
             doc.close()
@@ -92,13 +100,14 @@ class AnalyzeService:
                 else:
                     page_bytes = file_contents
 
-                # OCR 處理
+                # OCR 處理(注入 few-shot 範例)
                 page_result = await processor.process(
                     file_contents=page_bytes,
                     filename=filename,
                     page_number=page_num,
                     total_pages=total_pages,
                     enable_llm=enable_llm,
+                    few_shot=few_shot,
                 )
 
                 # 移除 original_image（節省回應大小）
@@ -126,11 +135,12 @@ class AnalyzeService:
         document_type: str,
         enable_llm: bool,
         question: Optional[str] = None,
+        few_shot: Optional[List[dict]] = None,
     ) -> dict:
         """
         執行完整的文件分析流程
 
-        流程：S3 上傳 → OCR 處理 → 統計計算 → 組裝回應
+        流程：S3 上傳 → OCR 處理（注入 few-shot）→ 統計計算 → 組裝回應
         """
         import time
 
@@ -139,9 +149,9 @@ class AnalyzeService:
         # 1. S3 上傳（失敗不影響後續）
         file_url = await self._upload_to_s3(file_contents, filename, document_type)
 
-        # 2. OCR 處理
+        # 2. OCR 處理（注入 few-shot 範例）
         pages, total_pages = await self._process_ocr(
-            file_contents, filename, document_type, enable_llm
+            file_contents, filename, document_type, enable_llm, few_shot
         )
 
         # 3. AI 問答（可選）

@@ -53,3 +53,7 @@ class AnalyzeResponse(BaseModel):
     pages: List[OcrPageResult]
     answer: Optional[str] = None
     stats: ProcessingStats
+    # 信心度攔截(任務 3.3)
+    needs_review: bool = False                              # 是否需人工複核
+    review_item_id: Optional[str] = None                   # 入列後的複核項目 id
+    field_confidences: Dict[str, float] = {}               # 欄位信心度彙整

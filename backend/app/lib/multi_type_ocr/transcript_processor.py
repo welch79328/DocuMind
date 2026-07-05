@@ -10,7 +10,7 @@ from typing import Dict, Any, Optional
 from PIL import Image
 import numpy as np
 
-from .processor import DocumentProcessor
+from .processor import OcrDocumentProcessor
 from ..ocr_enhanced.config import PreprocessConfig
 from ..ocr_enhanced.preprocessor import TranscriptPreprocessor
 from ..ocr_enhanced.engine_manager import EngineManager
@@ -19,7 +19,7 @@ from ..ocr_enhanced.postprocessor import TranscriptPostprocessor
 logger = logging.getLogger(__name__)
 
 
-class TranscriptProcessor(DocumentProcessor):
+class TranscriptProcessor(OcrDocumentProcessor):
     """
     謄本文件處理器
 
@@ -52,15 +52,17 @@ class TranscriptProcessor(DocumentProcessor):
         """
         logger.info("初始化 TranscriptProcessor")
 
-        # 初始化預處理器（使用預設配置）
+        # 初始化預處理器（預設含浮水印移除）
         preprocess_config = PreprocessConfig()
         self.preprocessor = TranscriptPreprocessor(config=preprocess_config)
 
-        # 初始化 OCR 引擎管理器
+        # 初始化 OCR 引擎管理器（依設定啟用 PaddleOCR;繁中優先,PaddleOCR 惰性載入）
+        from app.config import settings
         self.engine_manager = EngineManager(
-            engines=["tesseract"],  # 可根據需求調整引擎
-            parallel=False,
-            fusion_method="best"
+            engines=list(settings.OCR_ENGINES),
+            parallel=settings.OCR_MULTI_ENGINE,
+            fusion_method=settings.OCR_FUSION_METHOD,
+            paddleocr_lang=settings.OCR_PADDLEOCR_LANG,
         )
 
         # 初始化後處理器（LLM 由 process() 的 enable_llm 參數動態控制）
@@ -213,27 +215,30 @@ class TranscriptProcessor(DocumentProcessor):
         self,
         text: str,
         image_data: Optional[str] = None,
-        enable_llm: bool = False
+        enable_llm: bool = False,
+        few_shot: Optional[list] = None
     ) -> Dict[str, Any]:
         """
-        提取結構化欄位
+        提取謄本關鍵欄位(地號/建號、面積、權利範圍、所有權人)
 
-        謄本的結構化欄位提取功能（未來實作）。
-        目前返回空字典,保留擴展空間。
+        以規則抽取為主;啟用 LLM 且有圖像時,對低信心欄位以 LLM Vision 補齊
+        (注入 few-shot)。每欄位附信心度,低信心欄位標記於 needs_confirmation。
 
         Args:
             text: OCR 文字
-            image_data: base64 編碼的圖像資料（未使用）
-            enable_llm: 是否啟用 LLM 輔助提取（未使用）
+            image_data: base64 編碼的圖像資料(供 LLM Vision)
+            enable_llm: 是否啟用 LLM 輔助提取
+            few_shot: few-shot 範例(注入 LLM 提示)
 
         Returns:
-            結構化欄位字典,目前為空字典
-
-        Note:
-            未來可實作提取地號、面積、所有權人等謄本專屬欄位。
+            結構化欄位字典(含 field_confidences / needs_confirmation)
         """
-        logger.debug("提取結構化欄位（目前未實作）")
+        from .transcript_field_extractor import TranscriptFieldExtractor
 
-        # 未來實作: 使用 TranscriptFieldExtractor 提取謄本欄位
-        # 如: 地號、建號、面積、所有權人、他項權利等
-        return {}
+        extractor = TranscriptFieldExtractor()
+        return await extractor.extract(
+            text,
+            image_data=image_data,
+            use_llm_fallback=enable_llm,
+            few_shot=few_shot,
+        )

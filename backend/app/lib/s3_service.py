@@ -2,14 +2,16 @@
 S3 / Cloudflare R2 Service
 """
 
-import boto3
-from botocore.config import Config
 from app.config import settings
 import uuid
 
 
 def get_s3_client():
     """Get S3/R2 client"""
+    # 惰性匯入 boto3/botocore(僅使用 S3/R2 時需要)
+    import boto3
+    from botocore.config import Config
+
     client_config = {
         "service_name": "s3",
         "aws_access_key_id": settings.S3_ACCESS_KEY,

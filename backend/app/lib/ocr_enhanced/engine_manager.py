@@ -27,7 +27,8 @@ class EngineManager:
         self,
         engines: Optional[list[OCREngineName]] = None,
         parallel: bool = False,
-        fusion_method: FusionMethod = "best"
+        fusion_method: FusionMethod = "best",
+        paddleocr_lang: str = "chinese_cht"
     ):
         """
         初始化引擎管理器
@@ -36,18 +37,23 @@ class EngineManager:
             engines: 引擎列表
             parallel: 是否並行處理
             fusion_method: 融合方法 (best/weighted/vote)
+            paddleocr_lang: PaddleOCR 語言(繁中預設 chinese_cht)
         """
         self.engines: list[OCREngineName] = engines or ["paddleocr", "tesseract"]
         self.parallel = parallel
         self.fusion_method = fusion_method
+        self.paddleocr_lang = paddleocr_lang
+        # 註:PaddleOCR 改為首次使用時惰性載入(見 _ensure_paddleocr),
+        # 避免未安裝 paddleocr 的環境在建構時即失敗
 
-        # 初始化 PaddleOCR（單例模式）
-        if "paddleocr" in self.engines and EngineManager._paddleocr_instance is None:
+    def _ensure_paddleocr(self):
+        """惰性初始化 PaddleOCR(單例);僅在實際辨識時載入"""
+        if EngineManager._paddleocr_instance is None:
             try:
                 from paddleocr import PaddleOCR
                 EngineManager._paddleocr_instance = PaddleOCR(
                     use_angle_cls=True,
-                    lang='chinese_cht',
+                    lang=self.paddleocr_lang,
                     use_gpu=False,
                     show_log=False,
                     det=True,
@@ -55,6 +61,7 @@ class EngineManager:
                 )
             except Exception as e:
                 raise RuntimeError(f"PaddleOCR 初始化失敗: {e}")
+        return EngineManager._paddleocr_instance
 
     async def extract_text_multi_engine(
         self,
@@ -132,8 +139,8 @@ class EngineManager:
         Raises:
             RuntimeError: PaddleOCR 執行失敗
         """
-        if EngineManager._paddleocr_instance is None:
-            raise RuntimeError("PaddleOCR 未初始化")
+        # 惰性載入 PaddleOCR(首次辨識時)
+        self._ensure_paddleocr()
 
         # 將同步 OCR 呼叫轉為非同步
         def _ocr_sync():

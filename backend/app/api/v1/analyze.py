@@ -17,19 +17,31 @@ from app.schemas.analyze import AnalyzeResponse
 from app.services.analyze_service import AnalyzeService
 from app.database import get_db
 from app.models.api_usage_log import ApiUsageLog
+from app.lib.document_types import (
+    SUPPORTED_EXTENSIONS,
+    normalize_document_type,
+    is_extension_allowed,
+)
+from app.lib.multi_type_ocr.processor_factory import ProcessorFactory
+from app.lib.ocr_enhanced.quality_assessor import QualityAssessor
+from app.services.review_queue_service import ReviewQueueService
+from app.services.correction_sample_service import CorrectionSampleService
+from app.services.few_shot_selector import FewShotSelector
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# 支援的檔案格式
-SUPPORTED_EXTENSIONS = {".pdf", ".jpg", ".jpeg", ".png"}
-
-# 支援的文件類型
-SUPPORTED_DOCUMENT_TYPES = {"transcript", "contract"}
-
 # 檔案大小限制 (20MB)
 MAX_FILE_SIZE = 20 * 1024 * 1024
+
+
+def _file_extension(file: UploadFile) -> str:
+    """取得上傳檔案的小寫副檔名(含點),無副檔名則回傳空字串"""
+    filename = file.filename or ""
+    if "." in filename:
+        return "." + filename.rsplit(".", 1)[-1].lower()
+    return ""
 
 
 class AnalyzeError(Exception):
@@ -42,10 +54,7 @@ class AnalyzeError(Exception):
 
 def _validate_file(file: UploadFile) -> None:
     """驗證上傳檔案的格式"""
-    filename = file.filename or ""
-    ext = ""
-    if "." in filename:
-        ext = "." + filename.rsplit(".", 1)[-1].lower()
+    ext = _file_extension(file)
 
     if ext not in SUPPORTED_EXTENSIONS:
         raise AnalyzeError(
@@ -55,14 +64,87 @@ def _validate_file(file: UploadFile) -> None:
         )
 
 
-def _validate_document_type(document_type: str) -> None:
-    """驗證文件類型"""
-    if document_type not in SUPPORTED_DOCUMENT_TYPES:
-        supported = "、".join(SUPPORTED_DOCUMENT_TYPES)
+def _resolve_document_type(document_type: str) -> str:
+    """
+    正規化並驗證文件類型
+
+    - 將舊型別別名(如 lease)正規化為權威型別(contract)
+    - 依工廠動態產生的白名單驗證(僅已註冊處理器的型別可路由)
+    - 未指定 / 未知 / 未註冊者拋出繁中錯誤
+
+    Returns:
+        正規化後的權威型別字串(例如 "contract")
+    """
+    supported = [str(t) for t in ProcessorFactory.supported_types()]
+    normalized = normalize_document_type(document_type)
+
+    if normalized is None or normalized.value not in supported:
+        supported_display = "、".join(supported)
         raise AnalyzeError(
             status_code=400,
-            detail=f"不支援的文件類型：{document_type}。支援的類型：{supported}",
+            detail=(
+                f"不支援的文件類型：{document_type or '未指定'}。"
+                f"支援的類型：{supported_display}"
+            ),
             error_code="UNSUPPORTED_DOCUMENT_TYPE",
+        )
+
+    return normalized.value
+
+
+def _apply_confidence_gating(result: dict, db: Session) -> None:
+    """
+    信心度攔截(任務 3.3)
+
+    逐頁彙整信心度,以 QualityAssessor 判定是否需人工複核;低信心自動入複核佇列,
+    並於回應加上 needs_review / review_item_id / field_confidences。高信心則放行。
+    就地修改 result。
+    """
+    pages = result.get("pages") or []
+
+    # OCR 信心度取各頁最小值(保守);欄位信心度彙整自各頁 structured_data
+    page_confidences = [
+        p["ocr_raw"]["confidence"]
+        for p in pages
+        if p.get("ocr_raw") and p["ocr_raw"].get("confidence") is not None
+    ]
+    overall_ocr_confidence = min(page_confidences) if page_confidences else 1.0
+
+    field_confidences: dict = {}
+    for page in pages:
+        structured = page.get("structured_data") or {}
+        page_fields = structured.get("field_confidences")
+        if isinstance(page_fields, dict):
+            field_confidences.update(page_fields)
+
+    decision = QualityAssessor().assess(overall_ocr_confidence, field_confidences)
+
+    result["needs_review"] = decision["needs_review"]
+    result["field_confidences"] = field_confidences
+    result["review_item_id"] = None
+
+    if decision["needs_review"]:
+        review_id = ReviewQueueService(db).enqueue(
+            document_id=None,  # analyze 流程無狀態,佇列項目以快照自足
+            document_type=result.get("document_type"),
+            overall_confidence=decision["overall_confidence"],
+            result={"pages": pages, "field_confidences": field_confidences},
+        )
+        result["review_item_id"] = str(review_id)
+
+
+def _validate_type_file_compatibility(document_type: str, file: UploadFile) -> None:
+    """驗證檔案格式與所選文件類型是否相容(需求 1.5)"""
+    ext = _file_extension(file)
+    normalized = normalize_document_type(document_type)
+    if normalized is not None and not is_extension_allowed(normalized, ext):
+        raise AnalyzeError(
+            status_code=400,
+            detail=(
+                f"檔案格式 {ext or '未知'} 與文件類型「{document_type}」不相容。"
+                f"請確認上傳的檔案格式正確。"
+            ),
+            error_code="INCOMPATIBLE_FILE_TYPE",
         )
 
 
@@ -166,6 +248,7 @@ async def analyze_document(
         default=None,
         description="針對文件的問題（選填，提供時會基於 OCR 結果使用 AI 回答）"
     ),
+    db: Session = Depends(get_db),
 ):
     """
     ## 統一文件分析
@@ -220,10 +303,13 @@ async def analyze_document(
         # 1. 檔案格式驗證
         _validate_file(file)
 
-        # 2. 文件類型驗證
-        _validate_document_type(document_type)
+        # 2. 文件類型驗證與正規化(動態白名單 + 舊型別收斂)
+        resolved_document_type = _resolve_document_type(document_type)
 
-        # 3. 讀取檔案內容並檢查大小
+        # 3. 型別-檔案格式相容性驗證
+        _validate_type_file_compatibility(resolved_document_type, file)
+
+        # 4. 讀取檔案內容並檢查大小
         contents = await file.read()
         if len(contents) > MAX_FILE_SIZE:
             raise AnalyzeError(
@@ -232,15 +318,24 @@ async def analyze_document(
                 error_code="FILE_TOO_LARGE",
             )
 
-        # 4. 呼叫分析服務
+        # 5. 選取 few-shot 範例(依文件類型;校正累積後越用越準)
+        few_shot = FewShotSelector(CorrectionSampleService(db)).select(
+            resolved_document_type
+        )
+
+        # 6. 呼叫分析服務(傳入正規化後的權威型別與 few-shot)
         service = AnalyzeService()
         result = await service.analyze(
             file_contents=contents,
             filename=file.filename or "unknown",
-            document_type=document_type,
+            document_type=resolved_document_type,
             enable_llm=enable_llm,
             question=question,
+            few_shot=few_shot,
         )
+
+        # 7. 信心度攔截:低信心自動入複核佇列並標示 needs_review
+        _apply_confidence_gating(result, db)
         return result
 
     except AnalyzeError as e:

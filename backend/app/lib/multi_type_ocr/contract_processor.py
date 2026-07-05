@@ -10,7 +10,7 @@ from typing import Dict, Any, Optional
 from PIL import Image
 import numpy as np
 
-from .processor import DocumentProcessor
+from .processor import OcrDocumentProcessor
 from .types import ContractStructuredData
 from .contract_field_extractor import ContractFieldExtractor
 from ..ocr_enhanced.config import PreprocessConfig
@@ -21,7 +21,7 @@ from ..ocr_enhanced.postprocessor import TranscriptPostprocessor
 logger = logging.getLogger(__name__)
 
 
-class ContractProcessor(DocumentProcessor):
+class ContractProcessor(OcrDocumentProcessor):
     """
     合約文件處理器
 
@@ -228,7 +228,8 @@ class ContractProcessor(DocumentProcessor):
         self,
         text: str,
         image_data: Optional[str] = None,
-        enable_llm: bool = False
+        enable_llm: bool = False,
+        few_shot: Optional[list] = None
     ) -> ContractStructuredData:
         """
         提取結構化欄位

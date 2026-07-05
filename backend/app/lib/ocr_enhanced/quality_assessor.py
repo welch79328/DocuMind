@@ -1,97 +1,84 @@
 """
-Quality Assessor Module
+統一信心度評估點 QualityAssessor
 
-品質評估模組，提供 OCR 結果品質評分與重試決策功能。
+作為全系統唯一的信心度評估與複核判定入口,取代原先散落各處的硬編碼門檻。
+所有 pipeline 皆透過本元件依可配置門檻(settings.OCR_QUALITY_THRESHOLD,0-1 尺度)
+取得:整體信心度、低信心欄位清單、是否需人工複核。
 """
 
-from .types import QualityMetrics
+from __future__ import annotations
+
+from typing import Dict, List, Optional, TypedDict
+
+from app.config import settings
+from app.lib.document_types import DocumentType
+
+
+class QualityDecision(TypedDict):
+    """
+    信心度評估結果
+
+    Attributes:
+        overall_confidence: 整體信心度(0-1),採保守最差值
+        needs_review: 是否需進入人工複核佇列
+        low_confidence_fields: 低於門檻的欄位名稱清單
+    """
+    overall_confidence: float
+    needs_review: bool
+    low_confidence_fields: List[str]
 
 
 class QualityAssessor:
     """
-    品質評估器
+    品質(信心度)評估器
 
-    評估 OCR 結果品質，決策是否重試。
+    以單一可配置門檻判定文件處理結果是否可信、是否需人工複核。
     """
 
-    def __init__(
-        self,
-        quality_threshold: float = 60.0,
-        max_retries: int = 3
-    ):
+    def __init__(self, threshold: Optional[float] = None):
         """
-        初始化品質評估器
-
         Args:
-            quality_threshold: 品質閾值 (0-100)
-            max_retries: 最大重試次數
+            threshold: 信心度門檻(0-1);未提供時採 settings.OCR_QUALITY_THRESHOLD
         """
-        self.threshold = quality_threshold
-        self.max_retries = max_retries
+        self.threshold = (
+            threshold if threshold is not None else settings.OCR_QUALITY_THRESHOLD
+        )
 
     def assess(
         self,
-        ocr_result: str,
-        confidence: float,
-        doc_type: str = "transcript"
-    ) -> QualityMetrics:
+        ocr_confidence: float,
+        field_confidences: Optional[Dict[str, float]] = None,
+        document_type: Optional[DocumentType] = None,
+    ) -> QualityDecision:
         """
-        評估 OCR 結果品質
+        評估處理結果並產出複核判定
 
         Args:
-            ocr_result: OCR 文字
-            confidence: 平均信心度
-            doc_type: 文件類型
+            ocr_confidence: OCR / 整體辨識信心度(0-1)
+            field_confidences: 各欄位信心度 {欄位名: 信心度},可選
+            document_type: 文件類型(保留供未來依類型調整門檻),可選
 
         Returns:
-            品質指標 (QualityMetrics TypedDict)
+            QualityDecision:整體信心度、是否需複核、低信心欄位清單。
         """
-        # TODO: 實作品質評估
+        fields = field_confidences or {}
+
+        low_confidence_fields = sorted(
+            name for name, conf in fields.items() if conf < self.threshold
+        )
+
+        # 整體信心度採保守最差值:任一低信心欄位都應反映在整體
+        if fields:
+            overall_confidence = min(ocr_confidence, min(fields.values()))
+        else:
+            overall_confidence = ocr_confidence
+
+        needs_review = (
+            overall_confidence < self.threshold or bool(low_confidence_fields)
+        )
+
         return {
-            "confidence_score": 0.0,
-            "character_density": 0.0,
-            "field_match_rate": 0.0,
-            "anomaly_rate": 0.0,
-            "overall_score": 0.0
-        }
-
-    def should_retry(
-        self,
-        metrics: QualityMetrics,
-        retry_count: int
-    ) -> tuple[bool, str]:
-        """
-        判斷是否需要重試
-
-        Args:
-            metrics: 品質指標
-            retry_count: 當前重試次數
-
-        Returns:
-            (是否重試, 建議策略)
-        """
-        # TODO: 實作重試決策
-        return False, ""
-
-    def generate_report(
-        self,
-        metrics: QualityMetrics,
-        processing_history: list[dict]
-    ) -> dict:
-        """
-        生成品質報告
-
-        Args:
-            metrics: 品質指標
-            processing_history: 處理歷史
-
-        Returns:
-            品質報告字典
-        """
-        # TODO: 實作報告生成
-        return {
-            "quality_score": 0.0,
-            "assessment": "",
-            "recommendations": [],
-            "processing_history": []
+            "overall_confidence": overall_confidence,
+            "needs_review": needs_review,
+            "low_confidence_fields": low_confidence_fields,
         }

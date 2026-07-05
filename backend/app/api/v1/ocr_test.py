@@ -7,7 +7,10 @@ OCR 辨識測試與驗證 API
 from fastapi import APIRouter, UploadFile, File, HTTPException, Query
 from fastapi.responses import JSONResponse
 from PIL import Image
-import fitz
+try:
+    import fitz  # PyMuPDF;僅 PDF 相關端點需要,未安裝時延後到實際呼叫才報錯
+except ImportError:  # pragma: no cover
+    fitz = None
 from io import BytesIO
 import os
 from typing import Optional, List, Literal

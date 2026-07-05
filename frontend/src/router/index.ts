@@ -23,6 +23,16 @@ const router = createRouter({
       path: '/ocr-test',
       name: 'ocr-test',
       component: () => import('../views/OcrTestView.vue')
+    },
+    {
+      path: '/review',
+      name: 'review',
+      component: () => import('../views/ReviewQueueView.vue')
+    },
+    {
+      path: '/review/:id',
+      name: 'review-correct',
+      component: () => import('../views/ReviewCorrectView.vue')
     }
   ]
 })

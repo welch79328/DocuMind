@@ -210,3 +210,19 @@ class DocumentClassifier:
             return "id_card"
 
         return "unknown"
+
+    async def suggest(self, image: Image.Image):
+        """
+        建議文件類型(輔助):將分類結果對映至權威型別列舉並附信心度。
+
+        僅為建議供使用者確認,最終仍以使用者指定為準(需求 1.3)。
+
+        Returns:
+            (DocumentType 或 None, 信心度 0-1);無法對映權威型別時回 (None, 0.0)。
+        """
+        from app.lib.document_types import normalize_document_type
+
+        raw = await self.classify(image)
+        normalized = normalize_document_type(raw)
+        confidence = 0.7 if normalized is not None else 0.0
+        return normalized, confidence

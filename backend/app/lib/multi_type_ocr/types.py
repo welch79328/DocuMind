@@ -7,14 +7,19 @@
 
 from typing import TypedDict, Literal, Optional, Dict, Any
 
+# 權威文件類型列舉的單一真相來源(re-export,供既有引用者收斂)
+from app.lib.document_types import DocumentType
 
-# 文件類型列舉
-DocumentTypeEnum = Literal["transcript", "contract"]
+
+# 文件類型列舉(Literal 形式,對齊權威 DocumentType 的四種型別)
+DocumentTypeEnum = Literal["transcript", "bill", "contract", "repair_photo"]
 """
-支援的文件類型列舉
+支援的文件類型列舉(與權威 `DocumentType` 一致)
 
-- transcript: 謄本文件
-- contract: 合約文件
+- transcript: 建物土地謄本
+- bill: 帳單
+- contract: 合約
+- repair_photo: 修繕照片
 """
 
 
@@ -80,12 +85,14 @@ class PageResult(TypedDict):
     """
     page_number: int
     original_image: str
-    ocr_raw: OcrRawResult
-    rule_postprocessed: RulePostprocessedResult
+    ocr_raw: Optional[OcrRawResult]
+    rule_postprocessed: Optional[RulePostprocessedResult]
     llm_postprocessed: Optional[LlmPostprocessedResult]
     structured_data: Optional[Dict[str, Any]]
     accuracy: Optional[Dict[str, float]]
     processing_steps: Dict[str, str]
+    field_confidences: Dict[str, float]     # 各欄位信心度(任務 8.1)
+    overall_confidence: float               # 整體信心度(供 QualityAssessor)
 
 
 # 合約結構化資料型別定義
