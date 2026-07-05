@@ -20,7 +20,13 @@ ENV OMP_NUM_THREADS=1 \
 
 # Install system dependencies
 # PaddleOCR ARM64 Docker Fix: 添加 libgomp1 等必要庫
-RUN apt-get update && apt-get install -y \
+# 將 apt 來源改為 HTTPS(某些網路環境的 http://deb.debian.org 被 proxy 破壞/限速,
+# https 直通;ca-certificates 已內建於 slim 映像)
+RUN sed -i 's|http://deb.debian.org|https://deb.debian.org|g' \
+        /etc/apt/sources.list.d/debian.sources 2>/dev/null; \
+    sed -i 's|http://deb.debian.org|https://deb.debian.org|g' \
+        /etc/apt/sources.list 2>/dev/null; \
+    apt-get update && apt-get install -y \
     postgresql-client \
     tesseract-ocr \
     tesseract-ocr-chi-tra \
