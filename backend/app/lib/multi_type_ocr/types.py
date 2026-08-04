@@ -7,6 +7,11 @@
 
 from typing import TypedDict, Literal, Optional, Dict, Any
 
+try:  # NotRequired 於 Python 3.11 才進入標準 typing
+    from typing import NotRequired
+except ImportError:  # pragma: no cover - 3.9/3.10 走 typing_extensions
+    from typing_extensions import NotRequired
+
 # 權威文件類型列舉的單一真相來源(re-export,供既有引用者收斂)
 from app.lib.document_types import DocumentType
 
@@ -93,6 +98,9 @@ class PageResult(TypedDict):
     processing_steps: Dict[str, str]
     field_confidences: Dict[str, float]     # 各欄位信心度(任務 8.1)
     overall_confidence: float               # 整體信心度(供 QualityAssessor)
+    # 欄位層共識明細(選填):{"available": bool, "agreements": {...}}
+    # 共識模式未啟用時此鍵完全不存在,結果與現行版本逐鍵一致
+    consensus: NotRequired[Dict[str, Any]]
 
 
 # 合約結構化資料型別定義

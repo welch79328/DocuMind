@@ -11,10 +11,13 @@
 import logging
 from abc import ABC, abstractmethod
 from typing import Dict, Any, List, Optional
+import numpy as np
 from PIL import Image
 import io
 import base64
 
+from ..ocr_enhanced.types import EngineResult
+from .field_consensus import FieldConsensusResolver, field_candidate_from_extraction
 from .types import PageResult
 
 logger = logging.getLogger(__name__)
@@ -91,6 +94,122 @@ class OcrDocumentProcessor(DocumentProcessor):
         """OCR 文字提取,回傳 (文字, 信心度 0.0-1.0)"""
         pass
 
+    @staticmethod
+    def _to_bgr_array(image: Image.Image) -> np.ndarray:
+        """
+        將 PIL Image 轉為 OpenCV(BGR)格式的 numpy array
+
+        EngineManager 以 BGR 陣列為輸入。彩色(三通道)影像需交換紅藍通道;
+        灰階與含 alpha 的影像維持原樣。
+
+        供 extract_text() 與 extract_text_candidates() 共用,避免兩處重複。
+        """
+        array = np.array(image)
+        if len(array.shape) == 3 and array.shape[2] == 3:
+            array = array[:, :, ::-1].copy()
+        return array
+
+    async def extract_text_candidates(
+        self, image: Image.Image
+    ) -> List[EngineResult]:
+        """
+        產出多引擎辨識候選,供共識層比對。
+
+        預設實作:包裝既有 extract_text(),回傳單一元素列表。
+
+        ⚠️ 此預設僅保證「既有子類別不會失效」,**不足以啟動共識**——因
+        extract_text() 回傳的是融合後的單一文字。真正的共識能力必須由子類別
+        覆寫提供,改為回傳 EngineManager 各引擎的原始結果。
+        """
+        text, confidence = await self.extract_text(image)
+        return [{
+            "engine": "default",
+            "text": text,
+            "confidence": confidence,
+            "processing_time_ms": 0,
+        }]
+
+    async def fuse_candidates(
+        self, candidates: List[EngineResult]
+    ) -> tuple[str, float]:
+        """
+        由既有候選產生融合文字與信心度,**不重跑引擎**。
+
+        具 EngineManager 的處理器一律委派給它,以沿用設定的融合策略;
+        其餘情況退回「取信心度最高者」。
+        """
+        if not candidates:
+            return "", 0.0
+
+        engine_manager = getattr(self, "engine_manager", None)
+        if engine_manager is not None and hasattr(engine_manager, "fuse"):
+            return engine_manager.fuse(candidates)
+
+        best = max(candidates, key=lambda c: c["confidence"])
+        return best["text"], best["confidence"]
+
+    @staticmethod
+    def _consensus_enabled() -> bool:
+        """共識模式是否啟用(可由開關或融合模式擇一設定;需求 4.7)"""
+        from app.config import settings
+
+        return bool(getattr(settings, "OCR_CONSENSUS_ENABLED", False)) or (
+            getattr(settings, "OCR_FUSION_METHOD", "") == "cross_check"
+        )
+
+    async def _resolve_consensus(
+        self, candidates: List[EngineResult]
+    ) -> Optional[Dict[str, Any]]:
+        """
+        對各候選分別做**純規則式**欄位抽取後解析共識。
+
+        關鍵成本約束:此處一律以 `enable_llm=False`、`image_data=None` 呼叫,
+        使各候選走零成本的 regex 路徑。若對每個候選觸發 LLM,呼叫次數會隨候選數
+        倍增,直接衝擊月成本上限——LLM 補全只對共識後的單一結果執行一次。
+        """
+        field_candidates = []
+        for candidate in candidates:
+            extracted = await self.extract_fields(
+                candidate["text"],
+                image_data=None,
+                enable_llm=False,
+                few_shot=None,
+            )
+            field_candidates.append(
+                field_candidate_from_extraction(candidate["engine"], extracted)
+            )
+        return FieldConsensusResolver().resolve(field_candidates)
+
+    @staticmethod
+    def _apply_consensus(
+        structured_data: Optional[Dict[str, Any]],
+        consensus: Dict[str, Any],
+    ) -> Optional[Dict[str, Any]]:
+        """
+        將共識信心度覆蓋至既有抽取結果。
+
+        **只取較低者**:共識訊號只能收緊攔截,不得放寬。此為核心不變量
+        「信心度回報不得高於實際可信程度」的落實點——共識絕不會把一個原本
+        低信心的欄位抬高到門檻之上。
+
+        欄位值本身維持既有抽取結果(該結果來自融合文字,且可能已由 LLM 補齊),
+        共識僅提供信心度訊號與各引擎原始值對照。
+        """
+        if not structured_data:
+            return structured_data
+
+        existing = structured_data.get("field_confidences")
+        merged: Dict[str, float] = dict(existing) if isinstance(existing, dict) else {}
+
+        for field, confidence in consensus["field_confidences"].items():
+            if field in merged:
+                merged[field] = min(merged[field], confidence)
+            else:
+                merged[field] = confidence
+
+        structured_data["field_confidences"] = merged
+        return structured_data
+
     @abstractmethod
     async def postprocess(
         self, text: str, confidence: float, image_data: Optional[str] = None
@@ -120,8 +239,31 @@ class OcrDocumentProcessor(DocumentProcessor):
         preprocessed_image = await self.preprocess(image)
 
         # 步驟 3:OCR 文字提取
-        raw_text, ocr_confidence = await self.extract_text(preprocessed_image)
+        # 共識模式改走候選路徑,並由既有候選重用融合結果——引擎執行次數與現行相同。
+        # 共識關閉時(預設)程式路徑完全不變,行為與現行版本一致。
+        consensus_enabled = self._consensus_enabled()
+        candidates: List[EngineResult] = []
+        if consensus_enabled:
+            try:
+                candidates = await self.extract_text_candidates(preprocessed_image)
+                raw_text, ocr_confidence = await self.fuse_candidates(candidates)
+            except Exception as e:
+                logger.warning(f"共識模式候選提取失敗,降級為單引擎模式: {e}")
+                consensus_enabled = False
+                candidates = []
+                raw_text, ocr_confidence = await self.extract_text(preprocessed_image)
+        else:
+            raw_text, ocr_confidence = await self.extract_text(preprocessed_image)
         ocr_raw_result = {"text": raw_text, "confidence": ocr_confidence}
+
+        # 步驟 3b:各候選純規則式抽取 → 欄位層共識(零 LLM 成本)
+        consensus = None
+        if consensus_enabled:
+            try:
+                consensus = await self._resolve_consensus(candidates)
+            except Exception as e:
+                logger.warning(f"共識解析失敗,降級為單引擎信心度: {e}")
+                consensus = None
 
         # 步驟 4:後處理(image_data 供 LLM,依 enable_llm 決定)
         image_data_for_llm = image_data if enable_llm else None
@@ -150,6 +292,10 @@ class OcrDocumentProcessor(DocumentProcessor):
             few_shot=few_shot,
         )
 
+        # 步驟 5b:共識信心度覆蓋(只取較低者,絕不放寬攔截)
+        if consensus is not None:
+            structured_data = self._apply_consensus(structured_data, consensus)
+
         field_confidences: Dict[str, float] = {}
         if isinstance(structured_data, dict):
             fc = structured_data.get("field_confidences")
@@ -157,7 +303,7 @@ class OcrDocumentProcessor(DocumentProcessor):
                 field_confidences = fc
 
         llm_step = "✓ 完成（LLM 文字校正）" if llm_used else "⊗ 未使用"
-        return {
+        result: PageResult = {
             "page_number": 0,          # 由 process 補上
             "original_image": "",      # 由 process 補上
             "ocr_raw": ocr_raw_result,
@@ -175,6 +321,15 @@ class OcrDocumentProcessor(DocumentProcessor):
             "field_confidences": field_confidences,
             "overall_confidence": ocr_confidence,
         }
+
+        # 共識明細為選填欄位;未啟用時完全不出現,結果與現行版本逐鍵一致
+        if consensus is not None:
+            result["consensus"] = {
+                "available": consensus["consensus_available"],
+                "agreements": consensus["agreements"],
+            }
+
+        return result
 
 
 class ImageUnderstandingProcessor(DocumentProcessor):

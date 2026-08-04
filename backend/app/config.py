@@ -60,11 +60,18 @@ class Settings(BaseSettings):
     # Fine-tune 決策門檻(Phase 3;僅決策,不執行訓練)
     FINETUNE_MIN_SAMPLES: int = 200                        # 訓練池樣本量門檻
     FINETUNE_TARGET_ACCURACY: float = 0.9                  # 欄位準確率目標(低於此且停滯才評估微調)
+
+    # 基準測試(ocr-vlm-consensus 需求 1)
+    BASELINE_MIN_SAMPLES: int = 30                         # 低於此樣本數拒絕標記為正式基準線
     OCR_WATERMARK_REMOVAL: bool = True                      # 是否移除浮水印
     OCR_POSTPROCESSING: bool = True                         # 是否啟用後處理
     OCR_PDF_DPI: int = 300                                  # PDF 轉圖像 DPI
     OCR_BINARIZATION_METHOD: str = "gaussian"               # 二值化方法 (gaussian/mean/sauvola)
-    OCR_FUSION_METHOD: str = "best"                         # 融合方法 (best/weighted/vote)
+    OCR_FUSION_METHOD: str = "best"                         # 融合方法 (best/weighted/vote/smart/cross_check)
+
+    # 欄位層共識信心度(ocr-vlm-consensus 需求 4);預設關閉,行為與現行一致
+    OCR_CONSENSUS_ENABLED: bool = False                     # 啟用後才走多引擎候選比對
+    OCR_CONSENSUS_DISAGREE_PENALTY: float = 0.3             # 不一致時的信心度上限(0-1)
     OCR_PADDLEOCR_LANG: str = "chinese_cht"                 # PaddleOCR 語言
     OCR_TESSERACT_LANG: str = "chi_tra"                     # Tesseract 語言
 

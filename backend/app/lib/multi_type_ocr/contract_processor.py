@@ -8,7 +8,6 @@
 import logging
 from typing import Dict, Any, Optional
 from PIL import Image
-import numpy as np
 
 from .processor import OcrDocumentProcessor
 from .types import ContractStructuredData
@@ -148,14 +147,8 @@ class ContractProcessor(OcrDocumentProcessor):
         logger.debug("開始 OCR 文字提取")
 
         try:
-            # 轉換 PIL Image 為 numpy array
-            # EngineManager 需要 numpy array 作為輸入
-            image_array = np.array(image)
-
-            # 轉換 RGB 為 BGR（OpenCV 格式）
-            if len(image_array.shape) == 3 and image_array.shape[2] == 3:
-                # RGB -> BGR (交換紅藍通道)
-                image_array = image_array[:, :, ::-1].copy()
+            # 轉換為 EngineManager 所需的 BGR numpy array(共用輔助方法)
+            image_array = self._to_bgr_array(image)
 
             # 調用 EngineManager 提取文字
             text, confidence, _engine_results = \
@@ -168,6 +161,17 @@ class ContractProcessor(OcrDocumentProcessor):
         except Exception as e:
             logger.error(f"合約文字提取失敗: {str(e)}", exc_info=True)
             raise
+
+    async def extract_text_candidates(self, image: Image.Image) -> list:
+        """
+        回傳各引擎原始候選,供共識層逐欄位比對。
+
+        複用既有多引擎呼叫,不重跑引擎,新增辨識成本為零。
+        """
+        image_array = self._to_bgr_array(image)
+        _text, _confidence, engine_results = \
+            await self.engine_manager.extract_text_multi_engine(image_array)
+        return engine_results
 
     async def postprocess(
         self,

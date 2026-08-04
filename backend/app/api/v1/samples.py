@@ -13,6 +13,10 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.lib.document_types import normalize_document_type
+from app.services.annotation_importer import (
+    AnnotationImporter,
+    InvalidAnnotationFormatError,
+)
 from app.services.correction_sample_service import CorrectionSampleService
 
 router = APIRouter()
@@ -27,6 +31,11 @@ class SeedExample(BaseModel):
 
 class SeedRequest(BaseModel):
     examples: List[SeedExample]
+
+
+class ImportRequest(BaseModel):
+    file_path: str
+    purpose: str = "holdout"
 
 
 class GoldenRequest(BaseModel):
@@ -82,6 +91,31 @@ def seed_samples(document_type: str, body: SeedRequest, db: Session = Depends(ge
         )
         created_ids.append(str(sid))
     return {"created": len(created_ids), "ids": created_ids}
+
+
+@router.post("/{document_type}/import", summary="標註檔匯入評估集")
+def import_annotations(
+    document_type: str, body: ImportRequest, db: Session = Depends(get_db)
+):
+    """
+    將檔案型標註(ground truth JSON)匯入為校正樣本,預設用途為保留評估集
+    (holdout),供 EvaluationService 作為基準來源。
+
+    未標註(空值 / 佔位值)的項目會被略過並列於 skipped_refs,不寫入資料。
+    """
+    resolved = _resolve_type(document_type)
+    if resolved is None:
+        return _error(400, f"不支援的文件類型：{document_type}", "UNSUPPORTED_DOCUMENT_TYPE")
+
+    importer = AnnotationImporter(CorrectionSampleService(db))
+    try:
+        report = importer.import_from_file(body.file_path, resolved, body.purpose)
+    except FileNotFoundError as exc:
+        return _error(404, str(exc), "ANNOTATION_FILE_NOT_FOUND")
+    except InvalidAnnotationFormatError as exc:
+        return _error(422, str(exc), "INVALID_ANNOTATION_FORMAT")
+
+    return {"document_type": resolved, **report}
 
 
 @router.post("/{sample_id}/golden", summary="標記黃金範例")

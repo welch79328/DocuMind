@@ -8,7 +8,6 @@
 import logging
 from typing import Dict, Any, Optional
 from PIL import Image
-import numpy as np
 
 from .processor import OcrDocumentProcessor
 from .bill_field_extractor import BillFieldExtractor
@@ -52,11 +51,20 @@ class BillProcessor(OcrDocumentProcessor):
         return Image.fromarray(rgb_array)
 
     async def extract_text(self, image: Image.Image) -> tuple[str, float]:
-        image_array = np.array(image)
-        if len(image_array.shape) == 3 and image_array.shape[2] == 3:
-            image_array = image_array[:, :, ::-1].copy()
+        image_array = self._to_bgr_array(image)
         text, confidence, _ = await self.engine_manager.extract_text_multi_engine(image_array)
         return text, confidence
+
+    async def extract_text_candidates(self, image: Image.Image) -> list:
+        """
+        回傳各引擎原始候選,供共識層逐欄位比對。
+
+        複用既有多引擎呼叫,不重跑引擎,新增辨識成本為零。
+        """
+        image_array = self._to_bgr_array(image)
+        _text, _confidence, engine_results = \
+            await self.engine_manager.extract_text_multi_engine(image_array)
+        return engine_results
 
     async def postprocess(
         self, text: str, confidence: float, image_data: Optional[str] = None

@@ -1,0 +1,134 @@
+{
+  "description": "合約欄位提取標註資料 (Ground Truth)",
+  "version": "1.0",
+  "created_at": "2026-03-27",
+  "note": "此文件包含 11 份測試合約的關鍵欄位標註，用於驗證欄位提取準確率",
+  "contracts": {
+    "5640a32102ce9988322ef710e877e60c.pdf": {
+      "contract_number": null,
+      "signing_date": null,
+      "effective_date": null,
+      "party_a": null,
+      "party_b": null,
+      "contract_amount": null,
+      "currency": "TWD",
+      "notes": "需人工標註"
+    },
+    "698dbbfc798c3ff87abb07598385d748.pdf": {
+      "contract_number": null,
+      "signing_date": null,
+      "effective_date": null,
+      "party_a": null,
+      "party_b": null,
+      "contract_amount": null,
+      "currency": "TWD",
+      "notes": "需人工標註"
+    },
+    "70af4d5c4547c6b65883e59df238483a.pdf": {
+      "contract_number": null,
+      "signing_date": null,
+      "effective_date": null,
+      "party_a": null,
+      "party_b": null,
+      "contract_amount": null,
+      "currency": "TWD",
+      "notes": "需人工標註"
+    },
+    "75038b05cd85c2d6971ae0f350d2ff11.pdf": {
+      "contract_number": null,
+      "signing_date": null,
+      "effective_date": null,
+      "party_a": null,
+      "party_b": null,
+      "contract_amount": null,
+      "currency": "TWD",
+      "notes": "需人工標註"
+    },
+    "7e4d977459ffdf9a86f20894fb643d54.pdf": {
+      "contract_number": null,
+      "signing_date": null,
+      "effective_date": null,
+      "party_a": null,
+      "party_b": null,
+      "contract_amount": null,
+      "currency": "TWD",
+      "notes": "需人工標註"
+    },
+    "9df1c79d781e369ac53e39e226ad0754.pdf": {
+      "contract_number": null,
+      "signing_date": null,
+      "effective_date": null,
+      "party_a": null,
+      "party_b": null,
+      "contract_amount": null,
+      "currency": "TWD",
+      "notes": "需人工標註"
+    },
+    "9f049335b1f6d152fa82c70c14bd1fa9.pdf": {
+      "contract_number": null,
+      "signing_date": null,
+      "effective_date": null,
+      "party_a": null,
+      "party_b": null,
+      "contract_amount": null,
+      "currency": "TWD",
+      "notes": "需人工標註"
+    },
+    "ab67a4970c44391a39ca75548c271fbb.pdf": {
+      "contract_number": null,
+      "signing_date": null,
+      "effective_date": null,
+      "party_a": null,
+      "party_b": null,
+      "contract_amount": null,
+      "currency": "TWD",
+      "notes": "需人工標註"
+    },
+    "c3198c44a4482d38a2b61ccd86217aee.pdf": {
+      "contract_number": null,
+      "signing_date": null,
+      "effective_date": null,
+      "party_a": null,
+      "party_b": null,
+      "contract_amount": null,
+      "currency": "TWD",
+      "notes": "需人工標註"
+    },
+    "c5712154e7d79ffcf6f3aa3503bbc206.pdf": {
+      "contract_number": null,
+      "signing_date": null,
+      "effective_date": null,
+      "party_a": null,
+      "party_b": null,
+      "contract_amount": null,
+      "currency": "TWD",
+      "notes": "需人工標註"
+    },
+    "c6043d47a7eb6a4e6703cbe9d09edb55.pdf": {
+      "contract_number": null,
+      "signing_date": null,
+      "effective_date": null,
+      "party_a": null,
+      "party_b": null,
+      "contract_amount": null,
+      "currency": "TWD",
+      "notes": "需人工標註"
+    }
+  },
+  "field_definitions": {
+    "contract_number": "合約編號/合約字號",
+    "signing_date": "簽訂日期/立約日期",
+    "effective_date": "生效日期",
+    "party_a": "甲方/第一方/賣方名稱",
+    "party_b": "乙方/第二方/買方名稱",
+    "contract_amount": "合約金額（數字部分）",
+    "currency": "幣別（TWD/USD/CNY等）"
+  },
+  "critical_fields": [
+    "contract_number",
+    "party_a",
+    "party_b",
+    "contract_amount"
+  ],
+  "accuracy_threshold": 0.75
+}

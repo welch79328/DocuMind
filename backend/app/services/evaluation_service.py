@@ -142,6 +142,29 @@ class EvaluationService:
         self._persist(document_type, metrics, holdout_version, is_baseline=True)
 
     # ------------------------------------------------------------------ #
+    def record_metric(
+        self,
+        document_type: Any,
+        metric_type: str,
+        value: float,
+        holdout_version: str = "v1",
+        is_baseline: bool = False,
+    ) -> None:
+        """
+        記錄單一指標(供 CER / 欄位準確率以外的量測使用,例如低信心攔截觸發率)。
+
+        不改變既有 evaluate / record_baseline 的行為,僅補上單點寫入能力。
+        """
+        self.db.add(EvaluationRecord(
+            document_type=_type_value(document_type),
+            metric_type=metric_type,
+            value=value,
+            labeled_set_version=holdout_version,
+            is_baseline=is_baseline,
+        ))
+        self.db.commit()
+
+    # ------------------------------------------------------------------ #
     def compare(
         self, document_type: Any, before_version: str, after_version: str
     ) -> Dict[str, Dict[str, float]]:

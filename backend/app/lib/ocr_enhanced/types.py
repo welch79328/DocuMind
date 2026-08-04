@@ -192,13 +192,16 @@ class OCREngine(Protocol):
 DocumentType = Literal["transcript", "lease", "id_card", "unknown", "auto"]
 
 # 融合方法字面量
-FusionMethod = Literal["best", "weighted", "vote", "smart"]
+# cross_check:欄位層交叉比對(共識信心度);於欄位層執行,不經 _fuse_results
+FusionMethod = Literal["best", "weighted", "vote", "smart", "cross_check"]
 
 # 二值化方法字面量
 BinarizationMethod = Literal["gaussian", "mean", "sauvola"]
 
 # OCR 引擎名稱字面量
-OCREngineName = Literal["paddleocr", "tesseract", "textract"]
+OCREngineName = Literal[
+    "paddleocr", "tesseract", "textract", "paddleocr_vl", "qwen_vl"
+]
 
 
 # ============================================================================

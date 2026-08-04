@@ -265,6 +265,21 @@ class EngineManager:
             "processing_time_ms": processing_time_ms
         }
 
+    def fuse(self, results: list[EngineResult]) -> tuple[str, float]:
+        """
+        以設定的融合策略融合各引擎結果(公開入口)
+
+        供已取得候選的呼叫端重用融合邏輯,避免為了拿融合文字而重跑引擎。
+        行為完全委派給既有 _fuse_results,既有策略不受影響。
+
+        Args:
+            results: 各引擎結果列表
+
+        Returns:
+            (融合後文字, 融合後信心度)
+        """
+        return self._fuse_results(results)
+
     def _fuse_results(self, results: list[EngineResult]) -> tuple[str, float]:
         """
         融合多個引擎結果

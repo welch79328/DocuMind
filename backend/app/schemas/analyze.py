@@ -29,11 +29,16 @@ class LlmPostprocessedOutput(BaseModel):
 
 class OcrPageResult(BaseModel):
     """單頁 OCR 處理結果"""
+    model_config = {"extra": "ignore"}
+
     page_number: int
     ocr_raw: OcrRawOutput
     rule_postprocessed: RulePostprocessedOutput
     llm_postprocessed: Optional[LlmPostprocessedOutput] = None
     structured_data: Optional[Dict[str, Any]] = None
+    # 欄位層共識(需求 4;新增欄位皆為選填,既有欄位語意不變)
+    field_confidences: Dict[str, float] = {}               # 逐欄位信心度
+    consensus: Optional[Dict[str, Any]] = None             # 共識明細(未啟用時為 None)
 
 
 class ProcessingStats(BaseModel):
