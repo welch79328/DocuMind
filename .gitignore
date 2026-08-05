@@ -82,3 +82,7 @@ coverage/
 # Note: backend/data/ is kept for example files
 /data/
 /tests/
+
+# 行銷 PDF 建置的中間產物
+docs/tools/mermaid.min.js
+docs/tools/marketing.html
