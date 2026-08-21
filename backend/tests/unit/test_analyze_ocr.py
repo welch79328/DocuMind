@@ -13,6 +13,7 @@ import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
 from io import BytesIO
 from PIL import Image
+import sys
 
 
 def _make_test_image_bytes():
@@ -122,10 +123,14 @@ class TestProcessOcr:
             _make_mock_page_result(2),
         ])
 
-        with patch("app.services.analyze_service.fitz") as mock_fitz, \
+        # fitz 於函式內惰性匯入(生產端刻意如此,PyMuPDF 非必裝),
+        # 因此沒有模組層屬性可 patch,須改注入 sys.modules
+        mock_fitz = MagicMock()
+        mock_fitz.open.return_value = mock_doc
+        mock_fitz.Matrix = MagicMock()
+
+        with patch.dict(sys.modules, {"fitz": mock_fitz}), \
              patch("app.services.analyze_service.ProcessorFactory") as MockFactory:
-            mock_fitz.open.return_value = mock_doc
-            mock_fitz.Matrix = MagicMock()
             MockFactory.get_processor.return_value = mock_processor
 
             pages, total = await service._process_ocr(
@@ -158,10 +163,14 @@ class TestProcessOcr:
             _make_mock_page_result(2),
         ])
 
-        with patch("app.services.analyze_service.fitz") as mock_fitz, \
+        # fitz 於函式內惰性匯入(生產端刻意如此,PyMuPDF 非必裝),
+        # 因此沒有模組層屬性可 patch,須改注入 sys.modules
+        mock_fitz = MagicMock()
+        mock_fitz.open.return_value = mock_doc
+        mock_fitz.Matrix = MagicMock()
+
+        with patch.dict(sys.modules, {"fitz": mock_fitz}), \
              patch("app.services.analyze_service.ProcessorFactory") as MockFactory:
-            mock_fitz.open.return_value = mock_doc
-            mock_fitz.Matrix = MagicMock()
             MockFactory.get_processor.return_value = mock_processor
 
             pages, total = await service._process_ocr(
