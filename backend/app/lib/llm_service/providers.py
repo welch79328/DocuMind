@@ -2,7 +2,8 @@
 LLM Provider 抽象與實作(可插拔:本地優先、雲端可選)
 
 定義統一的 Provider 介面,支援多模態影像輸入與 few-shot 範例注入。
-OpenAIProvider 封裝既有 OpenAI 呼叫邏輯(行為不變);LocalQwenProvider 於任務 7.2 加入。
+OpenAIProvider / AnthropicProvider 封裝既有雲端呼叫邏輯(行為不變);
+LocalQwenProvider 於任務 7.2 加入。
 Provider 由 `create_provider` 依 settings.LLM_PROVIDER 建立。
 """
 
@@ -19,6 +20,43 @@ from app.config import settings
 logger = logging.getLogger(__name__)
 
 FewShot = Optional[List[Dict[str, Any]]]
+
+# 每 1M token 的美元單價 (input, output);找不到時用 _DEFAULT_PRICE。
+# 自架 Provider 無按量計價,一律 0.0。
+_PRICING: Dict[str, tuple] = {
+    "gpt-4o-mini": (0.150, 0.600),
+    "gpt-4o": (2.50, 10.00),
+    "claude-opus-5": (5.00, 25.00),
+    "claude-sonnet-5": (3.00, 15.00),
+    "claude-haiku-4-5": (1.00, 5.00),
+    "claude-3-5-sonnet": (3.00, 15.00),
+    "claude-3-5-haiku": (0.80, 4.00),
+}
+_DEFAULT_PRICE = (0.150, 0.600)
+
+
+def _new_stats() -> Dict[str, Any]:
+    """Provider 統計的統一形狀;estimated_cost 供既有成本紀錄沿用"""
+    return {
+        "llm_calls": 0,
+        "tokens_used": 0,
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "estimated_cost": 0.0,
+    }
+
+
+def _estimate_cost(model: str, prompt_tokens: int, completion_tokens: int) -> float:
+    """依模型名稱前綴比對定價;比對不到時採最便宜級距,寧可低估也不虛報"""
+    input_price, output_price = _DEFAULT_PRICE
+    for key, price in _PRICING.items():
+        if key in model:
+            input_price, output_price = price
+            break
+    return (
+        prompt_tokens * input_price / 1_000_000
+        + completion_tokens * output_price / 1_000_000
+    )
 
 
 class LLMProvider(ABC):
@@ -61,7 +99,7 @@ class OpenAIProvider(LLMProvider):
         self.model = model or "gpt-4o"
         self._api_key = api_key
         self._client = None
-        self.stats = {"llm_calls": 0, "tokens_used": 0}
+        self.stats = _new_stats()
 
     # -- 純組裝方法(可獨立測試,不觸發 API) -------------------------------- #
     @staticmethod
@@ -109,10 +147,97 @@ class OpenAIProvider(LLMProvider):
         )
 
         self.stats["llm_calls"] += 1
-        if getattr(response, "usage", None):
-            self.stats["tokens_used"] += response.usage.total_tokens
+        usage = getattr(response, "usage", None)
+        if usage:
+            prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0
+            completion_tokens = getattr(usage, "completion_tokens", 0) or 0
+            self.stats["tokens_used"] += usage.total_tokens
+            self.stats["prompt_tokens"] += prompt_tokens
+            self.stats["completion_tokens"] += completion_tokens
+            self.stats["estimated_cost"] += _estimate_cost(
+                self.model, prompt_tokens, completion_tokens
+            )
 
         return response.choices[0].message.content or ""
+
+
+class AnthropicProvider(LLMProvider):
+    """Anthropic(雲端)Provider — 封裝既有 Anthropic 呼叫邏輯
+
+    影像走 base64 content block;訊息組裝與遷移前的 LLMService._call_anthropic 一致。
+    """
+
+    def __init__(self, model: Optional[str] = None, api_key: Optional[str] = None):
+        self.model = model or "claude-3-5-haiku-20241022"
+        self._api_key = api_key
+        self._client = None
+        self.stats = _new_stats()
+
+    # -- 純組裝方法(可獨立測試,不觸發 API) -------------------------------- #
+    @staticmethod
+    def _build_prompt(prompt: str, few_shot: FewShot) -> str:
+        return _inject_few_shot(prompt, few_shot)
+
+    @staticmethod
+    def _build_content(
+        prompt: str, image_data: Optional[str]
+    ) -> Union[str, List[Dict[str, Any]]]:
+        if not image_data:
+            return prompt
+        # Anthropic 的 base64 image block 只吃裸 base64,須剝掉 data URI 前綴
+        raw = image_data.split("base64,", 1)[-1]
+        return [
+            {
+                "type": "image",
+                "source": {
+                    "type": "base64",
+                    "media_type": "image/png",
+                    "data": raw,
+                },
+            },
+            {"type": "text", "text": prompt},
+        ]
+
+    def _get_client(self):
+        if self._client is None:
+            from anthropic import AsyncAnthropic
+            self._client = AsyncAnthropic(
+                api_key=self._api_key or os.getenv("ANTHROPIC_API_KEY")
+            )
+        return self._client
+
+    # -- 呼叫 ------------------------------------------------------------- #
+    async def call(
+        self,
+        prompt: str,
+        image_data: Optional[str] = None,
+        few_shot: FewShot = None,
+        max_tokens: int = 2048,
+        temperature: float = 0.0,
+    ) -> str:
+        full_prompt = self._build_prompt(prompt, few_shot)
+        content = self._build_content(full_prompt, image_data)
+
+        response = await self._get_client().messages.create(
+            model=self.model,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            messages=[{"role": "user", "content": content}],
+        )
+
+        self.stats["llm_calls"] += 1
+        usage = getattr(response, "usage", None)
+        if usage:
+            prompt_tokens = getattr(usage, "input_tokens", 0) or 0
+            completion_tokens = getattr(usage, "output_tokens", 0) or 0
+            self.stats["tokens_used"] += prompt_tokens + completion_tokens
+            self.stats["prompt_tokens"] += prompt_tokens
+            self.stats["completion_tokens"] += completion_tokens
+            self.stats["estimated_cost"] += _estimate_cost(
+                self.model, prompt_tokens, completion_tokens
+            )
+
+        return response.content[0].text
 
 
 class LocalQwenProvider(LLMProvider):
@@ -129,7 +254,7 @@ class LocalQwenProvider(LLMProvider):
         self.endpoint = endpoint.rstrip("/")
         self.model = model or "Qwen2-VL-7B-Instruct"
         self._api_key = api_key
-        self.stats = {"llm_calls": 0, "tokens_used": 0}
+        self.stats = _new_stats()
 
     async def _request(
         self, messages: List[Dict[str, Any]], max_tokens: int, temperature: float
@@ -153,6 +278,9 @@ class LocalQwenProvider(LLMProvider):
 
         usage = data.get("usage") or {}
         self.stats["tokens_used"] += int(usage.get("total_tokens", 0))
+        self.stats["prompt_tokens"] += int(usage.get("prompt_tokens", 0))
+        self.stats["completion_tokens"] += int(usage.get("completion_tokens", 0))
+        # 自架推論無按量計價,estimated_cost 維持 0.0(硬體成本不在此統計)
         return data["choices"][0]["message"]["content"] or ""
 
     async def call(
@@ -197,6 +325,11 @@ def create_provider(
 
     if name == "openai":
         return OpenAIProvider(model=model or settings.OPENAI_MODEL, api_key=api_key)
+
+    if name == "anthropic":
+        return AnthropicProvider(
+            model=model or settings.ANTHROPIC_MODEL, api_key=api_key
+        )
 
     if name == "local_qwen":
         return LocalQwenProvider(

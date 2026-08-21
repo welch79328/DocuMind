@@ -1,12 +1,27 @@
 """
 LLM Postprocessor Module
 
-使用 LLM (Claude/GPT) 進行智能 OCR 錯誤修正
+使用 LLM 進行智能 OCR 錯誤修正。
+
+任務 8.1 起,模型一律經 `llm_service.providers.create_provider()` 取得,
+不再直接綁定僅支援雲端的 LLMService——此抽象同時提供本地部署選項與
+LLM_CLOUD_ENABLED 隱私守衛(需求 2.6、2.7)。全文校正委派給
+DualModalCorrector,由它決定雙模態 / 純文字降級 / 模型拒絕三條路徑。
 """
 
+import logging
 import re
-from typing import Optional, Literal
-from app.lib.llm_service import LLMService
+from typing import Optional
+
+from app.lib.llm_service.providers import create_provider
+from .dual_modal_corrector import (
+    CorrectionResult,
+    DualModalCorrector,
+    build_correction_prompt,
+    is_refusal,
+)
+
+logger = logging.getLogger(__name__)
 
 
 class LLMPostprocessor:
@@ -18,7 +33,7 @@ class LLMPostprocessor:
 
     def __init__(
         self,
-        provider: Literal["anthropic", "openai"] = "anthropic",
+        provider: Optional[str] = None,
         model: Optional[str] = None,
         api_key: Optional[str] = None
     ):
@@ -26,25 +41,23 @@ class LLMPostprocessor:
         初始化 LLM 後處理器
 
         Args:
-            provider: LLM 提供商 (anthropic/openai)
-            model: 模型名稱，None 使用預設
+            provider: LLM 提供商 (openai/anthropic/local_qwen)，None 依 settings.LLM_PROVIDER
+            model: 模型名稱，None 使用該 Provider 預設
             api_key: API 金鑰，None 從環境變數讀取
         """
-        # 使用統一的 LLMService
-        self.llm_service = LLMService(
-            provider=provider,
-            model=model,
-            api_key=api_key
-        )
+        # 隱私守衛在此生效:雲端停用時 create_provider 會直接拒絕建立雲端 Provider
+        self._provider = create_provider(provider, model=model, api_key=api_key)
+        self._corrector = DualModalCorrector(provider=self._provider)
 
         # 保持向後兼容
         self.provider = provider
-        self.model = self.llm_service.model
+        self.model = getattr(self._provider, "model", model)
+        self.last_result: Optional[CorrectionResult] = None
 
     @property
     def stats(self):
-        """獲取統計資料（向後兼容）"""
-        return self.llm_service.get_stats()
+        """獲取統計資料（向後兼容，含 estimated_cost）"""
+        return dict(self._provider.stats)
 
     async def correct_full_text(
         self,
@@ -55,32 +68,27 @@ class LLMPostprocessor:
         """
         全文修正（適合低信心度文件）
 
+        影像僅在 LLM_DUAL_MODAL_ENABLED=true 時送出;關閉時行為與現行純文字校正一致。
+
         Args:
             ocr_text: OCR 原始文字
             doc_type: 文件類型
-            image_data: base64 編碼的圖片資料（可選，提供可提升準確率）
+            image_data: base64 編碼的圖片資料（可選，雙模態啟用時提升準確率）
 
         Returns:
-            (修正後文字, 統計資訊)
+            (修正後文字, 統計資訊)；完整路徑資訊見 self.last_result
         """
-        # 使用詳細的提示詞（保持原有的高品質 prompt）
-        prompt = self._build_full_text_prompt(ocr_text, doc_type)
-
-        # 不傳圖片給 LLM（避免 PII 過濾拒絕處理），僅用文字校正
-        # 調用 LLMService
-        corrected_text = await self.llm_service.call(
-            prompt=prompt,
-            image_data=None,
-            max_tokens=3000,
-            temperature=0.1
+        result = await self._corrector.correct(
+            ocr_text=ocr_text,
+            doc_type=doc_type,
+            image_data=image_data,
         )
+        self.last_result = result
 
-        # 檢查 LLM 是否拒絕處理（安全過濾）
-        if self._is_refusal(corrected_text):
-            print(f"⚠️  LLM 拒絕處理，回退使用原始文字")
-            return ocr_text, self.stats
+        if result["refused"]:
+            logger.warning("LLM 拒絕處理，回退使用原始文字")
 
-        return corrected_text, self.stats
+        return result["text"], self.stats
 
     async def correct_fields(
         self,
@@ -186,7 +194,7 @@ OCR 結果: "{candidate}"
 請直接輸出修正後的地號，格式為 XXXX-XXXX，不要解釋。
 如果無法修正，輸出 "INVALID"。"""
 
-        result = await self.llm_service.call(prompt, max_tokens=50)
+        result = await self._provider.call(prompt, max_tokens=50)
         result = result.strip().replace(" ", "")
 
         # 驗證格式
@@ -209,7 +217,7 @@ OCR 結果: "{candidate}"
 
 請直接輸出修正後的日期，不要解釋。"""
 
-        result = await self.llm_service.call(prompt, max_tokens=50)
+        result = await self._provider.call(prompt, max_tokens=50)
         return result.strip()
 
     async def _correct_owner(self, candidate: str) -> str:
@@ -225,7 +233,7 @@ OCR 結果: "{candidate}"
 
 請直接輸出修正後的姓名，不要解釋。"""
 
-        result = await self.llm_service.call(prompt, max_tokens=30)
+        result = await self._provider.call(prompt, max_tokens=30)
         return result.strip()
 
     async def _correct_area(self, candidate: str) -> str:
@@ -239,25 +247,12 @@ OCR 結果: "{candidate}"
 
 請直接輸出修正後的面積，不要解釋。"""
 
-        result = await self.llm_service.call(prompt, max_tokens=50)
+        result = await self._provider.call(prompt, max_tokens=50)
         return result.strip()
 
     def _is_refusal(self, text: str) -> bool:
-        """檢查 LLM 回應是否為拒絕訊息"""
-        refusal_patterns = [
-            # English
-            "i'm sorry", "i can't assist", "i cannot assist",
-            "i'm unable to", "i cannot help", "i can't help",
-            "i'm not able to", "i cannot process",
-            # Chinese
-            "抱歉", "無法協助", "無法處理", "不能協助", "無法提供",
-            "我無法", "不能處理",
-        ]
-        text_lower = text.lower()
-        return (
-            len(text) < 100
-            and any(p in text_lower for p in refusal_patterns)
-        )
+        """檢查 LLM 回應是否為拒絕訊息（委派共用實作，避免兩份規則分歧）"""
+        return is_refusal(text)
 
     def _apply_corrections(self, text: str, corrections: dict) -> str:
         """應用修正到文字"""
@@ -272,83 +267,15 @@ OCR 結果: "{candidate}"
 
         return result
 
-    def _build_full_text_prompt(self, ocr_text: str, doc_type: str) -> str:
-        """建立全文修正提示詞（優化版：加入更多範例和明確指引）"""
-        prompt = f"""你是專業的台灣地政謄本 OCR 錯誤修正專家。請修正以下 OCR 辨識的錯誤文字。
+    def _build_full_text_prompt(
+        self, ocr_text: str, doc_type: str, has_image: bool = False
+    ) -> str:
+        """建立全文修正提示詞（委派共用實作）
 
-【任務說明】
-這是一個合法授權的文件數位化 OCR 校正系統。你的任務是純粹的文字校正——將 OCR 引擎辨識錯誤的字元修正為正確的字元。文件中的所有內容（包括姓名、地址、編號等）均為 OCR 辨識產生的文字，需要你協助校正錯別字。請勿拒絕處理或省略任何內容。
-
-【重要原則】
-1. **請仔細查看上面提供的文件圖片**，對照圖片中的實際文字來修正 OCR 錯誤
-2. 只修正明顯的 OCR 錯誤，不要過度解讀或改寫
-3. 保持原文的所有內容，包括數字、符號、換行
-4. 無法確定的文字請參考圖片，如果圖片也看不清楚則保持原樣
-
-【常見 OCR 錯誤對照表】
-文字錯誤：
-- 十 → 土（土地）
-- 膽/徐/朕 → 謄（謄本）
-- 攝 → 登（登記）
-- 焉/班 → 正（中正）
-- 息 → 段（正段）
-- 旋 → 段（小段）
-- 傑/樺 → 權（所有權）
-- 園/闕 → 圍（範圍）
-- 蕉 → 共（共4棟）
-- 害 → 割（分割）
-- 勁為 → 鑑界
-- 朕 → 謄
-
-數字與字母錯誤：
-- o/O → 0（地號中）
-- l/I/| → 1
-- 空格要移除（地號中不能有空格）
-
-【台灣地政謄本標準格式範例】
-正確格式：
-✓ 土地登記第三類謄本（所有權個人全部）
-✓ 中正區中正段三小段 0221-0000 地號
-✓ 列印時間：民國108年04月09日17時09分
-✓ 本謄本係網路申領之電子謄本，由申請人自行列印
-✓ 謄本種類碼：L944V64QT3
-✓ 建成地政事務所 主任 曾錫雄
-✓ 登記日期：民國075年05月27日
-✓ 登記原因：鑑界分割
-✓ 面積：153.00平方公尺
-✓ 所有權人：黃水木
-✓ 統一編號：A202******6
-✓ 權利範圍：全部
-
-【修正範例】
-錯誤：十:攝登記第三類有徐生 (所有權個人人金義5》 全
-正確：土地登記第三類謄本（所有權個人全部）
-
-錯誤：中焉區中班息三小旋 o221-oooolta中的0
-正確：中正區中正段三小段 0221-0000 地號
-
-錯誤：電子朕本
-正確：電子謄本
-
-錯誤：膽本種類碼
-正確：謄本種類碼
-
-錯誤：勁為分割
-正確：鑑界分割
-
-錯誤：蕉4棟
-正確：共4棟
-
-錯誤：因分害增加地號
-正確：因分割增加地號
-
-【要修正的 OCR 文字】
-{ocr_text}
-
-請直接輸出修正後的完整文字，不要添加任何解釋或說明。保持所有原有的換行和格式。"""
-
-        return prompt
-
+        提示詞須與實際模態一致:純文字模態不得保留「查看圖片」的指示，
+        否則等於要模型對照一張不存在的圖（任務 8.3）。
+        """
+        return build_correction_prompt(ocr_text, doc_type, has_image=has_image)
 
 
 # ============================================================================

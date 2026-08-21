@@ -34,7 +34,7 @@ class TranscriptPostprocessor:
         enable_typo_fix: bool = True,
         enable_format_correction: bool = True,
         enable_llm: bool = False,
-        llm_provider: Literal["anthropic", "openai"] = "anthropic",
+        llm_provider: Optional[str] = None,
         llm_strategy: Literal["auto", "full", "fields", "none"] = "auto"
     ):
         """
@@ -44,7 +44,7 @@ class TranscriptPostprocessor:
             enable_typo_fix: 是否啟用錯別字修正
             enable_format_correction: 是否啟用格式校正
             enable_llm: 是否啟用 LLM 修正
-            llm_provider: LLM 提供商
+            llm_provider: LLM 提供商 (openai/anthropic/local_qwen)，None 依 settings.LLM_PROVIDER
             llm_strategy: LLM 策略 (auto/full/fields/none)
         """
         self.enable_typo_fix = enable_typo_fix

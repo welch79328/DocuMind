@@ -3,7 +3,7 @@
   "description": "DocuMind OCR 引擎 VLM 化與共識信心度架構:將現行「傳統 OCR 引擎 → 規則後處理 → LLM 純文字校正」的辨識管線,升級為業界主流的混合架構,同時完整保留既有的類型路由(ProcessorFactory)、信心度攔截(QualityAssessor)、人工複核佇列與 few-shot 回饋學習層(此四者為非目標,不得更動其架構)。\n\n範圍分四階段:\n(0) 建立可驗證基準:現行 tests/benchmarks/baseline_results.json 為 placeholder 從未實際執行,data/contracts/ground_truth.json 的 11 份合約欄位全為 null 待人工標註,tests/fixtures/ground_truth.json 僅 2 份謄本標註(統計上不足)。需補齊謄本標註至統計可用量並實際跑出 CER 與欄位準確率基準,作為後續所有階段的驗收依據。標註為人工前置作業。\n(1) 雙模態 LLM 校正:llm_postprocessor.correct_full_text() 現僅接收 OCR 文字字串,校正時看不到原圖,無法辨識 OCR 字元誤判。改為同時傳入 OCR 文字與原始頁面影像(LLMProvider.call 的 image_data 參數已支援,現未使用)。依據 ConfBench(arXiv 2608.01792)實證:OCR 文字+影像雙模態的信心度品質優於任一單一模態。\n(2) 引擎 VLM 化:於 EngineManager 新增 PaddleOCR-VL 作為新引擎(沿用既有 EngineResult 介面與 _standardize_confidence),與現行 PaddleOCR/Tesseract 並存比較。PaddleOCR-VL 0.9B 於 OmniDocBench 得分 94.5,勝過 GPT-4o(85.80),可自架、支援繁體中文,符合地端優先與成本約束。以階段 0 基準決定是否升為主力引擎。\n(3) 共識信心度與分層成本控制:新增 cross_check 融合模式——多引擎對同一欄位結果不一致時將該欄位信心度壓低,交由既有 QualityAssessor 導入人工複核。此設計專門攔截 VLM 特有的「隱形錯誤」(幻覺產出語法合法但數值錯誤的內容,傳統拼字檢查無法偵測),且不依賴任何單一模型的自評信心度。搭配 cascade 分層(第一層單引擎,低信心才觸發第二引擎交叉比對)控制成本;但 cascade 僅在升級觸發率低時才划算,觸發率須由階段 0 基準實測決定,不得憑假設實作。\n\n約束:地端/自架優先(個資不外送,LLM_CLOUD_ENABLED=false 時須可完全本地運行)、成本敏感(月成本 <$15)、繁體中文文件為主、優先文件類型為建物土地謄本。\n非目標:不更動 ProcessorFactory 類型路由、QualityAssessor 判定介面、複核佇列與 few-shot 回饋學習層的架構;不移除現有傳統 OCR 引擎(需保留作為交叉比對對照組);不進行模型 fine-tune。",
   "language": "zh-TW",
   "created_at": "2026-08-04T00:00:00Z",
-  "updated_at": "2026-08-04T00:00:00Z",
+  "updated_at": "2026-08-21T00:00:00Z",
   "phase": "implementation-in-progress",
   "status": "draft",
   "approvals": {
@@ -53,7 +53,10 @@
       "6.2",
       "6.3",
       "6.4",
-      "6.5"
+      "6.5",
+      "8.1",
+      "8.2",
+      "8.3"
     ],
     "in_progress_tasks": [],
     "pending_tasks": [
@@ -61,9 +64,6 @@
       "3.2",
       "3.3",
       "7",
-      "8.1",
-      "8.2",
-      "8.3",
       "8.4",
       "9.1",
       "9.2",

@@ -37,9 +37,12 @@ class Settings(BaseSettings):
     ANTHROPIC_MODEL: str = "claude-3-5-sonnet-20241022"
 
     # LLM Provider(可插拔:本地優先、雲端可選)
-    LLM_PROVIDER: str = "openai"          # openai / local_qwen
+    LLM_PROVIDER: str = "openai"          # openai / anthropic / local_qwen
     LLM_CLOUD_ENABLED: bool = True        # 隱私硬需求時設 false,禁止載入雲端 Provider
     LOCAL_QWEN_ENDPOINT: str = ""         # 本地 / EC2 vLLM 端點(LLM_PROVIDER=local_qwen 時必填)
+
+    # 雙模態 LLM 校正(ocr-vlm-consensus 需求 2);預設關閉,校正行為與現行一致
+    LLM_DUAL_MODAL_ENABLED: bool = False  # 啟用後校正才同時送出頁面影像
 
     # AWS Textract
     AWS_ACCESS_KEY_ID: str = ""
