@@ -85,6 +85,6 @@
       "14.1",
       "14.3"
     ],
-    "notes": "14.2 第一條「完整流程可全本地運行」經獨立 verifier 代理實測推翻:合約欄位抽取繞過 LLM_CLOUD_ENABLED,全地端組態下仍對 api.openai.com 發出連線。校正路徑本身已達成。詳見 tasks.md 缺口 C1,待業主裁決。"
+    "notes": "14.2 前兩條已達成:缺口 C1(合約欄位抽取繞過 LLM_CLOUD_ENABLED)已修補,守衛下放至 LLMService.__init__。第三條「納入整合測試」仍阻擋於 PyMuPDF 未安裝。"
   }
 }

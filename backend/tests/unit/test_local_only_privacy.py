@@ -30,6 +30,14 @@ DOCUMENT_TEXT = "所有權人:黃水木 統一編號:A202******6 地號 0221-000
 # create_provider 新增分支時必須落入這裡或 CLOUD_PROVIDERS 其中之一
 LOCAL_PROVIDERS = {"local_qwen"}
 
+CONTRACT_TEXT = """
+合約編號：ABC-2026-001
+簽訂日期：2026年3月26日
+甲方：台灣科技股份有限公司
+乙方：全球資訊有限公司
+合約金額：新台幣 1,000,000 元
+"""
+
 
 class OutboundBlocked(AssertionError):
     """封死的 socket 被撥出去了——代表文件內容有機會外送"""
@@ -149,41 +157,97 @@ class TestGuardCannotBeBypassedByArguments:
                 create_provider(name)
 
 
-class TestKnownGapContractFieldExtraction:
+class TestContractExtractionHonoursTheGuard:
     """
-    已知缺口(非本規格引入,已回報業主):
-    ContractFieldExtractor._extract_with_llm 直接建構僅支援雲端的 LLMService,
-    完全繞過 LLM_CLOUD_ENABLED。需求 2.7 只涵蓋「校正」,故不在本規格範圍,
-    但地端承諾在合約欄位抽取這條路上是破的。
+    曾經的缺口(現已修補):`ContractFieldExtractor._extract_with_llm` 直接建構
+    僅支援雲端的 `LLMService`,完全繞過 `LLM_CLOUD_ENABLED`,在全地端組態下
+    仍把合約文字與頁面影像送往 OpenAI。
 
-    這條測試以 strict xfail 釘住現況:缺口一旦被修好,它會 XPASS 而失敗,
-    強迫有人回來把標記拿掉——比留一行 TODO 可靠。
+    守衛已下放至 `LLMService.__init__`——那是舊路徑的匯流點,
+    只要有任何一處直接 new 它,地端承諾就會再破一次。
     """
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="已知缺口:合約欄位抽取繞過 LLM_CLOUD_ENABLED(待業主裁決後另案修正)",
-    )
-    def test_contract_extractor_should_honour_the_cloud_guard(
-        self, cloud_disabled, monkeypatch
+    def test_llm_service_refuses_cloud_when_disabled(self, cloud_disabled, monkeypatch):
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-test-not-real")
+        from app.lib.llm_service import LLMService
+
+        with pytest.raises(ValueError, match="個資不外送"):
+            LLMService(provider="openai", model="gpt-4o")
+
+    def test_llm_service_refuses_anthropic_too(self, cloud_disabled, monkeypatch):
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test-not-real")
+        from app.lib.llm_service import LLMService
+
+        with pytest.raises(ValueError, match="個資不外送"):
+            LLMService(provider="anthropic")
+
+    def test_llm_service_still_works_when_cloud_enabled(self, monkeypatch):
+        """守衛只在地端組態下生效,不得順手把雲端模式也弄壞"""
+        monkeypatch.setattr(settings, "LLM_CLOUD_ENABLED", True)
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-test-not-real")
+        from app.lib.llm_service import LLMService
+
+        assert LLMService(provider="openai", model="gpt-4o").provider == "openai"
+
+    def test_two_cloud_lists_stay_in_sync(self):
+        """LLMService 與 providers 各有一份雲端清單,分歧會讓其中一條路徑漏掉守衛"""
+        from app.lib.llm_service.llm_service import _CLOUD_ONLY_PROVIDERS
+
+        assert set(_CLOUD_ONLY_PROVIDERS) == set(CLOUD_PROVIDERS)
+
+    @pytest.mark.asyncio
+    async def test_contract_extraction_sends_nothing_when_cloud_disabled(
+        self, cloud_disabled, no_outbound, monkeypatch
     ):
+        """驗收核心:全地端組態下跑完整合約抽取,不得有任何對外連線"""
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-test-not-real")
         from app.lib.multi_type_ocr.contract_field_extractor import (
             ContractFieldExtractor,
         )
 
+        result = await ContractFieldExtractor().extract(
+            CONTRACT_TEXT, image_data="ZmFrZS1pbWFnZQ==", use_llm_fallback=True
+        )
+
+        assert no_outbound == [], f"合約內容外送了:{no_outbound}"
+        # 流程不中斷:仍回傳正則抽取結果,交由既有低信心流程處理
+        assert result["contract_metadata"]["contract_number"] == "ABC-2026-001"
+        assert result["llm_used_for_extraction"] is False
+
+    @pytest.mark.asyncio
+    async def test_skip_is_logged_as_policy_not_failure(
+        self, cloud_disabled, no_outbound, monkeypatch, caplog
+    ):
+        """紀錄要講清楚「這是政策決定」。只靠 LLMService 守衛兜底的話,
+        日誌會寫成「LLM 提取失敗」,值班的人會去查一個不存在的故障"""
         monkeypatch.setenv("OPENAI_API_KEY", "sk-test-not-real")
+        from app.lib.multi_type_ocr.contract_field_extractor import (
+            ContractFieldExtractor,
+        )
+
+        logger_name = "app.lib.multi_type_ocr.contract_field_extractor"
+        with caplog.at_level("INFO", logger=logger_name):
+            await ContractFieldExtractor().extract(
+                CONTRACT_TEXT, image_data="ZmFrZS1pbWFnZQ==", use_llm_fallback=True
+            )
+
+        assert "合約內容不外送" in caplog.text
+        assert "LLM 提取失敗" not in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_low_confidence_alone_no_longer_triggers_egress(
+        self, cloud_disabled, no_outbound, monkeypatch
+    ):
+        """信心度低正是 OCR 難讀、最需要保密的時候,絕不能因此外送"""
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-test-not-real")
+        from app.lib.multi_type_ocr.contract_field_extractor import (
+            ContractFieldExtractor,
+        )
+
         extractor = ContractFieldExtractor()
+        result = await extractor.extract(
+            "幾乎讀不出東西的雜訊", image_data="ZmFrZS1pbWFnZQ==", use_llm_fallback=True
+        )
 
-        # 期望:雲端停用時建構雲端服務應被守衛擋下
-        with pytest.raises(ValueError, match="個資不外送"):
-            from app.lib.llm_service import LLMService
-
-            extractor.llm_service = LLMService(provider="openai", model="gpt-4o")
-
-    def test_the_gap_is_reachable_today(self, cloud_disabled, monkeypatch):
-        """記錄現況:雲端停用時,直接建構 LLMService 仍然成功——這正是缺口所在"""
-        monkeypatch.setenv("OPENAI_API_KEY", "sk-test-not-real")
-        from app.lib.llm_service import LLMService
-
-        service = LLMService(provider="openai", model="gpt-4o")
-        assert service.provider == "openai"  # 守衛沒有介入
+        assert result["extraction_confidence"] < extractor.CONFIDENCE_THRESHOLD
+        assert no_outbound == []

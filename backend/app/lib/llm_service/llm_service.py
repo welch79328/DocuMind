@@ -7,9 +7,17 @@ LLM Service Core
 import os
 import logging
 from typing import Optional, Dict, Any, Union, List
+
+from app.config import settings
+
 from .types import LLMProvider, LLMStats
 
 logger = logging.getLogger(__name__)
+
+# 僅雲端可用的提供商;與 providers.CLOUD_PROVIDERS 同一份清單。
+# 這裡不 import providers 是為了避免把 Provider 抽象層拉進這個舊路徑,
+# 但兩邊必須一致——test_local_only_privacy 有測試釘住這件事。
+_CLOUD_ONLY_PROVIDERS = frozenset({"openai", "anthropic"})
 
 
 class LLMService:
@@ -51,6 +59,16 @@ class LLMService:
             model: 模型名稱，None 使用預設模型
             api_key: API 金鑰，None 從環境變數讀取
         """
+        # 隱私守衛:雲端停用時拒絕建構雲端服務(需求 2.7)。
+        #
+        # 守衛放在這個匯流點而非個別呼叫端,是因為 LLMService 是與
+        # create_provider 並存的舊路徑——只要有任何一處直接 new 它,
+        # 地端承諾就破了。過去 ContractFieldExtractor 正是這樣繞過去的。
+        if provider in _CLOUD_ONLY_PROVIDERS and not settings.LLM_CLOUD_ENABLED:
+            raise ValueError(
+                f"雲端 Provider「{provider}」已停用(LLM_CLOUD_ENABLED=false),個資不外送"
+            )
+
         self.provider = provider
         self.api_key = api_key or self._get_api_key()
         self.model = model or self._get_default_model()

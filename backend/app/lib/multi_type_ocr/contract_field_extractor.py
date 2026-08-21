@@ -18,6 +18,7 @@ import logging
 from typing import Dict, Any, Optional
 from app.lib.multi_type_ocr.contract_patterns import PATTERNS
 from app.lib.llm_service import LLMService
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -134,7 +135,23 @@ class ContractFieldExtractor:
         logger.info(f"  - use_llm_fallback: {use_llm_fallback}")
         logger.info(f"  - image_data is not None: {image_data is not None}")
 
-        if confidence < self.CONFIDENCE_THRESHOLD and use_llm_fallback and image_data:
+        # 地端組態下不得把合約內容送往雲端。這裡先擋是為了讓紀錄講清楚
+        # 「這是政策決定」而非「LLM 提取失敗」——真正的守衛在 LLMService.__init__
+        cloud_blocked = not settings.LLM_CLOUD_ENABLED
+
+        if confidence < self.CONFIDENCE_THRESHOLD and use_llm_fallback and image_data and cloud_blocked:
+            logger.info(
+                "⛔ LLM_CLOUD_ENABLED=false,略過雲端 LLM 輔助抽取(合約內容不外送);"
+                "本份合約維持正則結果,信心度 %.2f%% 將交由既有低信心流程處理",
+                confidence * 100,
+            )
+
+        if (
+            confidence < self.CONFIDENCE_THRESHOLD
+            and use_llm_fallback
+            and image_data
+            and not cloud_blocked
+        ):
             try:
                 logger.info(f"✅ LLM 觸發條件滿足，啟用 LLM 輔助")
                 logger.info(f"正則提取信心度 {confidence:.2%} 低於閾值，啟用 LLM 輔助")
