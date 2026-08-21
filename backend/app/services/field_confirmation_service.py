@@ -86,7 +86,15 @@ class FieldConfirmationService:
                 logger.warning("略過未知處置 action=%r,欄位=%s", action, field)
                 continue
 
-            corrected_fields[field] = decision.get("after")
+            final_value = decision.get("after")
+            if final_value is None:
+                # 缺最終值的決定不成立。寫進去會讓 null 混入 few-shot 範例,
+                # 教模型「這個欄位就是空的」。空字串則是有效答案(使用者清空該欄)。
+                skipped.append(field)
+                logger.warning("略過缺少最終值的決定,欄位=%s", field)
+                continue
+
+            corrected_fields[field] = final_value
 
         if not corrected_fields:
             return {

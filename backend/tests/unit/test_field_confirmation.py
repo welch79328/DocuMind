@@ -124,6 +124,36 @@ class TestNoSampleWithoutRealDecisions:
         )
         assert report["created"] is False
 
+    def test_corrected_without_final_value_is_skipped(self, samples):
+        """缺最終值的決定不成立——寫進去會讓 null 混入 few-shot 範例"""
+        report = FieldConfirmationService(samples).record(
+            "transcript", PAGE_TEXT,
+            [{"field": "owner", "action": "corrected", "before": "黃水木"}],
+        )
+
+        assert report["created"] is False
+        assert report["skipped"] == ["owner"]
+        assert samples.count("transcript", purpose="train") == 0
+
+    def test_explicit_none_after_is_skipped(self, samples):
+        report = FieldConfirmationService(samples).record(
+            "transcript", PAGE_TEXT,
+            [{"field": "owner", "action": "confirmed", "after": None}],
+        )
+        assert report["created"] is False
+        assert report["skipped"] == ["owner"]
+
+    def test_empty_string_is_a_valid_answer(self, samples):
+        """使用者清空欄位代表「此欄無值」,是有效答案,不可與缺值混為一談"""
+        report = FieldConfirmationService(samples).record(
+            "transcript", PAGE_TEXT,
+            [{"field": "owner", "action": "corrected", "before": "雜訊", "after": ""}],
+        )
+
+        assert report["created"] is True
+        stored = samples.list_samples("transcript", purpose="train")[0]
+        assert stored["corrected_fields"] == {"owner": ""}
+
     def test_valid_and_invalid_mixed_writes_only_valid(self, samples):
         report = FieldConfirmationService(samples).record(
             "transcript", PAGE_TEXT,
