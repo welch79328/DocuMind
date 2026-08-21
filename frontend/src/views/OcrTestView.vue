@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import FieldConfirmation from '@/components/FieldConfirmation.vue'
+import type { FieldDecision } from '@/types/confirmation'
 
 const file = ref<File | null>(null)
 const testing = ref(false)
@@ -8,6 +10,13 @@ const groundTruth = ref('')
 const enableLlm = ref(true)
 const currentPageIndex = ref(0)  // 當前查看的頁面索引（0-based）
 const documentType = ref<'transcript' | 'contract'>('transcript')  // 文件類型選擇
+
+// 使用者當場確認的結果,逐頁保存(任務 9.1 只收集,回灌由任務 9.2 接手)
+const pageDecisions = ref<Record<number, FieldDecision[]>>({})
+
+function onDecisionsChange(pageIndex: number, decisions: FieldDecision[]) {
+  pageDecisions.value = { ...pageDecisions.value, [pageIndex]: decisions }
+}
 
 // 合併所有頁面的最終文字
 const mergedText = computed(() => {
@@ -223,6 +232,20 @@ const copyToClipboard = async () => {
 
     <!-- 測試結果 -->
     <div v-if="result && result.pages && result.pages.length > 0" class="space-y-6">
+      <!-- 欄位確認(任務 9.1):低信心或引擎不一致的欄位交由使用者當場確認 -->
+      <div class="bg-white rounded-lg shadow p-6">
+        <h3 class="text-xl font-semibold mb-4">✅ 欄位確認</h3>
+        <div v-for="(page, index) in result.pages" :key="`confirm-${index}`" class="mb-6 last:mb-0">
+          <h4 class="text-sm text-gray-500 mb-2">第 {{ page.page_number }} 頁</h4>
+          <FieldConfirmation
+            :structured-data="page.structured_data"
+            :field-confidences="page.field_confidences"
+            :consensus="page.consensus"
+            @change="(decisions: FieldDecision[]) => onDecisionsChange(index, decisions)"
+          />
+        </div>
+      </div>
+
       <!-- 合約結構化欄位顯示 -->
       <div v-if="result.document_type === 'contract'" class="bg-white rounded-lg shadow p-6">
         <h3 class="text-xl font-semibold mb-4">📋 合約欄位提取結果</h3>
