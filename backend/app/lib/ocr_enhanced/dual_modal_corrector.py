@@ -19,7 +19,9 @@ from __future__ import annotations
 
 import base64
 import binascii
+import json
 import logging
+import re
 from typing import Any, Dict, List, Literal, Optional, TypedDict
 
 from app.config import settings
@@ -62,6 +64,44 @@ def is_refusal(text: str) -> bool:
     return len(text) < _REFUSAL_MAX_LEN and any(
         pattern in lowered for pattern in _REFUSAL_PATTERNS
     )
+
+
+# 校正回應中信心度區塊的標記。放在正文之後,解析失敗時退回「整段都是正文」,
+# 與未啟用信心度時的行為一致——寧可不回報,也不憑空生成信心度。
+CONFIDENCE_MARKER = "【欄位信心度】"
+
+
+def split_confidence_block(response: str) -> tuple[str, Dict[str, float]]:
+    """
+    自模型回應切出「校正後全文」與「欄位信心度」。
+
+    找不到標記或 JSON 不合法時,回傳 (整段回應, {})——不猜、不補、不生成。
+    信心度回報若靠猜,整套低信心攔截就失去意義。
+    """
+    if CONFIDENCE_MARKER not in response:
+        return response, {}
+
+    text, _, tail = response.partition(CONFIDENCE_MARKER)
+
+    match = re.search(r"\{.*\}", tail, re.DOTALL)
+    if not match:
+        logger.warning("信心度區塊缺少 JSON,視為未回報")
+        return text.rstrip(), {}
+
+    try:
+        raw = json.loads(match.group(0))
+    except json.JSONDecodeError as exc:
+        logger.warning("信心度 JSON 解析失敗,視為未回報:%s", exc)
+        return text.rstrip(), {}
+
+    confidences: Dict[str, float] = {}
+    for field, value in (raw or {}).items():
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            continue
+        # 夾在 [0,1];模型偶爾回百分比或超界值,放行會讓下游門檻判斷失準
+        confidences[str(field)] = max(0.0, min(1.0, float(value)))
+
+    return text.rstrip(), confidences
 
 
 def normalize_image_data(image_data: Optional[str]) -> str:
@@ -132,25 +172,29 @@ class DualModalCorrector:
         doc_type: str = "transcript",
         image_data: Optional[str] = None,
         few_shot: Optional[List[Dict[str, Any]]] = None,
+        field_labels: Optional[Dict[str, str]] = None,
     ) -> CorrectionResult:
         """校正 OCR 文字
 
         image_data 為 None 或編碼失敗時降級為純文字校正並記錄事由(需求 2.3)。
         模型因內容政策拒絕時,回傳原始文字並記錄事由(需求 2.8)。
+        field_labels 提供時且已啟用,額外請模型回報各欄位信心度(需求 2.2)。
         """
         image_payload, degraded_reason = self._resolve_image(image_data)
 
         if image_payload is not None:
             try:
                 return await self._call(
-                    ocr_text, doc_type, image_payload, few_shot, degraded_reason=None
+                    ocr_text, doc_type, image_payload, few_shot,
+                    degraded_reason=None, field_labels=field_labels,
                 )
             except Exception as exc:  # noqa: BLE001 — 任何影像路徑失敗都須降級,不得中斷
                 degraded_reason = f"雙模態呼叫失敗,降級純文字:{exc}"
                 logger.warning(degraded_reason)
 
         return await self._call(
-            ocr_text, doc_type, None, few_shot, degraded_reason=degraded_reason
+            ocr_text, doc_type, None, few_shot,
+            degraded_reason=degraded_reason, field_labels=field_labels,
         )
 
     def _resolve_image(
@@ -175,12 +219,21 @@ class DualModalCorrector:
         image_payload: Optional[str],
         few_shot: Optional[List[Dict[str, Any]]],
         degraded_reason: Optional[str],
+        field_labels: Optional[Dict[str, str]] = None,
     ) -> CorrectionResult:
         modality: Literal["dual", "text_only"] = (
             "dual" if image_payload else "text_only"
         )
+        # 信心度僅在設定啟用且呼叫端指定了欄位時才索取。
+        # 沒有欄位清單就沒有東西可回報——請模型自行決定欄位等於放任它編。
+        want_confidence = bool(
+            settings.LLM_FIELD_CONFIDENCE_ENABLED and field_labels
+        )
         prompt = build_correction_prompt(
-            ocr_text, doc_type, has_image=image_payload is not None
+            ocr_text,
+            doc_type,
+            has_image=image_payload is not None,
+            field_labels=field_labels if want_confidence else None,
         )
 
         response = await self.provider.call(
@@ -202,9 +255,23 @@ class DualModalCorrector:
                 stats=self.stats,
             )
 
+        if not want_confidence:
+            return CorrectionResult(
+                text=response,
+                field_confidences={},
+                modality=modality,
+                degraded_reason=degraded_reason,
+                refused=False,
+                stats=self.stats,
+            )
+
+        text, confidences = split_confidence_block(response)
+        # 只保留有請求過的欄位,模型自行加碼的欄位不採信
+        confidences = {k: v for k, v in confidences.items() if k in (field_labels or {})}
+
         return CorrectionResult(
-            text=response,
-            field_confidences={},
+            text=text,
+            field_confidences=confidences,
             modality=modality,
             degraded_reason=degraded_reason,
             refused=False,
@@ -226,18 +293,48 @@ _UNCERTAIN_WITH_IMAGE = "無法確定的文字請參考圖片,如果圖片也看
 _UNCERTAIN_TEXT_ONLY = "無法確定的文字保持原樣,不要憑上下文臆測"
 
 
+def build_confidence_instruction(field_labels: Dict[str, str]) -> str:
+    """建立欄位信心度回報指示(任務 8.4)"""
+    listed = "\n".join(f"- {name}({label})" for name, label in field_labels.items())
+    template = ", ".join(f'"{name}": 0.0' for name in field_labels)
+    return f"""
+
+【額外要求:欄位信心度】
+輸出校正後的完整文字之後,另起一行寫下 {CONFIDENCE_MARKER},
+再輸出一行 JSON,標示你對下列各欄位「校正後數值正確」的信心度(0.0 至 1.0):
+{listed}
+
+格式範例:
+{CONFIDENCE_MARKER}
+{{{template}}}
+
+規則:
+- 文字中找不到該欄位時,信心度填 0.0
+- 只憑上下文推測而非明確讀到的,信心度不得高於 0.5
+- 不要為上列以外的欄位輸出信心度"""
+
+
 def build_correction_prompt(
-    ocr_text: str, doc_type: str = "transcript", has_image: bool = False
+    ocr_text: str,
+    doc_type: str = "transcript",
+    has_image: bool = False,
+    field_labels: Optional[Dict[str, str]] = None,
 ) -> str:
     """建立全文校正提示詞
 
     has_image=False 時不得出現任何要求查看圖片的指示——現行版本把
     「請仔細查看上面提供的文件圖片」寫死在提示詞裡卻從不傳圖,
     等於要模型對照一張不存在的圖(任務 8.3 修正此不一致)。
+
+    field_labels 提供時追加信心度回報指示(任務 8.4);未提供時提示詞
+    與 8.3 版本逐字相同,既有純文字校正行為不變。
     """
     rules = _COMMON_RULES.format(
         image_rules=_IMAGE_RULES if has_image else "",
         uncertain_rule=_UNCERTAIN_WITH_IMAGE if has_image else _UNCERTAIN_TEXT_ONLY,
+    )
+    confidence_section = (
+        build_confidence_instruction(field_labels) if field_labels else ""
     )
 
     return f"""你是專業的台灣地政謄本 OCR 錯誤修正專家。請修正以下 OCR 辨識的錯誤文字。
@@ -309,13 +406,16 @@ def build_correction_prompt(
 【要修正的 OCR 文字】
 {ocr_text}
 
-請直接輸出修正後的完整文字,不要添加任何解釋或說明。保持所有原有的換行和格式。"""
+請直接輸出修正後的完整文字,不要添加任何解釋或說明。保持所有原有的換行和格式。{confidence_section}"""
 
 
 __all__ = [
+    "CONFIDENCE_MARKER",
     "CorrectionResult",
     "DualModalCorrector",
+    "build_confidence_instruction",
     "build_correction_prompt",
     "is_refusal",
     "normalize_image_data",
+    "split_confidence_block",
 ]

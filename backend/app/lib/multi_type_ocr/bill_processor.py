@@ -76,6 +76,7 @@ class BillProcessor(OcrDocumentProcessor):
             enable_llm=enable_llm,
             llm_provider=self.llm_provider,
             llm_strategy=self.llm_strategy,
+            field_labels=getattr(BillFieldExtractor, "FIELD_LABELS", None),
         )
         return await postprocessor.postprocess(
             text, ocr_confidence=confidence, image_data=image_data

@@ -208,7 +208,8 @@ class ContractProcessor(OcrDocumentProcessor):
                 enable_format_correction=True,
                 enable_llm=enable_llm,
                 llm_provider=self.llm_provider,
-                llm_strategy=self.llm_strategy
+                llm_strategy=self.llm_strategy,
+                field_labels=getattr(ContractFieldExtractor, "FIELD_LABELS", None),
             )
 
             # 調用 TranscriptPostprocessor

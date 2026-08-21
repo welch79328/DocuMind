@@ -47,6 +47,22 @@ class ContractFieldExtractor:
         "tenant_name",         # 承租人姓名
     }
 
+    # 關鍵欄位的中文標籤(任務 8.4:校正階段索取欄位信心度時使用)。
+    # 只涵蓋 CRITICAL_FIELDS——把 26 個欄位全塞進提示詞會稀釋校正本身的注意力,
+    # 而信心度攔截真正在乎的也就是這幾個。
+    FIELD_LABELS = {
+        "contract_number": "合約編號",
+        "party_a": "甲方",
+        "party_b": "乙方",
+        "contract_amount": "合約金額",
+        "date_start": "租期起始日",
+        "date_end": "租期結束日",
+        "monthly_rent": "月租金",
+        "deposit": "押金",
+        "rental_address": "租賃標的地址",
+        "tenant_name": "承租人姓名",
+    }
+
     # 次要欄位定義（權重較低）
     MINOR_FIELDS = {
         # 通用合約次要欄位

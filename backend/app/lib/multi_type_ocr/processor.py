@@ -210,6 +210,30 @@ class OcrDocumentProcessor(DocumentProcessor):
         structured_data["field_confidences"] = merged
         return structured_data
 
+    @staticmethod
+    def _apply_correction_confidences(
+        structured_data: Optional[Dict[str, Any]],
+        correction_confidences: Optional[Dict[str, float]],
+    ) -> Optional[Dict[str, Any]]:
+        """
+        併入校正階段回報的欄位信心度(需求 2.2)。
+
+        **只取較低者**,與共識同一不變量:任何新訊號都只能收緊攔截、不得放寬。
+        模型自評信心度尤其不可用來抬高——本規格的核心論點正是自評不可信。
+        """
+        if not structured_data or not correction_confidences:
+            return structured_data
+
+        existing = structured_data.get("field_confidences")
+        merged: Dict[str, float] = dict(existing) if isinstance(existing, dict) else {}
+
+        for field, confidence in correction_confidences.items():
+            value = float(confidence)
+            merged[field] = min(merged[field], value) if field in merged else value
+
+        structured_data["field_confidences"] = merged
+        return structured_data
+
     @abstractmethod
     async def postprocess(
         self, text: str, confidence: float, image_data: Optional[str] = None
@@ -295,6 +319,11 @@ class OcrDocumentProcessor(DocumentProcessor):
         # 步驟 5b:共識信心度覆蓋(只取較低者,絕不放寬攔截)
         if consensus is not None:
             structured_data = self._apply_consensus(structured_data, consensus)
+
+        # 步驟 5c:雙模態校正回報的欄位信心度(任務 8.4);同樣只取較低者
+        structured_data = self._apply_correction_confidences(
+            structured_data, postprocess_stats.get("llm_field_confidences")
+        )
 
         field_confidences: Dict[str, float] = {}
         if isinstance(structured_data, dict):

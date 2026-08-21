@@ -16,6 +16,7 @@ from PIL import Image
 import numpy as np
 from app.lib.multi_type_ocr.transcript_processor import TranscriptProcessor
 from app.lib.multi_type_ocr.processor import DocumentProcessor
+from app.lib.multi_type_ocr.transcript_field_extractor import TranscriptFieldExtractor
 
 
 class TestTranscriptProcessorStructure:
@@ -209,7 +210,8 @@ class TestPostprocessMethod:
                 enable_format_correction=True,
                 enable_llm=True,
                 llm_provider="openai",
-                llm_strategy="auto"
+                llm_strategy="auto",
+                field_labels=TranscriptFieldExtractor.FIELD_LABELS,
             )
 
     @pytest.mark.asyncio
@@ -231,7 +233,8 @@ class TestPostprocessMethod:
                 enable_format_correction=True,
                 enable_llm=False,
                 llm_provider="openai",
-                llm_strategy="auto"
+                llm_strategy="auto",
+                field_labels=TranscriptFieldExtractor.FIELD_LABELS,
             )
 
 

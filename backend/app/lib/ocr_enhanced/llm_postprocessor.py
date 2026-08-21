@@ -63,7 +63,8 @@ class LLMPostprocessor:
         self,
         ocr_text: str,
         doc_type: str = "transcript",
-        image_data: Optional[str] = None
+        image_data: Optional[str] = None,
+        field_labels: Optional[dict] = None,
     ) -> tuple[str, dict]:
         """
         全文修正（適合低信心度文件）
@@ -82,6 +83,7 @@ class LLMPostprocessor:
             ocr_text=ocr_text,
             doc_type=doc_type,
             image_data=image_data,
+            field_labels=field_labels,
         )
         self.last_result = result
 

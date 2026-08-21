@@ -14,6 +14,7 @@ from ..ocr_enhanced.config import PreprocessConfig
 from ..ocr_enhanced.preprocessor import TranscriptPreprocessor
 from ..ocr_enhanced.engine_manager import EngineManager
 from ..ocr_enhanced.postprocessor import TranscriptPostprocessor
+from .transcript_field_extractor import TranscriptFieldExtractor
 
 logger = logging.getLogger(__name__)
 
@@ -196,7 +197,8 @@ class TranscriptProcessor(OcrDocumentProcessor):
                 enable_format_correction=True,
                 enable_llm=enable_llm,
                 llm_provider=self.llm_provider,
-                llm_strategy=self.llm_strategy
+                llm_strategy=self.llm_strategy,
+                field_labels=getattr(TranscriptFieldExtractor, "FIELD_LABELS", None),
             )
 
             # 調用 TranscriptPostprocessor

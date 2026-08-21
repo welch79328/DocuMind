@@ -43,6 +43,7 @@ class Settings(BaseSettings):
 
     # 雙模態 LLM 校正(ocr-vlm-consensus 需求 2);預設關閉,校正行為與現行一致
     LLM_DUAL_MODAL_ENABLED: bool = False  # 啟用後校正才同時送出頁面影像
+    LLM_FIELD_CONFIDENCE_ENABLED: bool = False  # 啟用後校正才附帶欄位級信心度
 
     # AWS Textract
     AWS_ACCESS_KEY_ID: str = ""

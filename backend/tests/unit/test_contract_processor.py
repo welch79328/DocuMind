@@ -17,6 +17,7 @@ import numpy as np
 from app.lib.multi_type_ocr.contract_processor import ContractProcessor
 from app.lib.multi_type_ocr.processor import DocumentProcessor
 from app.lib.multi_type_ocr.types import ContractStructuredData
+from app.lib.multi_type_ocr.contract_field_extractor import ContractFieldExtractor
 
 
 class TestContractProcessorStructure:
@@ -188,7 +189,8 @@ class TestPostprocessMethod:
                 enable_format_correction=True,
                 enable_llm=True,
                 llm_provider="openai",
-                llm_strategy="auto"
+                llm_strategy="auto",
+                field_labels=ContractFieldExtractor.FIELD_LABELS,
             )
 
 

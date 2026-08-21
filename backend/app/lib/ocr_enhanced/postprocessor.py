@@ -35,7 +35,8 @@ class TranscriptPostprocessor:
         enable_format_correction: bool = True,
         enable_llm: bool = False,
         llm_provider: Optional[str] = None,
-        llm_strategy: Literal["auto", "full", "fields", "none"] = "auto"
+        llm_strategy: Literal["auto", "full", "fields", "none"] = "auto",
+        field_labels: Optional[dict] = None,
     ):
         """
         初始化後處理器
@@ -51,6 +52,8 @@ class TranscriptPostprocessor:
         self.enable_format_correction = enable_format_correction
         self.enable_llm = enable_llm
         self.llm_strategy = llm_strategy
+        # 欄位標籤供校正階段索取欄位級信心度(任務 8.4);None 時完全不索取
+        self.field_labels = field_labels
 
         # LLM 後處理器（延遲初始化）
         self.llm_processor = None
@@ -126,6 +129,10 @@ class TranscriptPostprocessor:
             processed_text = llm_result["text"]
             self.stats["llm_used"] = llm_result["used"]
             self.stats["llm_cost"] = llm_result.get("cost", 0.0)
+            # 只在真的取得信心度時才新增此鍵;未啟用時 stats 逐鍵與現行一致
+            correction_confidences = llm_result.get("field_confidences") or {}
+            if correction_confidences:
+                self.stats["llm_field_confidences"] = correction_confidences
 
         # ========== 階段 3: 清理優化 ==========
         processed_text = self._clean_whitespace(processed_text)
@@ -167,7 +174,8 @@ class TranscriptPostprocessor:
                 # 全文修正（可搭配圖片）
                 corrected, stats = await self.llm_processor.correct_full_text(
                     text,
-                    image_data=image_data
+                    image_data=image_data,
+                    field_labels=self.field_labels,
                 )
             elif strategy == "fields":
                 # 欄位修正
@@ -175,10 +183,15 @@ class TranscriptPostprocessor:
             else:
                 return {"text": text, "used": False, "cost": 0.0}
 
+            last = getattr(self.llm_processor, "last_result", None) or {}
             return {
                 "text": corrected,
                 "used": True,
-                "cost": self.llm_processor.stats.get("estimated_cost", 0.0)
+                "cost": self.llm_processor.stats.get("estimated_cost", 0.0),
+                # 校正階段回報的欄位信心度;未啟用或未索取時為空,下游不受影響
+                "field_confidences": last.get("field_confidences") or {},
+                "modality": last.get("modality"),
+                "degraded_reason": last.get("degraded_reason"),
             }
 
         except Exception as e:
