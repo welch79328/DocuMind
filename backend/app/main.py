@@ -4,10 +4,13 @@ Main application entry point
 """
 
 import logging
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.v1 import documents, chat, ocr_test, analyze, review, samples, evaluation, classify
 from app.config import settings
+from app.config_conflicts import log_setting_conflicts
 
 # 配置日誌級別為 INFO
 logging.basicConfig(
@@ -19,8 +22,20 @@ logging.basicConfig(
 logging.getLogger('app.lib.multi_type_ocr').setLevel(logging.INFO)
 logging.getLogger('app.lib.llm_service').setLevel(logging.INFO)
 
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    """啟動時檢查設定衝突組合(任務 10.3)
+
+    只警告不阻擋:設定衝突是判斷問題而非錯誤,
+    擋下啟動會把一個可運行(只是效果打折)的系統變成完全不能用。
+    """
+    log_setting_conflicts(settings)
+    yield
+
+
 # Create FastAPI app instance
 app = FastAPI(
+    lifespan=lifespan,
     title="DocuMind AI 文件智能處理系統",
     description="""
     ## 🤖 AI 文件智能處理 API
