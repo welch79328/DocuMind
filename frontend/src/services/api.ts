@@ -1,5 +1,6 @@
 import axios from 'axios'
 import type { ReviewItem, ReviewQueueResponse, ReviewStatus, SubmitDiff } from '@/types/review'
+import type { ConfirmationReport, FieldDecision } from '@/types/confirmation'
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api'
 
@@ -46,6 +47,15 @@ export const reviewApi = {
     api.post<{ status: string; diff: SubmitDiff }>(`/v1/review/${id}/submit`, {
       reviewer,
       corrected_fields,
+    }),
+}
+
+// 使用者當場確認回灌(任務 9.2)
+export const confirmationApi = {
+  submit: (documentType: string, pageText: string, decisions: FieldDecision[]) =>
+    api.post<ConfirmationReport>(`/v1/samples/${documentType}/confirm`, {
+      page_text: pageText,
+      decisions,
     }),
 }
 

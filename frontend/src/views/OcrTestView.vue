@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import FieldConfirmation from '@/components/FieldConfirmation.vue'
+import { confirmationApi } from '@/services/api'
 import type { FieldDecision } from '@/types/confirmation'
 
 const file = ref<File | null>(null)
@@ -11,11 +12,50 @@ const enableLlm = ref(true)
 const currentPageIndex = ref(0)  // 當前查看的頁面索引（0-based）
 const documentType = ref<'transcript' | 'contract'>('transcript')  // 文件類型選擇
 
-// 使用者當場確認的結果,逐頁保存(任務 9.1 只收集,回灌由任務 9.2 接手)
+// 使用者當場確認的結果,逐頁保存(任務 9.1 收集,任務 9.2 回灌 few-shot)
 const pageDecisions = ref<Record<number, FieldDecision[]>>({})
+const submittingConfirm = ref(false)
+const confirmMessage = ref<{ type: 'error' | 'success'; text: string } | null>(null)
 
 function onDecisionsChange(pageIndex: number, decisions: FieldDecision[]) {
   pageDecisions.value = { ...pageDecisions.value, [pageIndex]: decisions }
+}
+
+// 所有頁面的決定攤平;沒有任何決定時不送出,不製造空樣本
+const allDecisions = computed<FieldDecision[]>(() =>
+  Object.values(pageDecisions.value).flat()
+)
+
+function pageTextOf(pageIndex: number): string {
+  const page = result.value?.pages?.[pageIndex]
+  return page?.rule_postprocessed?.text || page?.ocr_raw?.text || ''
+}
+
+async function submitConfirmations() {
+  if (allDecisions.value.length === 0) return
+  submittingConfirm.value = true
+  confirmMessage.value = null
+  try {
+    let written = 0
+    // 逐頁送出:版型指紋與 input_ref 都以該頁文字為準,混頁會讓兩者失真
+    for (const [index, decisions] of Object.entries(pageDecisions.value)) {
+      if (!decisions.length) continue
+      const resp = await confirmationApi.submit(
+        documentType.value,
+        pageTextOf(Number(index)),
+        decisions
+      )
+      written += resp.data.fields_written
+    }
+    confirmMessage.value = {
+      type: 'success',
+      text: `已回饋 ${written} 個欄位，將用於改善後續辨識`,
+    }
+  } catch {
+    confirmMessage.value = { type: 'error', text: '回饋失敗，請稍後再試' }
+  } finally {
+    submittingConfirm.value = false
+  }
 }
 
 // 合併所有頁面的最終文字
@@ -243,6 +283,30 @@ const copyToClipboard = async () => {
             :consensus="page.consensus"
             @change="(decisions: FieldDecision[]) => onDecisionsChange(index, decisions)"
           />
+        </div>
+
+        <!-- 回灌回饋學習(任務 9.2) -->
+        <div class="mt-4 pt-4 border-t flex items-center gap-3">
+          <button
+            type="button"
+            :disabled="allDecisions.length === 0 || submittingConfirm"
+            class="bg-blue-600 hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded px-5 py-2 text-sm"
+            @click="submitConfirmations"
+          >
+            {{ submittingConfirm ? '送出中…' : `送出確認結果（${allDecisions.length} 個欄位）` }}
+          </button>
+          <span
+            v-if="confirmMessage"
+            :class="[
+              'text-sm',
+              confirmMessage.type === 'error' ? 'text-red-600' : 'text-emerald-700',
+            ]"
+          >
+            {{ confirmMessage.text }}
+          </span>
+          <span v-else class="text-xs text-gray-500">
+            確認結果會沉澱為範例，逐步提升同版型文件的辨識準確率
+          </span>
         </div>
       </div>
 

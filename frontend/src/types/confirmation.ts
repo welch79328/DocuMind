@@ -80,3 +80,12 @@ export function flattenFields(
   }
   return fields
 }
+
+/** 後端回灌結果(POST /api/v1/samples/{type}/confirm) */
+export interface ConfirmationReport {
+  document_type: string
+  created: boolean
+  sample_id: string | null
+  fields_written: number
+  skipped: string[]
+}

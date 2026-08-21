@@ -18,6 +18,7 @@ from app.services.annotation_importer import (
     InvalidAnnotationFormatError,
 )
 from app.services.correction_sample_service import CorrectionSampleService
+from app.services.field_confirmation_service import FieldConfirmationService
 
 router = APIRouter()
 
@@ -40,6 +41,18 @@ class ImportRequest(BaseModel):
 
 class GoldenRequest(BaseModel):
     is_golden: bool = True
+
+
+class ConfirmDecision(BaseModel):
+    field: str
+    action: str                      # confirmed / corrected
+    before: Any = None
+    after: Any = None
+
+
+class ConfirmRequest(BaseModel):
+    page_text: str = ""              # 該頁 OCR 文字,供產生 input_ref 與版型指紋
+    decisions: List[ConfirmDecision] = []
 
 
 def _error(status_code: int, detail: str, error_code: str) -> JSONResponse:
@@ -115,6 +128,30 @@ def import_annotations(
     except InvalidAnnotationFormatError as exc:
         return _error(422, str(exc), "INVALID_ANNOTATION_FORMAT")
 
+    return {"document_type": resolved, **report}
+
+
+@router.post("/{document_type}/confirm", summary="使用者當場確認回灌")
+def confirm_fields(
+    document_type: str, body: ConfirmRequest, db: Session = Depends(get_db)
+):
+    """
+    將使用者在結果頁當場確認 / 修正的欄位寫回為訓練用途樣本(purpose='train'),
+    使其進入既有 few-shot 回灌流程。
+
+    只寫入使用者實際處置過的欄位;沒有任何有效決定時不寫入資料。
+    本端點不觸碰人工複核佇列——佇列保留為稍後處理的備援路徑。
+    """
+    resolved = _resolve_type(document_type)
+    if resolved is None:
+        return _error(400, f"不支援的文件類型：{document_type}", "UNSUPPORTED_DOCUMENT_TYPE")
+
+    service = FieldConfirmationService(CorrectionSampleService(db))
+    report = service.record(
+        document_type=resolved,
+        page_text=body.page_text,
+        decisions=[d.model_dump() for d in body.decisions],
+    )
     return {"document_type": resolved, **report}
 
 
