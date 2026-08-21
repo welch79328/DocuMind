@@ -977,19 +977,37 @@
 驗證停用雲端設定下,完整辨識流程可全本地完成,且文件內容不傳送至外部服務。
 
 **驗收標準**:
-- [x] 停用雲端時完整流程可全本地運行
+- [ ] 停用雲端時完整流程可全本地運行 ⛔ **未達成**——見下方缺口 C1。
+      **校正路徑**已達成且經實測;但「完整流程」在合約欄位抽取那一段會外送。
+      原本標記為達成是錯的,已由獨立 verifier 代理以實測推翻。
 - [x] 驗證無對外連線傳送文件內容(以封死 socket 實測,非讀碼推論)
+      ——涵蓋校正路徑;合約抽取路徑的外送見缺口 C1
 - [ ] 相關路徑納入整合測試 ⛔ **阻擋:`tests/integration` 因 PyMuPDF 未安裝無法收集**
       (見任務 10.1 驗收註記;涵蓋同等內容的測試已置於
       `tests/unit/test_local_only_privacy.py`,環境修復後再遷入整合測試)
 
-**已知缺口(非本規格引入,已回報業主)**
+**缺口 C1(P1,非本規格引入,待業主裁決)**
 
-`ContractFieldExtractor._extract_with_llm` 直接建構僅支援雲端的 `LLMService`,
-完全繞過 `LLM_CLOUD_ENABLED`,並將**合約頁面影像**送往 OpenAI。
-需求 2.7 只涵蓋「校正」,故不在本規格範圍,但地端承諾在合約欄位抽取這條路上是破的。
+`contract_field_extractor.py:323` 直接建構僅支援雲端的
+`LLMService(provider="openai", model="gpt-4o")`,完全繞過 `LLM_CLOUD_ENABLED`
+——`LLMService.__init__` 從不查閱該設定,是與 `create_provider` 並存的舊路徑。
+
+**這不是邊緣情況,是預設組態。** `analyze_document` 的 `enable_llm` 預設為 True,
+合約只要規則抽取信心度低於門檻就會觸發 `_extract_with_llm`——而那正是 OCR 難讀
+(最需要保密)的時候。獨立 verifier 代理以封死 socket 實測,於
+`LLM_CLOUD_ENABLED=false`、`LLM_PROVIDER=local_qwen` 的**全地端組態**下,
+仍測得三次對 `api.openai.com:443` 的連線嘗試,承載合約 OCR 文字與頁面影像。
+
+因此本任務第一條「**完整**流程可全本地運行」判定為未達成。
+把它縮寫成「校正路徑可全本地運行」是可辯護的產品決定,但那要業主明講,
+不能由我逕自把驗收條件改小。
+
 已於 `test_local_only_privacy.py::TestKnownGapContractFieldExtraction` 以
 strict xfail 釘住現況——缺口一旦修好,該測試會 XPASS 而失敗,強迫有人回來拿掉標記。
+
+修法二選一:把 `_extract_with_llm` 改走 `create_provider`,
+或把 `LLM_CLOUD_ENABLED` 守衛下放到 `LLMService.__init__`。
+兩者都會改動 production 行為(合約抽取在地端組態下將失去 LLM 輔助),故需裁決。
 
 **對應需求**: 2.7, 3.4
 

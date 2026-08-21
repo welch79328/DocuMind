@@ -26,6 +26,10 @@ from app.lib.ocr_enhanced.llm_postprocessor import LLMPostprocessor
 
 DOCUMENT_TEXT = "所有權人:黃水木 統一編號:A202******6 地號 0221-0000"
 
+# 確認為本地部署、不外送的 Provider 名稱;
+# create_provider 新增分支時必須落入這裡或 CLOUD_PROVIDERS 其中之一
+LOCAL_PROVIDERS = {"local_qwen"}
+
 
 class OutboundBlocked(AssertionError):
     """封死的 socket 被撥出去了——代表文件內容有機會外送"""
@@ -87,6 +91,10 @@ class TestNoDocumentContentLeavesTheHost:
         with pytest.raises(BaseException) as exc:
             await processor.correct_full_text(DOCUMENT_TEXT)
 
+        # 先確認被測路徑真的碰到網路——no_outbound 為空時下面的 all() 恆真,
+        # 那樣這條測試就只是在證明「什麼都沒發生」
+        assert no_outbound, "校正路徑未觸及網路,本測試失去意義"
+
         # 唯一被嘗試的位址必須是本地端點
         assert all(
             addr[0] in ("localhost", "127.0.0.1", "::1")
@@ -99,10 +107,30 @@ class TestNoDocumentContentLeavesTheHost:
         provider = create_provider()
         assert provider.endpoint.startswith("http://localhost")
 
-    def test_cloud_provider_set_is_the_complete_egress_list(self):
-        """雲端 Provider 清單即外送清單;新增雲端 Provider 卻忘了列進去,
-        守衛就會漏掉它"""
-        assert CLOUD_PROVIDERS == {"openai", "anthropic"}
+    def test_every_provider_branch_is_classified(self):
+        """每個 create_provider 分支都必須被歸類為雲端或本地。
+
+        原本這裡寫的是 `CLOUD_PROVIDERS == {"openai","anthropic"}`,
+        但那在它自稱要抓的情境下恆真——新增一個 gemini 分支卻不列進
+        CLOUD_PROVIDERS,集合仍然等於那兩個,測試照樣綠。
+        改為從函式原始碼取出所有分支名稱,逐一要求歸類。
+        """
+        import inspect
+        import re
+
+        source = inspect.getsource(create_provider)
+        branches = set(re.findall(r'name == "([a-z0-9_]+)"', source))
+        assert branches, "找不到任何 Provider 分支,取法可能已失效"
+
+        unclassified = branches - CLOUD_PROVIDERS - LOCAL_PROVIDERS
+        assert not unclassified, (
+            f"這些 Provider 分支未被歸類:{sorted(unclassified)}。"
+            "雲端的必須列入 CLOUD_PROVIDERS 才會被守衛擋下;"
+            "本地的請列入本測試的 LOCAL_PROVIDERS。"
+        )
+
+    def test_known_cloud_providers_are_all_guarded(self):
+        assert {"openai", "anthropic"} <= CLOUD_PROVIDERS
 
 
 class TestGuardCannotBeBypassedByArguments:
