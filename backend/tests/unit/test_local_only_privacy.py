@@ -38,6 +38,10 @@ CONTRACT_TEXT = """
 合約金額：新台幣 1,000,000 元
 """
 
+# 刻意低信心度:欄位殘缺,規則抽取分數必定低於門檻,才會走到 LLM 輔助那條路。
+# 用高信心度的合約測不到守衛——它根本不會嘗試呼叫 LLM。
+LOW_CONFIDENCE_CONTRACT = "合約編號：PARTIAL-001\n甲方：某公司"
+
 
 class OutboundBlocked(AssertionError):
     """封死的 socket 被撥出去了——代表文件內容有機會外送"""
@@ -205,13 +209,19 @@ class TestContractExtractionHonoursTheGuard:
             ContractFieldExtractor,
         )
 
-        result = await ContractFieldExtractor().extract(
-            CONTRACT_TEXT, image_data="ZmFrZS1pbWFnZQ==", use_llm_fallback=True
+        extractor = ContractFieldExtractor()
+        result = await extractor.extract(
+            LOW_CONFIDENCE_CONTRACT,
+            image_data="ZmFrZS1pbWFnZQ==",
+            use_llm_fallback=True,
         )
+
+        # 先確認真的走到會嘗試外送的那條路,否則本測試只是在證明「什麼都沒發生」
+        assert result["extraction_confidence"] < extractor.CONFIDENCE_THRESHOLD
 
         assert no_outbound == [], f"合約內容外送了:{no_outbound}"
         # 流程不中斷:仍回傳正則抽取結果,交由既有低信心流程處理
-        assert result["contract_metadata"]["contract_number"] == "ABC-2026-001"
+        assert result["contract_metadata"]["contract_number"] == "PARTIAL-001"
         assert result["llm_used_for_extraction"] is False
 
     @pytest.mark.asyncio
@@ -228,7 +238,9 @@ class TestContractExtractionHonoursTheGuard:
         logger_name = "app.lib.multi_type_ocr.contract_field_extractor"
         with caplog.at_level("INFO", logger=logger_name):
             await ContractFieldExtractor().extract(
-                CONTRACT_TEXT, image_data="ZmFrZS1pbWFnZQ==", use_llm_fallback=True
+                LOW_CONFIDENCE_CONTRACT,
+                image_data="ZmFrZS1pbWFnZQ==",
+                use_llm_fallback=True,
             )
 
         assert "合約內容不外送" in caplog.text

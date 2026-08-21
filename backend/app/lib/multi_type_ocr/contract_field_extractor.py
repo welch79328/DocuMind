@@ -48,6 +48,26 @@ class ContractFieldExtractor:
         "tenant_name",         # 承租人姓名
     }
 
+    # 租賃合約專屬欄位(通用合約不會有,不應計入通用合約的信心度分母)
+    LEASE_CRITICAL_FIELDS = {
+        "date_start", "date_end", "monthly_rent",
+        "deposit", "rental_address", "tenant_name",
+    }
+    LEASE_MINOR_FIELDS = {
+        "tenant_id_number", "tenant_phone", "landlord_name",
+        "landlord_id_number", "landlord_phone",
+        "management_fee", "parking_fee", "payment_day",
+    }
+
+    # 判別是否為租賃合約的關鍵詞。
+    # **刻意從原始文字判別,而非「有沒有抽到租賃欄位」**——後者會讓一份
+    # 讀壞的租約因為抽不到租賃欄位而被當成通用合約,分母縮小、信心度虛高,
+    # 正好在最該攔截的時候放行。
+    LEASE_MARKERS = (
+        "租賃", "承租人", "出租人", "房東", "房客",
+        "月租金", "押金", "租期", "起租",
+    )
+
     # 關鍵欄位的中文標籤(任務 8.4:校正階段索取欄位信心度時使用)。
     # 只涵蓋 CRITICAL_FIELDS——把 26 個欄位全塞進提示詞會稀釋校正本身的注意力,
     # 而信心度攔截真正在乎的也就是這幾個。
@@ -126,7 +146,7 @@ class ContractFieldExtractor:
 
         # 步驟 2: 計算信心度
         logger.info("步驟 2: 計算信心度")
-        confidence = self._calculate_confidence(fields)
+        confidence = self._calculate_confidence(fields, text)
         logger.info(f"正則提取信心度: {confidence:.4f} ({confidence:.2%})")
 
         # 步驟 3: 若信心度低且允許，使用 LLM 輔助
@@ -157,7 +177,7 @@ class ContractFieldExtractor:
                 logger.info(f"正則提取信心度 {confidence:.2%} 低於閾值，啟用 LLM 輔助")
                 llm_fields = await self._extract_with_llm(text, image_data)
                 fields = self._merge_fields(fields, llm_fields)
-                confidence = self._calculate_confidence(fields)
+                confidence = self._calculate_confidence(fields, text)
                 llm_used_for_extraction = True  # LLM 已使用
                 logger.info(f"LLM 輔助後信心度: {confidence:.2%}")
             except Exception as e:
@@ -213,7 +233,29 @@ class ContractFieldExtractor:
 
         return results
 
-    def _calculate_confidence(self, fields: Dict[str, Optional[str]]) -> float:
+    def is_lease_contract(self, text: str) -> bool:
+        """由原始文字判別是否為租賃合約(不看抽取結果,理由見 LEASE_MARKERS)"""
+        return any(marker in (text or "") for marker in self.LEASE_MARKERS)
+
+    def _applicable_fields(self, text: str) -> tuple:
+        """
+        取得這份合約**適用**的欄位集合,作為信心度分母。
+
+        租賃合約適用全部欄位;通用合約不含租賃專屬欄位。
+        以全部欄位當分母是原本的缺陷:通用合約即使每個欄位都抽對,
+        上限也只有 0.7×4/10 + 0.3×7/15 = 0.42,永遠低於門檻 0.7,
+        於是必然被判低信心、必然觸發 LLM 輔助、必然進複核佇列。
+        """
+        if self.is_lease_contract(text):
+            return self.CRITICAL_FIELDS, self.MINOR_FIELDS
+        return (
+            self.CRITICAL_FIELDS - self.LEASE_CRITICAL_FIELDS,
+            self.MINOR_FIELDS - self.LEASE_MINOR_FIELDS,
+        )
+
+    def _calculate_confidence(
+        self, fields: Dict[str, Optional[str]], text: str = ""
+    ) -> float:
         """
         計算欄位提取信心度
 
@@ -221,25 +263,30 @@ class ContractFieldExtractor:
         - 關鍵欄位（合約編號、雙方、金額）權重 0.7
         - 次要欄位（日期、地址、付款方式等）權重 0.3
 
+        分母只計入這份合約**適用**的欄位(見 _applicable_fields)。
+
         Args:
             fields: 提取到的欄位字典
+            text: 原始合約文字,用於判別合約子類型
 
         Returns:
             信心度分數 (0.0 - 1.0)
         """
+        critical_fields, minor_fields = self._applicable_fields(text)
+
         # 統計已提取的關鍵欄位
         critical_extracted = sum(
-            1 for field_name in self.CRITICAL_FIELDS
+            1 for field_name in critical_fields
             if fields.get(field_name) is not None
         )
-        critical_total = len(self.CRITICAL_FIELDS)
+        critical_total = len(critical_fields)
 
         # 統計已提取的次要欄位
         minor_extracted = sum(
-            1 for field_name in self.MINOR_FIELDS
+            1 for field_name in minor_fields
             if fields.get(field_name) is not None
         )
-        minor_total = len(self.MINOR_FIELDS)
+        minor_total = len(minor_fields)
 
         # 計算加權信心度
         critical_score = (critical_extracted / critical_total) if critical_total > 0 else 0.0
