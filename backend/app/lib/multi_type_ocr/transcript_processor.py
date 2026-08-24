@@ -60,7 +60,7 @@ class TranscriptProcessor(OcrDocumentProcessor):
         from app.config import settings
         self.engine_manager = EngineManager(
             engines=list(settings.OCR_ENGINES),
-            parallel=settings.OCR_MULTI_ENGINE,
+            parallel=settings.OCR_PARALLEL_ENGINES,
             fusion_method=settings.OCR_FUSION_METHOD,
             paddleocr_lang=settings.OCR_PADDLEOCR_LANG,
         )

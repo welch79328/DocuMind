@@ -37,7 +37,7 @@ class EngineConfig:
     """
 
     engines: Optional[list] = field(default=None)
-    parallel: bool = False
+    parallel: bool = True          # 與 EngineManager 預設一致(見 settings.OCR_PARALLEL_ENGINES)
     fusion_method: str = "best"
     paddleocr_lang: str = "chinese_cht"
     tesseract_lang: str = "chi_tra"

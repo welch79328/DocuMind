@@ -55,7 +55,20 @@ class Settings(BaseSettings):
 
     # OCR Enhancement Settings
     OCR_ENHANCED_MODE: bool = False                         # 是否啟用增強模式
-    OCR_MULTI_ENGINE: bool = False                          # 是否啟用多引擎融合
+    # 保留供既有 .env 相容;**已不再接線至任何執行路徑**。
+    # 引擎數量實際由 OCR_ENGINES 決定,此旗標名為「多引擎融合」卻只控制併發,
+    # 2026-08-24 拆分為 OCR_PARALLEL_ENGINES 後不再被讀取。
+    OCR_MULTI_ENGINE: bool = False                          # (已停用,見上)
+
+    # 是否讓多個 OCR 引擎並行執行(asyncio.gather + to_thread)。
+    # 2026-08-24 於線上 2 vCPU / 3.7GB 實測(同一份謄本):
+    #   循序  36.7s
+    #   並行  31.7s   ← 省 13.6%,辨識結果不變
+    # 理論值應省 47%(max(19.6, 17.1) ≈ 19.6s),差距來自 2 vCPU 的核心爭搶;
+    # 四核以上機器增益會明顯更大。
+    # ⚠️ 代價:並行時兩引擎同時常駐,峰值記憶體為兩者之和而非最大值。
+    #    該機 RAM 僅 3.7GB(建議值的一半),換更小機器前需重新評估。
+    OCR_PARALLEL_ENGINES: bool = True                       # 多引擎並行執行
     OCR_ENGINES: List[str] = ["paddleocr", "tesseract"]     # 使用的引擎列表
     OCR_QUALITY_THRESHOLD: float = 0.8                      # 信心度門檻(0-1),低於此值進入人工複核
     OCR_MAX_RETRIES: int = 3                                # 最大重試次數

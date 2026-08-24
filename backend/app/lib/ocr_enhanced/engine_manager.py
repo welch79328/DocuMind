@@ -26,7 +26,7 @@ class EngineManager:
     def __init__(
         self,
         engines: Optional[list[OCREngineName]] = None,
-        parallel: bool = False,
+        parallel: bool = True,
         fusion_method: FusionMethod = "best",
         paddleocr_lang: str = "chinese_cht"
     ):
@@ -35,7 +35,8 @@ class EngineManager:
 
         Args:
             engines: 引擎列表
-            parallel: 是否並行處理
+            parallel: 是否並行處理(預設 True;2026-08-24 於 2 vCPU 實測省 13.6%,
+                      辨識結果不變。代價為峰值記憶體是兩引擎之和,見 settings.OCR_PARALLEL_ENGINES)
             fusion_method: 融合方法 (best/weighted/vote)
             paddleocr_lang: PaddleOCR 語言(繁中預設 chinese_cht)
         """
