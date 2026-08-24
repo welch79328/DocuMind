@@ -34,6 +34,10 @@ PyMuPDF==1.24.13  # PDF 處理（import 為 fitz）
 # ⚠️ 需搭配 EngineManager 的 enable_mkldnn=False,理由見該處註解。
 paddlepaddle==3.3.1
 paddleocr==3.7.0
+# ONNX Runtime 為實際的推論引擎(engine="onnxruntime")。
+# 2026-08-24 實測:同一份謄本、同一個模型,54.2s → 19.7s,輸出逐項相同。
+# paddlepaddle 仍需保留——paddleocr 3.x 的模型管理與前處理仍依賴它。
+onnxruntime>=1.20.0
 numpy<2.0.0
 opencv-python-headless>=4.5.0  # headless 版本避免 GUI 依賴問題
 

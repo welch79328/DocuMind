@@ -63,12 +63,23 @@ class EngineManager:
                 # 只有建構子參數有效。2026-08-24 於 x86_64 Linux 實測確認。
                 EngineManager._paddleocr_instance = PaddleOCR(
                     lang=self.paddleocr_lang,
+                    # ONNX Runtime 取代 paddle 執行器。2026-08-24 同一份謄本實測:
+                    #   paddle 執行器  54.2s  72 行  信心度 0.927
+                    #   ONNX Runtime   19.7s  72 行  信心度 0.927   ← 快 2.75 倍,輸出逐項相同
+                    # 模型本身沒換(仍是 PP-OCRv6_medium),換的只是執行引擎。
+                    engine="onnxruntime",
+                    # enable_mkldnn 僅對 paddle 執行器有意義;保留是為了萬一
+                    # 日後切回 paddle 時不會再踩一次 oneDNN 的坑(見下方說明)
                     enable_mkldnn=False,
                     # 前處理模組預設開啟會拖慢且對已掃描的謄本無益;
                     # 手機拍攝路徑若要開 use_doc_unwarping,請另行實測比較
                     use_doc_orientation_classify=False,
                     use_doc_unwarping=False,
-                    use_textline_orientation=True,
+                    # use_textline_orientation 對謄本是純白工:2026-08-24 實測
+                    # 同一份謄本開與不開的輸出**逐項相同**(72 行、平均信心度 0.927),
+                    # 但開啟多花 4 秒(58.2s vs 54.2s)。謄本是掃描件,文字方向本就是正的。
+                    # 舊版的 use_angle_cls=True 是慣性沿用,量過之後確認不需要。
+                    use_textline_orientation=False,
                 )
             except Exception as e:
                 raise RuntimeError(f"PaddleOCR 初始化失敗: {e}")

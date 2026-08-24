@@ -149,6 +149,7 @@ async def extract_text_with_paddleocr(file_url: str) -> tuple[str, int]:
     # 開啟時推論會拋 NotImplementedError(詳見 EngineManager._ensure_paddleocr 註解)。
     ocr = PaddleOCR(
         lang=settings.OCR_PADDLEOCR_LANG,
+        engine="onnxruntime",   # 比 paddle 執行器快 2.75 倍且輸出相同,詳見 EngineManager 註解
         enable_mkldnn=False,
         use_doc_orientation_classify=False,
         use_doc_unwarping=False,
