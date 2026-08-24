@@ -14,8 +14,13 @@
 2. **`image_data` 的管線佈線已完整貫穿,唯一斷點在最末端**
    `DocumentProcessor.process()` 已將原圖編碼為 base64 並逐層傳遞至 `analyze()` → `postprocess()` / `extract_fields()`。整條路徑都接受並傳遞 `image_data`,唯一中斷處是 `correct_full_text()` 內的一行 `image_data=None`。管線改造工作量趨近於零,真正的工作在 PII 與 Provider 選型。
 
-3. **並存兩套 LLM 服務,且僅其中一套支援本地部署**
-   `llm_postprocessor` 使用舊的 `LLMService`(僅 openai / anthropic,**無本地選項**);`repair_photo_processor` 使用新的 `providers.create_provider()`(支援 `local_qwen` 與 `LLM_CLOUD_ENABLED` 隱私守衛)。由於規避 PII 過濾的主要手段是改用本地模型,**需求 2 隱含一項前置工作:將 `llm_postprocessor` 遷移至新 Provider 抽象**。此項未寫入 requirements。
+3. ~~**並存兩套 LLM 服務,且僅其中一套支援本地部署**~~ — ✅ **已於任務 8.1 補上(2026-08-24 查證)**
+
+   原盤查:`llm_postprocessor` 使用舊的 `LLMService`(僅 openai / anthropic,無本地選項);`repair_photo_processor` 使用新的 `providers.create_provider()`。當時推論「需求 2 隱含一項前置工作:將 `llm_postprocessor` 遷移至新 Provider 抽象,此項未寫入 requirements」。
+
+   **該遷移已完成,不需補進 requirements。** `backend/app/lib/ocr_enhanced/llm_postprocessor.py` 現在 `from app.lib.llm_service.providers import create_provider`,並以 `create_provider(...)` 取得模型;檔頭註解寫明「任務 8.1 起,模型一律經 `create_provider()` 取得,不再直接綁定僅支援雲端的 `LLMService`」。隱私守衛在該處生效(雲端停用時 `create_provider` 直接拒絕建立雲端 Provider)。需求 2.6、2.7 已滿足。
+
+   ⛔ **不要再依本條衍生「遷移 llm_postprocessor」的任務或提案。**
 
 4. **並存兩套評估體系,彼此未接通**
    體系 A(檔案型):`ground_truth.json` + `run_baseline_benchmark.py`,以 `difflib.SequenceMatcher` 算相似度,不需資料庫。
