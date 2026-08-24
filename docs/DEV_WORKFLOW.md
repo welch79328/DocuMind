@@ -31,18 +31,40 @@
 
 **不要再重試這四條路。** 要驗 PaddleOCR,上線上。
 
+⚠️ **「照 `requirements.txt` 建一個釘版 venv」就是第四列,不是新方案。**
+`backend/requirements.txt` 釘著 `paddlepaddle==3.3.1` / `paddleocr==3.7.0`(第 35–36 行),
+在 Apple Silicon 上照它建 venv,等於重跑「原生 macOS venv」那一條。**不要建。**
+需要釘版環境判定的事情,一律拿線上容器判定——那個容器就是 `requirements.txt` 的實體。
+
 ---
 
 ## 本機做什麼
 
-實測可行(2026-08-24):
+實測(2026-08-24 重跑,取代本表先前「957 項全過」的記載——那筆與實況不符):
 
 | 項目 | 狀態 |
 |---|---|
-| 後端單元測試 957 項 | ✅ 全過 |
-| 前端測試 36 項 | ✅ 全過 |
-| 合約整合測試 15 項 | ✅ 全過(走 PDF 文字層,不碰 OCR) |
+| 後端單元測試 `tests/unit` | ⚠️ 收集 961 項:**924 passed / 1 failed / 36 errors** |
+| 前端測試 36 項 | ✅ 全過(3 檔 36 項) |
+| 後端整合測試 `tests/integration` | ❌ 3 個模組**收集期即失敗**,一項都沒跑到 |
 | 寫程式、重構、跑測試迴圈 | ✅ 快,幾秒一輪 |
+
+**那 37 項不是本規格造成的,也不是本機該修的:**
+
+- 36 errors + 1 failed 全部集中在 5 個 `test_analyze_*` 模組。根因是本機實裝
+  `fastapi 0.104.1` / `starlette 0.27.0` / `httpx 0.28.1`,與 `requirements.txt`
+  釘的 `fastapi==0.115.0` / `httpx==0.27.2` 不符;httpx 0.28 移除了
+  `Client(app=...)`,舊 starlette 的 `TestClient(app)` 因此全數 `TypeError`。
+- `tests/integration` 三個模組(`test_contract_e2e`、`test_transcript_e2e`、
+  `test_performance_report`)`import fitz` 失敗,本機未裝 PyMuPDF。
+
+**兩者都不要在本機修**(修法只有建釘版 venv,見上方⚠️)。要判定「全數通過」,
+在線上容器跑——`requirements.txt` 已釘 `pytest==8.3.3` 與 `PyMuPDF==1.24.13`,
+容器裡這 37 項的成因都不存在:
+
+```bash
+docker compose exec -T backend python -m pytest tests/unit tests/integration -q
+```
 
 **日常開發九成在本機。** 本機是 2 vCPU EC2 的數倍快。
 

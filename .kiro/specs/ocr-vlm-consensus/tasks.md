@@ -675,7 +675,10 @@
    `fastapi 0.104.1` / `starlette 0.27.0` / `httpx 0.28.1`。
    httpx 0.28 移除了 `Client(app=...)` 捷徑,舊 starlette 的 `TestClient(app)` 因此
    全數 `TypeError`。在符合 requirements 的環境(Docker)不會發生。
-   **需授權建立釘版虛擬環境才能判定。**
+   **判定改在線上容器,不要建本機釘版 venv。**(2026-08-24 更正:本註記原寫
+   「需授權建立釘版虛擬環境才能判定」,該方案已於同日被否決——`requirements.txt`
+   釘著 `paddlepaddle==3.3.1`,在 Apple Silicon 上照它建 venv 就是
+   `docs/DEV_WORKFLOW.md` 四條失敗路徑的第四條。)
 
 2. **PyMuPDF 未安裝**——`tests/integration` 三個模組 import 期即失敗,無法收集。
 
