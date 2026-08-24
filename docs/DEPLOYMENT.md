@@ -31,7 +31,7 @@
 | OCR 引擎(`document_service` 路徑) | **`pytesseract` 單獨** | 兩台 `.env` 的 `OCR_SERVICE` |
 | PaddleOCR 執行器 | **ONNX Runtime**(非 paddle 執行器) | `engine_manager.py` `engine="onnxruntime"` |
 | GPU | **無,也不需要** | 選項 B 明訂「無需 GPU」 |
-| 容器數 | **四個**:`frontend`、`backend`、`postgres`、`redis` | §1 原寫三個,已於本次更正 |
+| 容器數 | **四個**:`frontend`、`backend`、`postgres`、`nginx` | `docker compose ps` 實測 |
 
 ### ⚠️ 系統有**兩條各自獨立**的 OCR 路徑,別搞混
 
@@ -92,6 +92,33 @@ PP-OCRv6_medium 權重,實測輸出與 paddle 執行器**逐項相同**(72 行�
    但解法不同(換 c 系列 vs 加核)。**此項須在 AWS Console 看,ssh 進去看不到。**
 3. **是否曾發生 OOM** — `dmesg | grep -i oom`
 
+### ⚠️ 2026-08-24 OOM 事故與三道防線
+
+在該機以 300 DPI 渲染合約頁 + 去噪 + 雙引擎並行跑 OCR:
+
+```
+docker inspect .State.OOMKilled  →  true
+load average (2 vCPU)            →  51.35
+產出                              →  無,一頁都沒完成
+```
+
+服務未中斷(四個容器沒重啟,nginx 仍回 200),被殺的是外掛行程。
+但**核心的 OOM killer 挑記憶體佔用大的殺**,這次是運氣;若當時 postgres
+正在膨脹,被殺的就是資料庫。
+
+根因:`docker-compose.yml` **原本完全沒設 `mem_limit`**(cgroup `memory.max`
+讀出來是 `max`),四個容器共用全部 3.7GB。
+
+已補三道防線(`b7ba31a`):
+
+| # | 防線 | 位置 |
+|---|---|---|
+| 1 | 容器記憶體上限 backend 2g / postgres 512m / frontend 256m / nginx 128m | `docker-compose.yml` |
+| 2 | 可用記憶體低於 `OCR_PARALLEL_MIN_AVAILABLE_MB`(預設 1024)時,並行自動退回循序 | `lib/ocr_enhanced/memory_guard.py` |
+| 3 | 單頁渲染像素上限 `OCR_MAX_RENDER_PIXELS`(預設 4M);A4 由 300 DPI/8.7M 降為 203 DPI/4.0M | `services/analyze_service.py` |
+
+⚠️ **防線 1 需重啟容器才生效,尚未套用到線上。**
+
 ### 決策(2026-08-24,業主定案)
 
 **暫定維持現行規格,不升級。** 其他規格選項(t3.large 8 GB / 4 vCPU 級 /
@@ -122,8 +149,8 @@ c 系列非 burstable)等**系統穩定後**再討論。
    OCR 引擎(PaddleOCR / Tesseract)+ LLM Provider(OpenAI / 本地 Qwen vLLM)
 ```
 
-**容器組成**(docker-compose):`frontend`(Nginx)、`backend`(FastAPI)、`postgres`、`redis`。
-(2026-08-24 更正:原記三個,線上實際四個。)
+**容器組成**(docker-compose):`frontend`、`backend`(FastAPI)、`postgres`、`nginx`。
+(2026-08-24 以 `docker compose ps` 實測更正:原記三個且把 nginx 誤寫成 frontend 的一部分;`redis` 不在本 compose 內。)
 
 ---
 
