@@ -30,6 +30,41 @@
 5. **標註成果有遺失風險(P0)**
    `.gitignore` 含 `/data/` 與 `/tests/`,因此標註對象(11 份合約 PDF)與標註成果(`tests/fixtures/ground_truth.json`、`data/contracts/ground_truth.json`)**皆不在版控內**。進版控的是 `backend/tests_all/` 下的副本。在決定存放位置前投入 1~2 人天標註,成果可能因換機或清理而消失。
 
+6. **本規格全部的成效可能落在使用者碰不到的路徑上(P0,2026-08-24 新增)**
+
+   系統有**兩條各自獨立的 OCR 路徑**,本規格只作用在其中一條:
+
+   | 路徑 | 入口 | 分派依據 | 實際跑什麼 |
+   |---|---|---|---|
+   | 舊 | `/api/v1/documents` → `services/document_service.py` → `lib/ocr_service.py` | `settings.OCR_SERVICE` | **`pytesseract` 單獨,PaddleOCR 完全未參與** |
+   | 新 | `lib/multi_type_ocr/*` → `lib/ocr_enhanced/engine_manager.py` | `settings.OCR_ENGINES` | `paddleocr` + `tesseract` 雙引擎 |
+
+   **問題在於前端只用舊路徑。** 完整呼叫鏈(2026-08-24 查證):
+
+   ```
+   /upload            frontend/src/router/index.ts:13
+     → UploadView.vue:25    POST /api/v1/documents/upload
+     → DocumentView.vue:40  POST /api/v1/documents/{id}/process
+     → backend/app/api/v1/documents.py:48   document_service.process_document
+     → backend/app/services/document_service.py:14   extract_text_from_document
+     → backend/app/lib/ocr_service.py:18    依 settings.OCR_SERVICE 分派
+     → 本機與線上 .env 皆為 pytesseract → Tesseract 單獨
+   ```
+
+   而 PP-OCRv6 升級(繁中信心度 0.63 → 0.936)與 ONNX Runtime 提速(54.2s → 19.6s)
+   **只影響 `/api/v1/analyze`**(`main.py:83`),前端一次都沒呼叫過該端點。
+
+   附帶事實:`/api/v1/documents` 在 `main.py:80` 標了 `include_in_schema=False`
+   ——被藏起來不進 API 文件,形似待淘汰的舊路由,但它是前端**唯一的上傳入口**。
+
+   **待業主裁決:`/api/v1/documents` 是要淘汰的舊路由,還是仍在服役的主流程?**
+
+   - 若**要淘汰** → 前端改呼叫 `/analyze`。獨立小改動,與本規格平行,不影響規格範圍。
+   - 若**仍在服役** → 本規格的成功標準(謄本關鍵欄位 95%、整體 85%)量的是一條
+     使用者碰不到的路徑,**驗收的意義需要重新界定**。
+
+   本條不在原規格範圍內(規格處理的是新路徑),先前盤查未涵蓋路由層,故遺漏。
+
 ### 建議策略
 
 採**混合策略**:需求 1 新建匯入橋接與存放規範(P0,且須在標註動工前完成);需求 2 以「解除封鎖 + Provider 遷移」處理,不新建元件;需求 3、4 擴展既有 `EngineManager`,但需求 4 需擴展回傳型別以承載欄位級信心度。
