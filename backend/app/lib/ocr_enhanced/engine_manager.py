@@ -50,6 +50,18 @@ class EngineManager:
         """惰性初始化 PaddleOCR(單例);僅在實際辨識時載入"""
         if EngineManager._paddleocr_instance is None:
             try:
+                # ⚠️ 這行不是多餘的,也不能移到 paddleocr 之後 ⚠️
+                #
+                # paddle 的原生擴充與 pyclipper 的 C 擴充搶同一組共用函式庫。
+                # 先載 paddle 再載 pyclipper 會 SIGABRT / zlib.error;反過來正常。
+                # paddleocr 內部會 import pyclipper(ppocr.postprocess.db_postprocess),
+                # 所以必須在 paddleocr 之前先讓 pyclipper 佔位。
+                #
+                # 2026-08-24 於 x86_64 Linux 實測確認:
+                #   import paddle → import pyclipper   → SIGABRT
+                #   import pyclipper → import paddleocr → 正常
+                import pyclipper  # noqa: F401  (載入順序用,勿刪)
+
                 from paddleocr import PaddleOCR
                 EngineManager._paddleocr_instance = PaddleOCR(
                     use_angle_cls=True,
