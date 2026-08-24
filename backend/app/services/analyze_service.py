@@ -21,6 +21,39 @@ S3_PATH_MAP = {
 }
 
 
+def _render_scale(rect) -> float:
+    """算出單頁渲染倍率:以 OCR_RENDER_DPI 為目標,但受像素上限約束。
+
+    原本寫死 `fitz.Matrix(300/72, 300/72)`。A4 在 300 DPI 是 2480×3508
+    ≈ 8.7M 像素,單頁 PNG 加解碼後的點陣就數十 MB,再乘上雙引擎與後續
+    保存的 base64 原圖——2026-08-24 在 3.7GB 的線上機器上實測會 OOM
+    (`docker inspect .State.OOMKilled` = true,load average 衝到 51.35)。
+
+    這裡只降**解析度**,不動頁數、不丟棄任何內容:超過上限時等比例縮到剛好
+    貼齊上限。以 4M 像素上限計,A4 大約落在 200 DPI,對掃描文件的辨識影響有限。
+
+    `OCR_MAX_RENDER_PIXELS <= 0` 表示停用上限,退回純 DPI 行為。
+    """
+    from app.config import settings
+
+    base = settings.OCR_RENDER_DPI / 72.0
+    cap = settings.OCR_MAX_RENDER_PIXELS
+    if cap <= 0:
+        return base
+
+    # rect 的單位是 point(1/72 吋),乘上倍率即為輸出像素
+    width_pt, height_pt = float(rect.width), float(rect.height)
+    if width_pt <= 0 or height_pt <= 0:
+        return base
+
+    pixels_at_base = (width_pt * base) * (height_pt * base)
+    if pixels_at_base <= cap:
+        return base
+
+    # 面積與倍率平方成正比,故以平方根等比例縮
+    return base * (cap / pixels_at_base) ** 0.5
+
+
 class AnalyzeService:
     """統一文件分析服務"""
 
@@ -93,7 +126,8 @@ class AnalyzeService:
                 if is_pdf:
                     doc = fitz.open(stream=file_contents, filetype="pdf")
                     page = doc[page_num - 1]
-                    mat = fitz.Matrix(300 / 72, 300 / 72)
+                    scale = _render_scale(page.rect)
+                    mat = fitz.Matrix(scale, scale)
                     pix = page.get_pixmap(matrix=mat)
                     page_bytes = pix.tobytes("png")
                     doc.close()

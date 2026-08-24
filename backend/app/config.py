@@ -79,6 +79,20 @@ class Settings(BaseSettings):
     # ⚠️ 代價:並行時兩引擎同時常駐,峰值記憶體為兩者之和而非最大值。
     #    該機 RAM 僅 3.7GB(建議值的一半),換更小機器前需重新評估。
     OCR_PARALLEL_ENGINES: bool = True                       # 多引擎並行執行
+
+    # 並行的記憶體門檻:可用記憶體低於此值時,即使 OCR_PARALLEL_ENGINES=True
+    # 也自動退回循序執行(慢一點,但不會把整台吃垮)。
+    # 2026-08-24 實測:300 DPI 合約頁 + 去噪 + 雙引擎並行,在 3.7GB 的機器上
+    # 觸發 OOM(docker inspect .State.OOMKilled = true),load average 衝到 51.35。
+    # 並行的代價是峰值記憶體從「兩引擎取大」變成「兩引擎相加」,機器小就撐不住。
+    # 設為 0 可停用此保護(不建議)。
+    OCR_PARALLEL_MIN_AVAILABLE_MB: int = 1024               # 並行所需的最低可用記憶體
+
+    # 單頁渲染的像素上限。PDF 原以固定 300 DPI 渲染,A4 即 2480×3508 ≈ 8.7M 像素,
+    # 是上述 OOM 的主要來源之一。超過此上限時自動降低 DPI(等比例縮),
+    # 不改變頁數、不丟棄內容。設為 0 可停用此上限(不建議)。
+    OCR_MAX_RENDER_PIXELS: int = 4_000_000                  # 約 2000×2000
+    OCR_RENDER_DPI: int = 300                               # 目標 DPI,受上方像素上限約束
     OCR_ENGINES: List[str] = ["paddleocr", "tesseract"]     # 使用的引擎列表
     OCR_QUALITY_THRESHOLD: float = 0.8                      # 信心度門檻(0-1),低於此值進入人工複核
     OCR_MAX_RETRIES: int = 3                                # 最大重試次數

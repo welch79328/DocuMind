@@ -1,8 +1,22 @@
+# ⚠️ 記憶體上限(2026-08-24 新增)
+#
+# 主機實體記憶體僅 3.7GB,而本檔原本**完全沒有設任何 mem_limit**——
+# 四個容器共用全部記憶體,誰都能吃到全部,由核心的 OOM killer 決定殺誰。
+# 2026-08-24 實測:在容器內跑 300 DPI 合約頁 + 去噪 + 雙引擎並行的 OCR,
+# `docker inspect .State.OOMKilled` 為 true,主機 load average 衝到 51.35(2 vCPU)。
+# 那次被殺的是外掛的分析行程;若當時 postgres 正在膨脹,被殺的就會是資料庫。
+#
+# 配額(合計約 2.9g,留約 800MB 給主機):
+#   backend 2g / postgres 512m / frontend 256m / nginx 128m
+#
+# 換機器時記得一併調整;上限設得比實體記憶體總和還大等於沒設。
+
 services:
   # PostgreSQL Database
   postgres:
     image: postgres:14-alpine
     container_name: ai-doc-postgres
+    mem_limit: 512m      # DB 目前為空,512m 有充裕餘裕
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
@@ -25,6 +39,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: ai-doc-backend
+    mem_limit: 2g      # OCR 管線最貪;2026-08-24 曾因無上限被 OOM 殺掉(見下)
     environment:
       # Database
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/ai_doc_demo
@@ -86,6 +101,7 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
     container_name: ai-doc-frontend
+    mem_limit: 256m      # 純靜態,不需要更多
     environment:
       VITE_API_URL: ${VITE_API_URL:-http://backend:8000}
     depends_on:
@@ -97,6 +113,7 @@ services:
   nginx:
     image: nginx:alpine
     container_name: ai-doc-nginx
+    mem_limit: 128m      # 反向代理
     ports:
       - "8085:80"
     volumes:

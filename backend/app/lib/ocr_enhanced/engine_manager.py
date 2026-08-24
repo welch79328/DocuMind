@@ -111,8 +111,21 @@ class EngineManager:
             tasks.append(self._run_tesseract(image))
 
         # 並行執行所有引擎（使用 asyncio.gather）
+        #
+        # ⚠️ self.parallel 只是「意願」,不是「許可」。並行的峰值記憶體是兩引擎
+        # 之和而非最大值,機器小就會 OOM——2026-08-24 在 3.7GB 的線上機器上實測
+        # 觸發過(見 memory_guard 的說明)。故實際是否並行由記憶體當下的餘裕決定。
+        from app.config import settings
+        from .memory_guard import parallel_is_safe
+
+        run_parallel = (
+            self.parallel
+            and len(tasks) > 1
+            and parallel_is_safe(settings.OCR_PARALLEL_MIN_AVAILABLE_MB)
+        )
+
         try:
-            if self.parallel and len(tasks) > 1:
+            if run_parallel:
                 # 並行模式：同時執行
                 results = await asyncio.gather(*tasks, return_exceptions=True)
             else:
