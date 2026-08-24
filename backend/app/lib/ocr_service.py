@@ -143,10 +143,17 @@ async def extract_text_with_paddleocr(file_url: str) -> tuple[str, int]:
     except ImportError:
         raise ImportError("PaddleOCR or pdf2image not installed")
 
-    # Initialize PaddleOCR (use Chinese + English model)
-    # use_angle_cls=True helps detect text orientation
-    # use_gpu=False for CPU-only environments (set to True if GPU available)
-    ocr = PaddleOCR(use_angle_cls=True, lang='ch', use_gpu=False, show_log=False)
+    # Initialize PaddleOCR
+    # paddleocr 3.x API:use_angle_cls / use_gpu / show_log 已移除。
+    # enable_mkldnn=False 為必要——paddle 3.x 的 PIR 執行器與 oneDNN 有功能缺口,
+    # 開啟時推論會拋 NotImplementedError(詳見 EngineManager._ensure_paddleocr 註解)。
+    ocr = PaddleOCR(
+        lang=settings.OCR_PADDLEOCR_LANG,
+        enable_mkldnn=False,
+        use_doc_orientation_classify=False,
+        use_doc_unwarping=False,
+        use_textline_orientation=True,
+    )
 
     # Download file from storage
     file_bytes = await storage_service.download_file(file_url)
@@ -164,16 +171,13 @@ async def extract_text_with_paddleocr(file_url: str) -> tuple[str, int]:
             import numpy as np
             img_array = np.array(image)
 
-            # Run OCR
-            result = ocr.ocr(img_array, cls=True)
+            # Run OCR(3.x 為 predict();回傳 list[dict] 而非巢狀 bbox 陣列)
+            result = ocr.predict(img_array)
 
             # Extract text from result
             page_text = []
-            if result and result[0]:
-                for line in result[0]:
-                    # line format: [[[x1,y1], [x2,y2], [x3,y3], [x4,y4]], (text, confidence)]
-                    text_content = line[1][0]
-                    page_text.append(text_content)
+            for page in (result or []):
+                page_text.extend(page.get("rec_texts") or [])
 
             text_parts.append(f"--- Page {i}/{page_count} ---\n" + "\n".join(page_text))
 
@@ -200,16 +204,12 @@ async def extract_text_with_paddleocr(file_url: str) -> tuple[str, int]:
         # Convert to numpy array for PaddleOCR
         img_array = np.array(image)
 
-        # Run OCR
-        result = ocr.ocr(img_array, cls=True)
+        # Run OCR(3.x 為 predict())
+        result = ocr.predict(img_array)
 
         # Extract text from result
         text_lines = []
-        if result and result[0]:
-            for line in result[0]:
-                # line format: [[[x1,y1], [x2,y2], [x3,y3], [x4,y4]], (text, confidence)]
-                text_content = line[1][0]
-                confidence = line[1][1]
-                text_lines.append(text_content)
+        for page in (result or []):
+            text_lines.extend(page.get("rec_texts") or [])
 
         return "\n".join(text_lines), 1

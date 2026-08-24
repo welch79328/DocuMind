@@ -50,26 +50,25 @@ class EngineManager:
         """惰性初始化 PaddleOCR(單例);僅在實際辨識時載入"""
         if EngineManager._paddleocr_instance is None:
             try:
-                # ⚠️ 這行不是多餘的,也不能移到 paddleocr 之後 ⚠️
-                #
-                # paddle 的原生擴充與 pyclipper 的 C 擴充搶同一組共用函式庫。
-                # 先載 paddle 再載 pyclipper 會 SIGABRT / zlib.error;反過來正常。
-                # paddleocr 內部會 import pyclipper(ppocr.postprocess.db_postprocess),
-                # 所以必須在 paddleocr 之前先讓 pyclipper 佔位。
-                #
-                # 2026-08-24 於 x86_64 Linux 實測確認:
-                #   import paddle → import pyclipper   → SIGABRT
-                #   import pyclipper → import paddleocr → 正常
-                import pyclipper  # noqa: F401  (載入順序用,勿刪)
-
                 from paddleocr import PaddleOCR
+
+                # ⚠️ enable_mkldnn=False 不可拿掉 ⚠️
+                #
+                # paddle 3.x 的新執行器(PIR)與 oneDNN 之間有功能缺口,推論時拋
+                #   NotImplementedError: ConvertPirAttribute2RuntimeAttribute
+                #     not support [pir::ArrayAttribute<pir::DoubleAttribute>]
+                #     (at .../new_executor/instruction/onednn/onednn_instruction.cc)
+                #
+                # 環境變數 FLAGS_use_mkldnn=0 對 3.x **無效**(2.x 才吃那個旗標),
+                # 只有建構子參數有效。2026-08-24 於 x86_64 Linux 實測確認。
                 EngineManager._paddleocr_instance = PaddleOCR(
-                    use_angle_cls=True,
                     lang=self.paddleocr_lang,
-                    use_gpu=False,
-                    show_log=False,
-                    det=True,
-                    rec=True
+                    enable_mkldnn=False,
+                    # 前處理模組預設開啟會拖慢且對已掃描的謄本無益;
+                    # 手機拍攝路徑若要開 use_doc_unwarping,請另行實測比較
+                    use_doc_orientation_classify=False,
+                    use_doc_unwarping=False,
+                    use_textline_orientation=True,
                 )
             except Exception as e:
                 raise RuntimeError(f"PaddleOCR 初始化失敗: {e}")
@@ -169,21 +168,21 @@ class EngineManager:
                 img_rgb = image
 
             # 執行 OCR
-            result = EngineManager._paddleocr_instance.ocr(img_rgb, cls=True)
+            # paddleocr 3.x 的 API 是 predict();2.x 的 ocr(img, cls=True) 已移除
+            result = EngineManager._paddleocr_instance.predict(img_rgb)
             processing_time_ms = int((time.time() - start_time) * 1000)
 
-            # 處理返回格式: list[list[tuple[bbox, tuple[text, confidence]]]]
+            # 3.x 回傳 list[dict],文字與信心度分別在 rec_texts / rec_scores
+            # (2.x 是 list[list[[bbox, (text, conf)]]],結構完全不同)
             text_lines = []
             confidences = []
 
-            if result and result[0]:
-                for line in result[0]:
-                    # line = [bbox, (text, confidence)]
-                    text_content = line[1][0]
-                    confidence = line[1][1]
-
+            for page in (result or []):
+                texts = page.get("rec_texts") or []
+                scores = page.get("rec_scores") or []
+                for text_content, confidence in zip(texts, scores):
                     text_lines.append(text_content)
-                    confidences.append(confidence)
+                    confidences.append(float(confidence))
 
             # 合併文字（逐行）
             text = "\n".join(text_lines)

@@ -50,7 +50,14 @@ class PPStructureEnhancer:
     def _ensure_engine(self):
         """惰性載入 PP-Structure(單例)"""
         if PPStructureEnhancer._instance is None:
-            from paddleocr import PPStructure  # 未安裝時於此拋出,由呼叫端降級
+            # ⚠️ paddleocr 3.x 已移除 PPStructure(取而代之的是 PPStructureV3,
+            # API 與回傳結構皆不同)。2026-08-24 升級至 3.7.0 後,這裡必定
+            # ImportError,由呼叫端的 try/except 降級為標準流程。
+            #
+            # OCR_ENABLE_PP_STRUCTURE 預設為 False,所以正常情況下根本不會走到這裡。
+            # 若日後要啟用版面解析,需改寫為 PPStructureV3 並重新驗證回傳結構,
+            # 不是換個類別名稱就好。
+            from paddleocr import PPStructure  # 3.x 已移除,於此拋出由呼叫端降級
             PPStructureEnhancer._instance = PPStructure(
                 show_log=False,
                 lang=settings.OCR_PADDLEOCR_LANG,

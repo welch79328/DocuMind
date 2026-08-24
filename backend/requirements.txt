@@ -28,9 +28,12 @@ pdf2image==1.17.0
 PyMuPDF==1.24.13  # PDF 處理（import 為 fitz）
 
 # PaddleOCR (Better Chinese OCR)
-# 版本鎖定以避免 ARM64 Docker 兼容性問題
-paddlepaddle==2.6.2
-paddleocr==2.8.1
+# 2026-08-24 升級至 PP-OCRv6:繁中辨識平均信心度 0.63 → 0.936(同一份謄本實測)。
+# paddleocr 3.7.0 預設模型即 PP-OCRv6_medium;2.8.1 的繁中走的是三代前的
+# chinese_cht_PP-OCRv3_rec,與同套件簡中拿到的 v4 不同代。
+# ⚠️ 需搭配 EngineManager 的 enable_mkldnn=False,理由見該處註解。
+paddlepaddle==3.3.1
+paddleocr==3.7.0
 numpy<2.0.0
 opencv-python-headless>=4.5.0  # headless 版本避免 GUI 依賴問題
 
