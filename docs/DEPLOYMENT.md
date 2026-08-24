@@ -1,7 +1,7 @@
 # DocuMind 部署指南與建議規格
 
 > 對象:DocuMind AI 文件智能處理系統(FastAPI + Vue3 + PostgreSQL + OCR/LLM)
-> 最後更新:2026-07-05
+> 最後更新:2026-08-24(補入 §0.5 現行部署實況)
 
 ---
 
@@ -11,6 +11,80 @@
 - **LLM 三選一**:雲端 OpenAI(最省事)/ 地端 Qwen(隱私+長期省)/ 混合。依隱私與量級選(見 §3)。
 - **建議起步規格**:x86 2–4 vCPU / 8 GB RAM + PostgreSQL,LLM 走雲端 → 月成本 ~$10–15。
 - **地端要 GPU**:7B 模型需 ~16 GB 顯存;2B 可 CPU(慢)。
+
+---
+
+## 0.5 現行部署實況(2026-08-24 定案:暫定維持)
+
+本節記錄**實際跑著什麼**,與 §3 的建議規格分開看。§3 是選型指南,本節是現況。
+
+### 現行組態
+
+| 項目 | 實際值 | 出處 |
+|---|---|---|
+| 部署位置 | AWS 東京區(`54.248.x.x`) | — |
+| 機型 | **t3.medium 級:2 vCPU / 3.7 GB 可用** | 機上 `nproc` / `free`;**機型名為推定,未經 Console 確認** |
+| 月費 | **約 $33–35**(推算) | §3.1 表 t3.medium `$30`(us-east-1)× 東京 +10–15% |
+| 走哪個選項 | **選項 B — 雲端 OpenAI** | `backend/app/config.py:40` `LLM_PROVIDER="openai"`,`.env` 未覆寫 |
+| LLM 模型 | `gpt-4o` | `config.py:32` |
+| OCR 引擎 | **`["paddleocr", "tesseract"]`** 兩個 | `config.py:59` |
+| PaddleOCR 執行器 | **ONNX Runtime**(非 paddle 執行器) | `engine_manager.py` `engine="onnxruntime"` |
+| GPU | **無,也不需要** | 選項 B 明訂「無需 GPU」 |
+| 容器數 | **四個**:`frontend`、`backend`、`postgres`、`redis` | §1 原寫三個,已於本次更正 |
+
+**ONNX 不是第三個引擎。** 它是 PaddleOCR 內部的推論執行器,跑的是同一組
+PP-OCRv6_medium 權重,實測輸出與 paddle 執行器**逐項相同**(72 行、信心度 0.927),
+只是快 2.75 倍。共識比對的兩個獨立來源仍然是 PaddleOCR 與 Tesseract。
+
+### 與 §3 選項 B 建議規格的落差
+
+| | 選項 B 建議 | 現況 | 判定 |
+|---|---|---|---|
+| CPU | 2–4 vCPU | 2 vCPU | 踩在下限 |
+| **RAM** | **8 GB** | **3.7 GB** | **不足一半** |
+| GPU | 無需 | 無 | ✅ |
+
+目前跑得動,原因是 PaddleOCR 改用 ONNX Runtime 後記憶體足跡小於 paddle 執行器。
+**RAM 不足是潛在風險,不是已發生的故障**——尚未觀察到 OOM。
+
+### 已量到的痛點:2 vCPU 讓兩個引擎搶不過來
+
+2026-08-24 同機實測:
+
+| | 秒數 |
+|---|---|
+| paddleocr 單獨執行 | 19.6s |
+| 雙引擎循序 | 36.7s |
+| 雙引擎並行(`parallel=True`) | **31.7s(僅省 13.6%)** |
+
+理論並行值應為 `max(19.6, 17.1) ≈ 19.6s`(省 47%)。實際只省 13.6%,
+**核心爭搶吃掉三分之二的理論增益**——這台上兩個引擎沒有真的並行,只是輪流。
+
+### 尚未量測的三項(換機型前必須先有)
+
+1. **實際記憶體餘量與各容器佔用** — `free -h`、`docker stats --no-stream`
+2. **CPUCreditBalance** — t 系列為 burstable,基準效能僅 2 vCPU 的 20%。
+   持續跑 OCR 是典型的 credit 燃燒器;credit 耗盡後的表現與「核數不夠」難以分辨,
+   但解法不同(換 c 系列 vs 加核)。**此項須在 AWS Console 看,ssh 進去看不到。**
+3. **是否曾發生 OOM** — `dmesg | grep -i oom`
+
+### 決策(2026-08-24,業主定案)
+
+**暫定維持現行規格,不升級。** 其他規格選項(t3.large 8 GB / 4 vCPU 級 /
+c 系列非 burstable)等**系統穩定後**再討論。
+
+理由:RAM 不足尚未造成故障;CPU 爭搶雖已量到,但成因未定(核數 vs credit),
+在三項量測完成前任何升級都可能沒對症。
+
+### 附帶事實:$15 月成本上限已與現況脫鉤
+
+`docs/README.md:253` 的 `$10–15/月` 是照「Vercel、Railway、Cloudflare 免費額度」
+估的,主機錢靠免費額度吃掉。自架 EC2 之後該前提失效——**光機器就約 $33–35,
+已是上限的 2.2 倍,尚未計入 OpenAI API 費用。**
+
+此事屬 `ocr-vlm-consensus` 規格的任務 14.3(成本驗收)範疇,該任務已預留處理方式:
+「若現行成本基線本身已超出約定上限,須回報並提出上限重訂建議,而非強行宣告達標」。
+**本節不重訂上限,只記錄事實。**
 
 ---
 
@@ -24,7 +98,8 @@
    OCR 引擎(PaddleOCR / Tesseract)+ LLM Provider(OpenAI / 本地 Qwen vLLM)
 ```
 
-**容器組成**(docker-compose):`frontend`(Nginx)、`backend`(FastAPI)、`postgres`。
+**容器組成**(docker-compose):`frontend`(Nginx)、`backend`(FastAPI)、`postgres`、`redis`。
+(2026-08-24 更正:原記三個,線上實際四個。)
 
 ---
 
@@ -140,6 +215,12 @@
 ---
 
 ## 5. 建議規格總表(依規模)
+
+> ⚠️ **「月成本(估)」欄不含自架 VM 的機器費。**(2026-08-24 補註)
+> 首列 Demo/MVP 的 `~$10–15` 沿用 `docs/README.md:253` 的前提——
+> 「Vercel、Railway、Cloudflare 都有免費額度」,主機錢靠免費額度吃掉,該金額幾乎全是 API 費。
+> **自架 EC2 之後這個前提不成立**:同樣 2 vCPU / 8 GB 在 §3.1 表上是 t3.large **$61/月**。
+> 本表是選型指南;**實際跑著什麼、花多少,見 §0.5。**
 
 | 情境 | vCPU | RAM | GPU | LLM | 月成本(估) |
 |---|---|---|---|---|---|
