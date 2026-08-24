@@ -40,12 +40,19 @@ def _is_git_ignored(path: Path) -> bool:
 
 @pytest.fixture(scope="module", autouse=True)
 def _require_git():
-    probe = subprocess.run(
-        ["git", "rev-parse", "--is-inside-work-tree"],
-        cwd=str(REPO_ROOT),
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
+    try:
+        probe = subprocess.run(
+            ["git", "rev-parse", "--is-inside-work-tree"],
+            cwd=str(REPO_ROOT),
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except (FileNotFoundError, OSError):
+        # 容器映像沒裝 git。本 fixture 的意圖就是「git 不可用就跳過」,
+        # 原本只處理了「git 存在卻回非零」,漏了「git 根本沒裝」——
+        # 那會拋 FileNotFoundError,變成 error 而非 skip。
+        pytest.skip("環境未安裝 git,無法驗證版控規範")
+
     if probe.returncode != 0:
         pytest.skip("非 git 工作區,無法驗證版控規範")
 
