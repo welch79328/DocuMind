@@ -50,8 +50,18 @@ class Settings(BaseSettings):
     AWS_SECRET_ACCESS_KEY: str = ""
     AWS_REGION: str = "us-east-1"
 
-    # OCR Service Selection
-    OCR_SERVICE: str = "textract"  # or "pytesseract"
+    # OCR Service Selection —— 舊路徑 `lib/ocr_service.py` 的分派鍵。
+    # 這條路徑由 `services/document_service.py` 使用(/api/v1/documents),
+    # 與 `lib/ocr_enhanced` 的 OCR_ENGINES 是**兩條各自獨立的 OCR 路徑**,別搞混。
+    #
+    # ⚠️ 預設值 2026-08-24 由 "textract" 改為 "pytesseract"。
+    # 原預設會讓**任何沒設此鍵的部署一開機就呼叫 AWS Textract**——計費,
+    # 且文件內容送出到 AWS。boto3 client 是接好的(`ocr_service.py` 的
+    # `extract_text_with_textract`),AWS 金鑰也在 `.env` 裡,而 `.env` 不進版控,
+    # 等於把「不外送」這件事擋在一個換台機器就會消失的檔案上。
+    # 改為本地引擎後,未設定時的行為是安全的;要用 Textract 請顯式設定。
+    # (本機與線上的 .env 本來就都設 pytesseract,故實際行為不變。)
+    OCR_SERVICE: str = "pytesseract"  # textract / paddleocr / pytesseract
 
     # OCR Enhancement Settings
     OCR_ENHANCED_MODE: bool = False                         # 是否啟用增強模式

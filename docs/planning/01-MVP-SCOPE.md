@@ -195,7 +195,7 @@
 - ✅ 前端部署环境（Vercel/Netlify）
 - ✅ 后端部署环境（Railway/Render）
 - ✅ AI API Key（OpenAI/Claude）
-- ✅ OCR 服务账号（AWS/Google/Azure）
+- ~~OCR 服务账号（AWS/Google/Azure）~~ — **不需要**,系統使用本地 OCR 引擎(PaddleOCR + Tesseract)
 - ✅ 文件存储（S3/Cloudflare R2）
 
 ### 10.3 展示材料

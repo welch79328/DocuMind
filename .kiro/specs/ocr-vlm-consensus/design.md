@@ -21,7 +21,7 @@
 | 1 | 共識比對層級 | **欄位層**(非文字層) | 與既有 `QualityAssessor(ocr_confidence, field_confidences)` 介面天然吻合,免除變更 `_fuse_results()` 回傳型別的相容性風險 |
 | 2 | 多引擎候選取得方式 | `OcrDocumentProcessor` 新增**可選**方法,預設實作包裝既有 `extract_text()` | 既有四個處理器無需修改即可運作(需求 6.6) |
 | 3 | 雙模態校正的 Provider | 遷移至 `llm_service.providers.create_provider()` | 舊 `LLMService` 僅支援雲端;規避 PII 拒絕需本地選項(需求 2.6-2.7) |
-| 4 | 視覺語言引擎定位 | 第一期為**離線評估工具**,非即時產品功能 | GPU 常駐成本無數據支撐;評估可於開發機零成本完成 |
+| 4 | 視覺語言引擎定位 | 第一期為**離線評估工具**,非即時產品功能 | GPU 常駐成本無數據支撐 ⚠️ **原理由「評估可於開發機零成本完成」已於 2026-08-24 業主定案作廢**——開發機為 Apple Silicon,跑不了 `paddlepaddle`;執行環境改為待定,見 `tasks.md` 12.1 |
 | 5 | 人機協作形態 | 即時回傳 + 欄位層標示 + 使用者當場確認 | 市面標準為欄位級分流;本專案使用者即最佳複核者 |
 | 6 | 共識路徑的欄位抽取 | 各候選**僅規則式**抽取,LLM fallback **僅執行一次** | 避免 LLM 呼叫隨候選數倍增;使共識模式的 LLM 成本與現行相同 |
 | 7 | 多引擎候選來源 | 複用 `extract_text_multi_engine()` 目前被丟棄的 `valid_results` | 引擎本已並行執行,停止丟棄即可,新增辨識成本為零 |
@@ -120,8 +120,12 @@
 | 依賴 | 版本 | 用途 | 風險評估 |
 |---|---|---|---|
 | PaddleOCR-VL | 0.9B 系列 | 離線對照評估 | **中** — 須確認可否繞開 `paddlepaddle`(ARM64 上游缺陷) |
-| Qwen2-VL | 2B / 7B | 本地雙模態校正、離線評估 | 低 — `LocalQwenProvider` 已實作 |
-| mlx-vlm | 最新 | 開發機離線評估 | 低 — 不進生產程式碼路徑 |
+| Qwen2-VL | 2B / 7B | 本地雙模態校正、離線評估 | 低 — `LocalQwenProvider` **框架已實作但從未接線**:它只是對接 vLLM 端點的 HTTP client,自己不跑模型,且 `LOCAL_QWEN_ENDPOINT` 為空字串時建構子直接 raise |
+| mlx-vlm | 最新 | ~~開發機離線評估~~ | **已排除**(2026-08-24):不在開發機建置,見 `tasks.md` 12.1 |
+
+> ⚠️ **本表列的是候選與規劃,不是現況。** 截至 2026-08-24,生產路徑上**沒有任何 VLM 在運行**;
+> 實際使用的 OCR 引擎只有 `OCR_ENGINES = ["paddleocr", "tesseract"]` 兩個
+> (`backend/app/config.py`),LLM 走雲端 `openai` / `gpt-4o`。
 
 ### 與現有系統對齊
 

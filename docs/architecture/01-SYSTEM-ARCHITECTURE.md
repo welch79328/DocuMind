@@ -65,7 +65,7 @@
 | **資料庫** | PostgreSQL | 關聯式資料庫，支援 JSON 欄位 |
 | **ORM** | SQLAlchemy | Python 標準 ORM，功能強大 |
 | **檔案儲存** | Cloudflare R2 / AWS S3 | 穩定可靠，成本合理 |
-| **OCR** | AWS Textract / pytesseract | Textract 準確率高，pytesseract 免費 |
+| **OCR** | PaddleOCR + Tesseract | 本地雙引擎,結果交叉比對產生共識信心度;個資不外送 |
 | **AI** | OpenAI GPT-4 / Claude 3.5 Sonnet | 抽取能力強，API 穩定 |
 | **部署** | Vercel (前端) + Railway (後端) | 快速部署，免費額度足夠 Demo |
 

@@ -64,7 +64,7 @@
 ### 核心功能
 
 ✅ **文件上傳** - 支援 PDF/JPG/PNG，最大 10MB
-✅ **OCR 處理** - AWS Textract 文字辨識
+✅ **OCR 處理** - PaddleOCR + Tesseract 本地雙引擎辨識
 ✅ **AI 分類** - 自動識別 3 類文件（租約/報價單/身分證）
 ✅ **欄位抽取** - AI 自動抽取關鍵欄位
 ✅ **AI 摘要** - 生成 3-5 行文件摘要
@@ -89,7 +89,7 @@
 
 **AI 服務：**
 - OpenAI GPT-4o / GPT-4o-mini
-- AWS Textract
+- PaddleOCR(PP-OCRv6_medium,ONNX Runtime 推論)+ Tesseract
 
 **基礎設施：**
 - Cloudflare R2（檔案儲存）
@@ -250,7 +250,13 @@ ai-doc-demo/
 
 ### Q4: 成本會很高嗎？
 
-**A:** MVP 階段預估每月 $10-15 美元，主要是 OpenAI API 費用。Vercel、Railway、Cloudflare R2 都有免費額度。
+**A:** 依部署方式而定,差距很大。
+
+- **用 Vercel / Railway / Cloudflare 免費額度**:約 **$10-15/月**,幾乎全是 OpenAI API 費用。
+- **自架 EC2**(現行實際部署):**光機器就約 $33-35/月**(東京區 t3.medium),尚未計入 API 費用。
+
+⚠️ 上面那個 $10-15 是照「主機錢靠免費額度吃掉」估的。**自架之後該前提不成立。**
+現行部署的實際規格與月費見 `docs/DEPLOYMENT.md` §0.5。
 
 ### Q5: 如何確保 AI 準確率？
 

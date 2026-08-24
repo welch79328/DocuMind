@@ -27,10 +27,26 @@
 | 月費 | **約 $33–35**(推算) | §3.1 表 t3.medium `$30`(us-east-1)× 東京 +10–15% |
 | 走哪個選項 | **選項 B — 雲端 OpenAI** | `backend/app/config.py:40` `LLM_PROVIDER="openai"`,`.env` 未覆寫 |
 | LLM 模型 | `gpt-4o` | `config.py:32` |
-| OCR 引擎 | **`["paddleocr", "tesseract"]`** 兩個 | `config.py:59` |
+| OCR 引擎(`ocr_enhanced` 路徑) | **`["paddleocr", "tesseract"]`** 兩個 | `config.py` 的 `OCR_ENGINES` |
+| OCR 引擎(`document_service` 路徑) | **`pytesseract` 單獨** | 兩台 `.env` 的 `OCR_SERVICE` |
 | PaddleOCR 執行器 | **ONNX Runtime**(非 paddle 執行器) | `engine_manager.py` `engine="onnxruntime"` |
 | GPU | **無,也不需要** | 選項 B 明訂「無需 GPU」 |
 | 容器數 | **四個**:`frontend`、`backend`、`postgres`、`redis` | §1 原寫三個,已於本次更正 |
+
+### ⚠️ 系統有**兩條各自獨立**的 OCR 路徑,別搞混
+
+| 路徑 | 入口 | 分派依據 | 目前實際跑什麼 |
+|---|---|---|---|
+| 舊 | `/api/v1/documents` → `services/document_service.py` → `lib/ocr_service.py` | `settings.OCR_SERVICE` | **`pytesseract` 單獨**(PaddleOCR 未參與) |
+| 新 | `lib/multi_type_ocr/*` → `lib/ocr_enhanced/engine_manager.py` | `settings.OCR_ENGINES` | `paddleocr` + `tesseract` 雙引擎 |
+
+本規格(`ocr-vlm-consensus`)的共識機制只作用在**新路徑**。
+談「OCR 引擎是什麼」時務必先講清楚是哪一條。
+
+**`OCR_SERVICE` 的預設值曾是安全破口。** 2026-08-24 由 `"textract"` 改為 `"pytesseract"`:
+原預設會讓**任何沒設此鍵的部署一開機就呼叫 AWS Textract**——計費,且文件內容送出到 AWS。
+boto3 client 是接好的、AWS 金鑰在 `.env`,而 `.env` 不進版控,等於把「不外送」擋在
+一個換台機器就會消失的檔案上。兩台機器的 `.env` 本來就都設 `pytesseract`,故實際行為不變。
 
 **ONNX 不是第三個引擎。** 它是 PaddleOCR 內部的推論執行器,跑的是同一組
 PP-OCRv6_medium 權重,實測輸出與 paddle 執行器**逐項相同**(72 行、信心度 0.927),
