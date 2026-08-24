@@ -18,7 +18,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision: str = 'f1a2b3c4d5e6'
-down_revision: Union[str, None] = 'd18dbadf87e7'
+down_revision: Union[str, None] = 'a0b1c2d3e4f5'  # 2026-08-24 插入 baseline:本遷移的外鍵需要 documents 表
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
