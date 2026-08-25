@@ -82,6 +82,12 @@ services:
       - ./backend:/app
       - /app/venv  # Exclude venv from mount
       - ./uploads:/app/uploads  # Mount for local file storage
+      # 標註對象(真實謄本/合約 PDF,含個資)。依 docs/ANNOTATION_GUIDE.md 的規範,
+      # 這批檔案刻意排除於版控之外(.gitignore 的 /data/),只存在於持有原始檔的機器上。
+      # 掛進來是為了讓 tests/integration 在容器內找得到測試對象——
+      # 2026-08-24 之前它沒被掛,test_contract_e2e.py 六條測試因此在線上全數失敗。
+      # **唯讀**:容器只讀不寫,原始檔不會被程式動到。
+      - ./data:/app/data:ro
       - ./data:/data  # Mount test data directory
     networks:
       - ai-doc-network
