@@ -56,23 +56,26 @@ class TestRenderScale:
     def test_small_page_keeps_full_dpi(self):
         """小頁面不該被無謂降級——上限只在超標時生效。
 
-        頁面尺寸刻意選在 300 DPI 下仍低於上限之處(200×400 pt → 833×1666
-        ≈ 1.39M 像素)。若日後把上限調得更低,這裡要跟著換更小的頁面,
-        否則測的就不再是「小頁面不降級」而是「上限有沒有生效」。
+        頁面尺寸刻意選在 300 DPI 下仍低於上限之處(150×300 pt → 625×1250
+        ≈ 0.78M 像素)。若日後把上限調得更低,這裡要跟著換更小的頁面,
+        否則測的就不再是「小頁面不降級」而是「上限有沒有生效」——
+        下方的前置斷言會直接告訴你該換了(2026-08-24 已因此換過兩次)。
         """
-        small = _Rect(200, 400)
+        small = _Rect(150, 300)
         full = settings.OCR_RENDER_DPI / 72.0
         assert (small.width * full) * (small.height * full) < settings.OCR_MAX_RENDER_PIXELS, (
             "測試用的頁面在目前上限下已不算小,請改用更小的尺寸"
         )
         assert self._scale()(small) == pytest.approx(full)
 
-    # 2026-08-24 於線上容器實測的峰值 RSS(單頁、單引擎、循序):
-    #   4.0M 像素 → >1651 MB(超出可用空間,會殺掉 backend 容器)
-    #   2.0M 像素 →  1354 MB ✓
-    #   1.0M 像素 →  1132 MB ✓
+    # 2026-08-24 於線上容器實測峰值 RSS(單頁、單引擎、循序,**文字密集的內文頁**):
+    #   3.0M → >1626 MB ✗   2.0M → >1503 MB ✗   1.5M → >1454 MB ✗
+    #   1.25M → 1453 MB ✓(餘裕僅 106MB)      1.0M → 1323 MB ✓(餘裕 236MB)
     # 可用空間 = 容器上限 2048MB − 應用程式本身 489MB ≈ 1559MB
-    MEASURED_SAFE_MAX_PIXELS = 2_000_000
+    #
+    # ⚠️ 這個常數先後錯過兩次(4M、2M),兩次都是拿只有 5 行的**封面頁**校準的。
+    # 記憶體主要由文字密度決定,不是像素數。要調高請先用內文頁重測。
+    MEASURED_SAFE_MAX_PIXELS = 1_000_000
 
     def test_cap_is_within_the_measured_safe_ceiling(self):
         """上限不得高於實測裝得下的值。
