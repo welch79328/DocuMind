@@ -19,7 +19,21 @@ from app.lib.multi_type_ocr.contract_processor import ContractProcessor
 
 
 # 合約測試資料路徑
-CONTRACTS_DIR = Path(__file__).parent.parent.parent.parent / "data" / "contracts"
+#
+# 這批 PDF 是**真實合約、含個資**,依 docs/ANNOTATION_GUIDE.md 的存放規範刻意
+# 排除於版控之外(.gitignore 的 /data/)。因此它們只存在於有原始檔的機器上,
+# 線上容器不會有——2026-08-24 於線上實測,本檔 6 條測試全部因此失敗。
+#
+# 兩件事一起修:
+#   1. 路徑:原本往上四層是 repo 根,但容器只掛 ./backend:/app、repo 根不存在,
+#      會算成 /data/contracts。改為依序找幾個候選位置。
+#   2. 缺資料時**跳過而非失敗**——沒有測試對象不是缺陷,是這台機器沒有那批檔案。
+_HERE = Path(__file__).resolve()
+_CANDIDATES = (
+    _HERE.parents[3] / "data" / "contracts",   # repo 根(本機開發)
+    _HERE.parents[2] / "data" / "contracts",   # backend 根(容器內 /app)
+)
+CONTRACTS_DIR = next((c for c in _CANDIDATES if c.is_dir()), _CANDIDATES[0])
 
 # 選取 3 份代表性合約（不同大小和格式）
 # 使用檔案大小作為選擇依據，選擇小、中、大三種
@@ -30,8 +44,30 @@ TEST_CONTRACTS = [
 ]
 
 
+def _missing_contracts():
+    """回傳缺少的測試合約檔名;全部齊備時回傳空 list。"""
+    if not CONTRACTS_DIR.is_dir():
+        return list(TEST_CONTRACTS)
+    return [f for f in TEST_CONTRACTS if not (CONTRACTS_DIR / f).is_file()]
+
+
+_MISSING = _missing_contracts()
+requires_contracts = pytest.mark.skipif(
+    bool(_MISSING),
+    reason=(
+        f"測試合約不在本機:{CONTRACTS_DIR} 缺 {len(_MISSING)}/{len(TEST_CONTRACTS)} 份。"
+        "這批檔案含個資、依規範不進版控(見 docs/ANNOTATION_GUIDE.md),"
+        "只存在於持有原始檔的機器上。"
+    ),
+)
+
+
+@requires_contracts
 class TestContractProcessorE2E:
-    """合約處理器端到端整合測試"""
+    """合約處理器端到端整合測試
+
+    ⚠️ 需要 data/contracts 下的真實合約 PDF;缺檔時整個類別跳過(見 requires_contracts)。
+    """
 
     def test_processor_factory_returns_contract_processor(self):
         """驗證工廠返回正確的處理器類型"""
@@ -42,7 +78,7 @@ class TestContractProcessorE2E:
     async def test_contract_processing_basic_functionality(self):
         """測試合約基礎處理功能"""
         # 驗證合約目錄存在
-        assert CONTRACTS_DIR.exists(), f"合約目錄不存在: {CONTRACTS_DIR}"
+        assert CONTRACTS_DIR.is_dir(), f"合約目錄不存在: {CONTRACTS_DIR}"
 
         # 取得處理器
         processor = ProcessorFactory.get_processor("contract")
@@ -393,6 +429,7 @@ class TestContractProcessorE2E:
         print("\n合約結構化資料格式驗證通過 (Phase 1 基礎版)")
 
 
+@requires_contracts
 class TestContractProcessorPerformance:
     """合約處理器效能測試"""
 
@@ -450,6 +487,7 @@ class TestContractProcessorPerformance:
             print(f"  最慢: {max_time:.2f} 秒")
 
 
+@requires_contracts
 class TestContractFieldExtractionE2E:
     """合約欄位提取端到端測試 (Task 10.2)"""
 
