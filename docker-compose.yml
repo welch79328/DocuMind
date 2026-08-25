@@ -102,6 +102,14 @@ services:
       dockerfile: Dockerfile
     container_name: ai-doc-frontend
     mem_limit: 256m      # 純靜態,不需要更多
+    # 2026-08-24 正式收進版控:此 healthcheck 原本只存在於線上機器的未提交修改,
+    # 每次 pull 都要 git stash 保護,一不小心就會被蓋掉。內容與線上實跑的完全相同。
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     environment:
       VITE_API_URL: ${VITE_API_URL:-http://backend:8000}
     depends_on:
