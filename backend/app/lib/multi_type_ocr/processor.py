@@ -194,14 +194,47 @@ class OcrDocumentProcessor(DocumentProcessor):
 
         欄位值本身維持既有抽取結果(該結果來自融合文字,且可能已由 LLM 補齊),
         共識僅提供信心度訊號與各引擎原始值對照。
+
+        **⚠️ 共識算在 LLM 校正之前,值卻可能在之後被改。**
+        共識(步驟 3b)跑在未經 LLM 的候選上;LLM 全文校正(步驟 4)之後,
+        欄位值可能已經不是任何一個引擎讀到的東西。若原樣套用共識信心度,
+        一個被 LLM 竄改的金額會揹著「兩個引擎都同意」的高分過關——
+        那正是需求 2 點名的「語法合法但數值錯誤」的靜默污染。
+
+        故此處多做一件事:**值若與所有引擎的原始值都不一致,信心度壓到
+        `OCR_CONSENSUS_DISAGREE_PENALTY`**。理由是那至少和「引擎彼此不一致」
+        一樣可疑——最終值找不到任何 OCR 證據支持它。
+
+        比對一律走 `values_agree`(與共識自己判定 `agreed` 用的是同一支),
+        它做欄位型別感知的正規化,所以 LLM 只是把全形改半形、補千分位、
+        換紀年表示法**不會**被誤判成竄改。
+
+        仍然只收緊、不放寬:壓低值取 min,不會抬高任何欄位。
         """
         if not structured_data:
             return structured_data
+
+        from .field_normalizer import values_agree
+
+        penalty = FieldConsensusResolver._configured_penalty()
+        agreements = consensus.get("agreements") or {}
 
         existing = structured_data.get("field_confidences")
         merged: Dict[str, float] = dict(existing) if isinstance(existing, dict) else {}
 
         for field, confidence in consensus["field_confidences"].items():
+            agreement = agreements.get(field)
+            if agreement is not None:
+                final_value = OcrDocumentProcessor._field_value(structured_data, field)
+                engine_values = (agreement.get("engine_values") or {}).values()
+                supported = any(
+                    values_agree(field, final_value, engine_value)
+                    for engine_value in engine_values
+                )
+                if not supported:
+                    # 最終值找不到任何引擎證據支持——多半是 LLM 改的,不得沿用共識高分
+                    confidence = min(confidence, penalty)
+
             if field in merged:
                 merged[field] = min(merged[field], confidence)
             else:
@@ -209,6 +242,21 @@ class OcrDocumentProcessor(DocumentProcessor):
 
         structured_data["field_confidences"] = merged
         return structured_data
+
+    @staticmethod
+    def _field_value(structured_data: Dict[str, Any], field: str) -> Any:
+        """取出欄位的最終值。
+
+        欄位可能平鋪在頂層,也可能收在 `fields` 底下(不同處理器的結構不同),
+        兩處都找不到時回傳 None——而 None 與任何實際值都不 agree,
+        會走保守路徑壓低信心度,符合「寧可誤攔不可誤放」。
+        """
+        if field in structured_data:
+            return structured_data[field]
+        nested = structured_data.get("fields")
+        if isinstance(nested, dict):
+            return nested.get(field)
+        return None
 
     @staticmethod
     def _apply_correction_confidences(
