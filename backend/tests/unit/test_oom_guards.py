@@ -54,9 +54,36 @@ class TestRenderScale:
         )
 
     def test_small_page_keeps_full_dpi(self):
-        """小頁面不該被無謂降級——上限只在超標時生效"""
-        scale = self._scale()(_Rect(300, 400))
-        assert scale == pytest.approx(settings.OCR_RENDER_DPI / 72.0)
+        """小頁面不該被無謂降級——上限只在超標時生效。
+
+        頁面尺寸刻意選在 300 DPI 下仍低於上限之處(200×400 pt → 833×1666
+        ≈ 1.39M 像素)。若日後把上限調得更低,這裡要跟著換更小的頁面,
+        否則測的就不再是「小頁面不降級」而是「上限有沒有生效」。
+        """
+        small = _Rect(200, 400)
+        full = settings.OCR_RENDER_DPI / 72.0
+        assert (small.width * full) * (small.height * full) < settings.OCR_MAX_RENDER_PIXELS, (
+            "測試用的頁面在目前上限下已不算小,請改用更小的尺寸"
+        )
+        assert self._scale()(small) == pytest.approx(full)
+
+    # 2026-08-24 於線上容器實測的峰值 RSS(單頁、單引擎、循序):
+    #   4.0M 像素 → >1651 MB(超出可用空間,會殺掉 backend 容器)
+    #   2.0M 像素 →  1354 MB ✓
+    #   1.0M 像素 →  1132 MB ✓
+    # 可用空間 = 容器上限 2048MB − 應用程式本身 489MB ≈ 1559MB
+    MEASURED_SAFE_MAX_PIXELS = 2_000_000
+
+    def test_cap_is_within_the_measured_safe_ceiling(self):
+        """上限不得高於實測裝得下的值。
+
+        原本設 4_000_000 是用推算的(「A4 降到 203 DPI 應該夠」),實測不夠。
+        有人想調高時,請先在目標機器上重測峰值 RSS 再改這裡的常數。
+        """
+        assert 0 < settings.OCR_MAX_RENDER_PIXELS <= self.MEASURED_SAFE_MAX_PIXELS, (
+            f"OCR_MAX_RENDER_PIXELS={settings.OCR_MAX_RENDER_PIXELS} 高於實測安全值 "
+            f"{self.MEASURED_SAFE_MAX_PIXELS};4.0M 已實測會超出容器可用記憶體"
+        )
 
     def test_cap_can_be_disabled(self):
         """上限設 0 時退回純 DPI 行為(留給大機器)"""

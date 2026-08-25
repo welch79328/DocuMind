@@ -89,9 +89,22 @@ class Settings(BaseSettings):
     OCR_PARALLEL_MIN_AVAILABLE_MB: int = 1024               # 並行所需的最低可用記憶體
 
     # 單頁渲染的像素上限。PDF 原以固定 300 DPI 渲染,A4 即 2480×3508 ≈ 8.7M 像素,
-    # 是上述 OOM 的主要來源之一。超過此上限時自動降低 DPI(等比例縮),
+    # 是 OOM 的主要來源之一。超過此上限時自動降低 DPI(等比例縮),
     # 不改變頁數、不丟棄內容。設為 0 可停用此上限(不建議)。
-    OCR_MAX_RENDER_PIXELS: int = 4_000_000                  # 約 2000×2000
+    #
+    # ⚠️ 2.0M 這個值是實測出來的,不是猜的。2026-08-24 於線上容器
+    # (backend 上限 2048MB、應用程式本身佔 489MB → 可用約 1559MB)
+    # 以單頁單引擎循序實測同一份合約第一頁:
+    #
+    #   像素上限   解析度    峰值 RSS      結果
+    #   4.0M      203 DPI   >1651 MB     ✗ 超出可用空間,會殺掉 backend 容器
+    #   2.0M      144 DPI    1354 MB     ✓ 落在可用空間內
+    #   1.0M      102 DPI    1132 MB     ✓
+    #
+    # 光是載入 PaddleOCR 引擎就佔 701 MB(尚未開始辨識)——這個數字決定了
+    # 任何機器的最低配額,換機器時先用它推算。
+    # 原設 4_000_000 是照「A4 降到 203 DPI 應該夠」推的,實測不夠,已下修。
+    OCR_MAX_RENDER_PIXELS: int = 2_000_000                  # A4 約 144 DPI
     OCR_RENDER_DPI: int = 300                               # 目標 DPI,受上方像素上限約束
     OCR_ENGINES: List[str] = ["paddleocr", "tesseract"]     # 使用的引擎列表
     OCR_QUALITY_THRESHOLD: float = 0.8                      # 信心度門檻(0-1),低於此值進入人工複核
