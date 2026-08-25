@@ -18,8 +18,13 @@ from app.services.annotation_importer import (
 )
 from app.services.correction_sample_service import CorrectionSampleService
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
-ANNOTATION_DIR = REPO_ROOT / "backend" / "tests_all" / "fixtures"
+# parents[2] 是 backend 根,在兩種佈局下都成立:
+#   本機   .../DocuMind/backend/tests/unit/  → .../DocuMind/backend
+#   容器   /app/tests/unit/                  → /app        (compose 掛 ./backend:/app)
+# 原本用 parents[3] 再接 "backend/",那是 repo 根的算法——容器裡只掛了 backend,
+# repo 根不存在,會算成 /backend/... 而找不到檔案(2026-08-24 於線上實測)。
+BACKEND_ROOT = Path(__file__).resolve().parents[2]
+ANNOTATION_DIR = BACKEND_ROOT / "tests_all" / "fixtures"
 
 
 @pytest.fixture

@@ -199,8 +199,20 @@ class TestComposeHasMemLimits:
                 "ai-doc-frontend", "ai-doc-nginx"}
 
     def test_every_container_has_a_mem_limit(self):
-        compose = Path(__file__).resolve().parents[3] / "docker-compose.yml"
-        assert compose.exists(), f"找不到 {compose}"
+        # parents[3] 在本機是 repo 根;容器裡只掛了 ./backend:/app,repo 根不存在,
+        # docker-compose.yml 本來就不在容器內(2026-08-24 於線上實測)。
+        # 因此:認得出是 repo 佈局才斷言,認不出就跳過——不是靜默放行,
+        # 而是「這個環境看不到那個檔案」。
+        repo_root = Path(__file__).resolve().parents[3]
+        looks_like_repo = (repo_root / "backend").is_dir() or (repo_root / ".git").exists()
+        compose = repo_root / "docker-compose.yml"
+
+        if not looks_like_repo:
+            pytest.skip("非 repo 佈局(容器內只掛 ./backend),看不到 docker-compose.yml")
+
+        assert compose.exists(), (
+            f"這是 repo 佈局卻找不到 {compose}——compose 檔被移除或改名了"
+        )
         text = compose.read_text(encoding="utf-8")
 
         found = {}
