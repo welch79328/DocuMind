@@ -100,7 +100,12 @@ def validate_engine_config(config: EngineConfig) -> None:
         ValueError: 配置參數無效
     """
     # 有效的引擎名稱
-    valid_engines = ["paddleocr", "tesseract", "textract"]
+    # 只列**實際跑得動**的引擎。engine_manager.extract_text_multi_engine 只分派
+    # paddleocr 與 tesseract(見該檔的 `if "paddleocr" in self.engines` 等分支);
+    # 把 textract 列為 valid 會讓它通過驗證卻不產生任何 task——**靜默地什麼都不做**。
+    # 2026-08-25 移除。types.OCREngineName 另外還宣告了 paddleocr_vl / qwen_vl,
+    # 那是 Phase 2 的規劃名稱,同樣未實作,不得列入此處。
+    valid_engines = ["paddleocr", "tesseract"]
 
     # 驗證引擎列表不為空
     if not config.engines or len(config.engines) == 0:

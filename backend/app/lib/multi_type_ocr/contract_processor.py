@@ -66,11 +66,19 @@ class ContractProcessor(OcrDocumentProcessor):
         )
         self.preprocessor = TranscriptPreprocessor(config=preprocess_config)
 
-        # 初始化 OCR 引擎管理器（與謄本相同配置）
+        # 初始化 OCR 引擎管理器
+        #
+        # 2026-08-25:引擎清單由寫死的 ["tesseract"] 改為讀 settings.OCR_ENGINES,
+        # 與 transcript_processor / bill_processor 一致。
+        # 原本寫死違反需求 3.6「引擎選擇 SHALL 可由設定調整,且變更引擎組態
+        # 不需修改程式碼」——合約是唯一改設定也切不動引擎的類型。
+        from app.config import settings
+
         self.engine_manager = EngineManager(
-            engines=["tesseract"],
-            parallel=False,
-            fusion_method="best"
+            engines=list(settings.OCR_ENGINES),
+            parallel=settings.OCR_PARALLEL_ENGINES,
+            fusion_method=settings.OCR_FUSION_METHOD,
+            paddleocr_lang=settings.OCR_PADDLEOCR_LANG,
         )
 
         # 後處理器設定（LLM 由 process() 的 enable_llm 參數動態控制）

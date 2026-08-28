@@ -199,6 +199,11 @@ FusionMethod = Literal["best", "weighted", "vote", "smart", "cross_check"]
 BinarizationMethod = Literal["gaussian", "mean", "sauvola"]
 
 # OCR 引擎名稱字面量
+# ⚠️ 此處宣告的是**名稱空間**,不是可用清單。
+# 實際跑得動的只有 paddleocr 與 tesseract(engine_manager 只分派這兩個);
+# textract 屬舊路徑 lib/ocr_service.py 的 OCR_SERVICE,不走 EngineManager;
+# paddleocr_vl / qwen_vl 是 Phase 2 的規劃名稱,尚未實作。
+# 可用清單以 ocr_enhanced/config.py 的 valid_engines 為準。
 OCREngineName = Literal[
     "paddleocr", "tesseract", "textract", "paddleocr_vl", "qwen_vl"
 ]
