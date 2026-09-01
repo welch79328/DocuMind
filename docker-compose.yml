@@ -40,8 +40,22 @@ services:
       dockerfile: Dockerfile
     container_name: ai-doc-backend
     mem_limit: 2g      # OCR 管線最貪;2026-08-24 曾因無上限被 OOM 殺掉(見下)
+    # .env 是設定的單一真相來源。凡是 backend/app/config.py 有預設值的鍵,
+    # **不要**在下面的 environment: 重複寫一份預設——那會蓋掉 config.py,
+    # 造成「改了程式碼預設值,容器卻還跑舊值」。2026-09-01 實際踩過兩次:
+    #   OPENAI_MODEL 改成 gpt-4o-mini 後容器仍跑 gpt-4o(被下面的 :-gpt-4o 蓋掉)
+    #   OCR_ENGINES 不在下面的名單上,寫進 .env 也傳不進容器
+    #
+    # 也不要改用 `${VAR:-}`(空字串)來「不指定」——實測 pydantic 不會忽略空字串,
+    # OCR_ENGINES="" 會直接 SettingsError,應用程式起不來。
+    # 正確做法就是 env_file:未列在 .env 的鍵根本不會進容器,config.py 的預設才生效。
+    env_file:
+      - path: .env
+        required: false
+
     environment:
-      # Database
+      # 只放「config.py 沒有、或必須強制覆寫成容器網路值」的鍵。
+      # environment: 的優先序高於 env_file,故此處的值一定生效。
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/ai_doc_demo
 
       # AWS S3
@@ -55,18 +69,13 @@ services:
       # Storage
       STORAGE_TYPE: ${STORAGE_TYPE:-s3}
 
-      # OpenAI
+      # LLM(金鑰無預設值,必須傳遞)
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o}
-      OPENAI_MODEL_MINI: ${OPENAI_MODEL_MINI:-gpt-4o-mini}
 
       # AWS Textract
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
       AWS_REGION: ${AWS_REGION:-us-east-1}
-
-      # OCR Service
-      OCR_SERVICE: ${OCR_SERVICE:-pytesseract}
 
       # CORS
       CORS_ORIGINS: '${CORS_ORIGINS:-["http://localhost:8085","http://localhost:3000"]}'
