@@ -29,7 +29,11 @@ class Settings(BaseSettings):
 
     # OpenAI
     OPENAI_API_KEY: str = ""
-    OPENAI_MODEL: str = "gpt-4o"
+    # 2026-09-01 業主定案:統一使用 gpt-4o-mini。
+    # 我曾提出反對意見(高風險欄位抽取用小模型,較易產出「語法合法但數值錯誤」
+    # 的值,正是需求 2 點名的靜默污染),業主評估後仍決定統一——記錄於此,
+    # 待任務 3.3 的基準線產出後,可實測降級的實際代價再議。
+    OPENAI_MODEL: str = "gpt-4o-mini"
     OPENAI_MODEL_MINI: str = "gpt-4o-mini"
 
     # Anthropic Claude (Optional)

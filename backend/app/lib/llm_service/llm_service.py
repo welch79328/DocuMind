@@ -104,7 +104,9 @@ class LLMService:
     def _get_default_model(self) -> str:
         """獲取預設模型"""
         if self.provider == "openai":
-            return "gpt-4o"  # 支援視覺，準確率高
+            # 2026-09-01 統一為 gpt-4o-mini。原值 gpt-4o,註解寫「支援視覺,準確率高」;
+            # gpt-4o-mini 同樣支援視覺輸入,雙模態校正路徑不受影響。
+            return "gpt-4o-mini"
         elif self.provider == "anthropic":
             return "claude-3-5-haiku-20241022"  # 快速且便宜
         return ""

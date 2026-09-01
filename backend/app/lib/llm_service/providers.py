@@ -27,7 +27,7 @@ _PRICING: Dict[str, tuple] = {
     "gpt-4o-mini": (0.150, 0.600),
     "gpt-4o": (2.50, 10.00),
     "claude-opus-5": (5.00, 25.00),
-    "claude-sonnet-5": (3.00, 15.00),
+    "claude-sonnet-5": (2.00, 10.00),   # 2026-09-01 更正:原填 3.00/15.00 是 Sonnet 4.6 的價
     "claude-haiku-4-5": (1.00, 5.00),
     "claude-3-5-sonnet": (3.00, 15.00),
     "claude-3-5-haiku": (0.80, 4.00),
@@ -96,7 +96,7 @@ class OpenAIProvider(LLMProvider):
     """OpenAI(雲端)Provider — 封裝既有 OpenAI 呼叫邏輯"""
 
     def __init__(self, model: Optional[str] = None, api_key: Optional[str] = None):
-        self.model = model or "gpt-4o"
+        self.model = model or "gpt-4o-mini"   # 與 settings.OPENAI_MODEL 一致(2026-09-01 統一)
         self._api_key = api_key
         self._client = None
         self.stats = _new_stats()
