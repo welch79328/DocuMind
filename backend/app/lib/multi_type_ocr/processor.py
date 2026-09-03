@@ -259,6 +259,53 @@ class OcrDocumentProcessor(DocumentProcessor):
         return None
 
     @staticmethod
+    def _apply_field_validation(
+        structured_data: Optional[Dict[str, Any]],
+    ) -> Optional[Dict[str, Any]]:
+        """值不像該欄位該有的東西時,壓低信心度並列入待確認。
+
+        2026-09-03 線上實測:地號 "0555-0000" 被填進 area,信心度 0.8,
+        高於攔截門檻 0.8——**字串合法、型別看似正確,規則與信心度都攔不住**。
+        該頁只因整體信心度 0.320 才被拖進複核,那是運氣不是機制。
+
+        與共識同一不變量:**只收緊,不放寬**。壓低值取 min,
+        既有更低的信心度不會被抬高。
+
+        不修改欄位值——這裡只回報「不像」,不猜正確答案。
+        猜錯的代價比留給人看更高。
+        """
+        if not structured_data:
+            return structured_data
+
+        from .field_validator import validate_fields
+
+        problems = validate_fields(structured_data)
+        if not problems:
+            return structured_data
+
+        from app.config import settings
+
+        penalty = float(settings.OCR_CONSENSUS_DISAGREE_PENALTY)
+
+        existing = structured_data.get("field_confidences")
+        merged: Dict[str, float] = dict(existing) if isinstance(existing, dict) else {}
+        for field in problems:
+            merged[field] = min(merged.get(field, penalty), penalty)
+        structured_data["field_confidences"] = merged
+
+        # 列入待確認,讓複核的人知道要看哪幾欄、為什麼
+        pending = structured_data.get("needs_confirmation")
+        pending = list(pending) if isinstance(pending, (list, tuple)) else []
+        for field in problems:
+            if field not in pending:
+                pending.append(field)
+        structured_data["needs_confirmation"] = pending
+        structured_data["validation_warnings"] = dict(problems)
+
+        logger.warning("欄位型別檢查未通過,已壓低信心度: %s", problems)
+        return structured_data
+
+    @staticmethod
     def _apply_correction_confidences(
         structured_data: Optional[Dict[str, Any]],
         correction_confidences: Optional[Dict[str, float]],
@@ -372,6 +419,9 @@ class OcrDocumentProcessor(DocumentProcessor):
         structured_data = self._apply_correction_confidences(
             structured_data, postprocess_stats.get("llm_field_confidences")
         )
+
+        # 步驟 5d:欄位型別合理性——攔截「語法合法但填錯欄位」的值
+        structured_data = self._apply_field_validation(structured_data)
 
         field_confidences: Dict[str, float] = {}
         if isinstance(structured_data, dict):
