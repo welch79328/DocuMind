@@ -18,6 +18,25 @@ from app.config import settings
 logger = logging.getLogger(__name__)
 
 
+def _first_captured_group(match) -> Optional[str]:
+    """取第一個有值的擷取群組;全部為空時回傳 None。
+
+    原本寫死 `match.group(1)`,交替樣式(`A|B`)只要命中第二個分支,
+    group(1) 就是 None,`.strip()` 直接拋 AttributeError。
+
+    2026-09-03 需要交替樣式的理由:真實謄本的地號寫成
+    `竹田鄉過溝段0555-0000地號`——**值在標籤前面**,而少數表格式版型是標籤在前。
+    兩種順序都要收,就必然用到交替群組。
+    """
+    if match is None:
+        return None
+    for value in match.groups():
+        if value is not None and str(value).strip():
+            return str(value).strip()
+    return None
+
+
+
 class RegexFieldExtractor:
     """規則 + LLM Vision 欄位抽取基類"""
 
@@ -72,8 +91,9 @@ class RegexFieldExtractor:
         for key in self.KEY_FIELDS:
             pattern = self.PATTERNS.get(key)
             match = pattern.search(text or "") if pattern else None
-            if match:
-                fields[key] = match.group(1).strip()
+            captured = _first_captured_group(match)
+            if captured is not None:
+                fields[key] = captured
                 confidences[key] = self._MATCH_CONFIDENCE
             else:
                 fields[key] = None
