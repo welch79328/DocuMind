@@ -121,6 +121,21 @@ class Settings(BaseSettings):
     #    這條管線的瓶頸不在解析度。
     OCR_MAX_RENDER_PIXELS: int = 1_000_000                  # A4 約 102 DPI
     OCR_RENDER_DPI: int = 300                               # 目標 DPI,受上方像素上限約束
+
+    # 同時可執行 OCR 的頁數上限。**這是記憶體的閘門,不是效能旋鈕。**
+    # 2026-09-03 實測:單頁 OCR 峰值 1141–1778 MB,而 backend 容器可用約 1695 MB
+    # (上限 2048 − 應用程式本身約 353)。兩頁同時跑必然 OOM,而在此之前
+    # 系統沒有任何機制擋著——單 uvicorn worker、無 --limit-concurrency、無 Semaphore,
+    # 兩個使用者同時上傳就會把容器打掛。設為 1 讓第二頁排隊而不是一起爆。
+    # 換更大機器時可調高,但**先用 backend/scripts/measure_ocr_memory.py 量過再改**。
+    OCR_MAX_CONCURRENT: int = 1
+
+    # 同時進行的頁面數(涵蓋渲染、前處理、LLM 校正、欄位抽取)。
+    # OCR 本身仍由 OCR_MAX_CONCURRENT 序列化,此值只讓**網路等待**重疊——
+    # LLM 在遠端算,本機只是等 HTTP,與記憶體無關。
+    # 2026-09-03 實測 4 頁謄本:LLM 佔 24.6s/頁、逐頁串接共 98s;重疊後約 25s。
+    # 調高會讓更多頁的原圖 base64 同時在記憶體裡,故不宜過大。
+    OCR_MAX_CONCURRENT_PAGES: int = 4
     OCR_ENGINES: List[str] = ["paddleocr", "tesseract"]     # 使用的引擎列表
     OCR_QUALITY_THRESHOLD: float = 0.8                      # 信心度門檻(0-1),低於此值進入人工複核
     OCR_MAX_RETRIES: int = 3                                # 最大重試次數

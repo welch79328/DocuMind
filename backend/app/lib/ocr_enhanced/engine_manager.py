@@ -13,6 +13,31 @@ import cv2
 from .types import EngineResult, FusionMethod, OCREngineName
 
 
+_ocr_gate: Optional["asyncio.Semaphore"] = None
+_ocr_gate_limit: int = -1
+
+
+def _get_ocr_gate() -> "asyncio.Semaphore":
+    """同時執行 OCR 的閘門(行程層級,跨請求共用)。
+
+    **這是記憶體的閘門,不是效能旋鈕。** 單頁 OCR 峰值實測 1141–1778 MB,
+    容器可用約 1695 MB——兩頁同時跑必然 OOM。在此之前系統沒有任何機制擋著:
+    單 uvicorn worker、無 --limit-concurrency、程式碼無 Semaphore,
+    兩個使用者同時上傳就會把 backend 容器打掛(2026-09-03 盤查)。
+
+    刻意延後建立:asyncio.Semaphore 會綁定建立時的事件迴圈,
+    在 import 期建立會在某些測試/啟動順序下綁到錯的迴圈。
+    """
+    global _ocr_gate, _ocr_gate_limit
+    from app.config import settings
+
+    limit = max(1, int(settings.OCR_MAX_CONCURRENT))
+    if _ocr_gate is None or _ocr_gate_limit != limit:
+        _ocr_gate = asyncio.Semaphore(limit)
+        _ocr_gate_limit = limit
+    return _ocr_gate
+
+
 class EngineManager:
     """
     OCR 引擎管理器
@@ -124,37 +149,41 @@ class EngineManager:
             and parallel_is_safe(settings.OCR_PARALLEL_MIN_AVAILABLE_MB)
         )
 
+        # ⚠️ 閘門在此,不在呼叫端。記憶體是被**引擎執行**吃掉的,不是被頁面迴圈;
+        # 把閘門放這裡,無論是同一份文件的多頁併發、還是不同使用者的併發請求,
+        # 都受同一個上限約束。放在 API 層只擋得住其中一種。
         try:
-            if run_parallel:
-                # 並行模式：同時執行
-                results = await asyncio.gather(*tasks, return_exceptions=True)
-            else:
-                # 順序模式：逐個執行
-                results = []
-                for task in tasks:
-                    try:
-                        result = await task
-                        results.append(result)
-                    except Exception as e:
-                        results.append(e)
-
-            # 過濾失敗結果
-            valid_results: list[EngineResult] = []
-            for result in results:
-                if isinstance(result, Exception):
-                    # 記錄錯誤但繼續使用其他引擎結果
-                    print(f"引擎執行失敗: {result}")
+            async with _get_ocr_gate():
+                if run_parallel:
+                    # 並行模式：同時執行
+                    results = await asyncio.gather(*tasks, return_exceptions=True)
                 else:
-                    valid_results.append(result)
+                    # 順序模式：逐個執行
+                    results = []
+                    for task in tasks:
+                        try:
+                            result = await task
+                            results.append(result)
+                        except Exception as e:
+                            results.append(e)
 
-            if not valid_results:
-                # 所有引擎都失敗
-                return "", 0.0, []
+                # 過濾失敗結果
+                valid_results: list[EngineResult] = []
+                for result in results:
+                    if isinstance(result, Exception):
+                        # 記錄錯誤但繼續使用其他引擎結果
+                        print(f"引擎執行失敗: {result}")
+                    else:
+                        valid_results.append(result)
 
-            # 融合結果
-            fused_text, fused_confidence = self._fuse_results(valid_results)
+                if not valid_results:
+                    # 所有引擎都失敗
+                    return "", 0.0, []
 
-            return fused_text, fused_confidence, valid_results
+                # 融合結果
+                fused_text, fused_confidence = self._fuse_results(valid_results)
+
+                return fused_text, fused_confidence, valid_results
 
         except Exception as e:
             print(f"多引擎處理失敗: {e}")

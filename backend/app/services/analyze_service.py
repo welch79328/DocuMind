@@ -4,6 +4,8 @@
 協調 S3 上傳、OCR 處理、問答等流程。
 """
 
+import asyncio
+from app.config import settings
 import logging
 from typing import Optional, List, Tuple
 
@@ -118,9 +120,23 @@ class AnalyzeService:
             pages_to_process = [1]
 
         processor = ProcessorFactory.get_processor(document_type)
-        results = []
 
-        for page_num in pages_to_process:
+        # 頁面併發,但 OCR 仍由 EngineManager 的閘門序列化。
+        #
+        # 2026-09-03 實測 4 頁謄本:總計 151s,其中 LLM 佔 24.6s/頁(98s,65%)。
+        # LLM 在遠端算,本機只是等 HTTP——那 98 秒是**排隊等網路**,不是在用記憶體。
+        # 逐頁串接等於把四段網路等待接起來;讓頁面重疊後那段降到約 25s(取最慢者)。
+        #
+        # OCR 不能跟著重疊:單頁峰值 1141–1778 MB,容器可用約 1695 MB。
+        # 但閘門放在 EngineManager 而非此處,所以這裡放心併發——
+        # 真正吃記憶體的那一段自己會排隊。
+        page_gate = asyncio.Semaphore(max(1, int(settings.OCR_MAX_CONCURRENT_PAGES)))
+
+        async def _process_page(page_num: int) -> dict:
+            async with page_gate:
+                return await _run_one_page(page_num)
+
+        async def _run_one_page(page_num: int) -> dict:
             try:
                 # 提取單頁圖片
                 if is_pdf:
@@ -147,18 +163,21 @@ class AnalyzeService:
                 # 移除 original_image（節省回應大小）
                 page_result.pop("original_image", None)
 
-                results.append(page_result)
+                return page_result
 
             except Exception as e:
                 logger.error(f"頁面 {page_num} 處理失敗: {e}")
-                results.append({
+                return {
                     "page_number": page_num,
                     "error": f"頁面處理失敗: {str(e)}",
                     "ocr_raw": {"text": "", "confidence": 0.0},
                     "rule_postprocessed": {"text": "", "stats": {}},
                     "llm_postprocessed": None,
                     "structured_data": None,
-                })
+                }
+
+        # gather 保序:回傳順序與傳入順序一致,故頁碼不會亂
+        results = list(await asyncio.gather(*(_process_page(n) for n in pages_to_process)))
 
         return results, total_pages
 
