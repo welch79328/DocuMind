@@ -4,6 +4,9 @@ OCR Postprocessor Module
 OCR 後處理模組，提供錯別字修正、格式校正等功能。
 """
 
+import logging
+
+logger = logging.getLogger(__name__)
 import re
 from typing import Optional, Literal
 
@@ -15,6 +18,34 @@ from .typo_dict import (
     ROC_DATE_PATTERN,
     AREA_PATTERN,
 )
+
+
+
+def _reject_destructive_correction(original: str, corrected: object) -> str:
+    """校正結果明顯吃掉原文時,退回原文。
+
+    2026-09-03 線上實測:謄本 p1 的 1600 字 OCR 文字,校正後變成 0 字,
+    整頁靜默消失(回應仍為 HTTP 200、llm_used=True、cost=$0.04)。
+
+    判準刻意寬鬆——只擋「明顯是壞掉」的情況,不擋正常的校正:
+      - 非字串或空白 → 一定是壞掉
+      - 原文有內容,而校正後短於原文的一半 → 校正不會刪掉一半內容
+
+    一半這個界線是保守的:實測正常校正的長度變化在 -7% 到 +4% 之間
+    (p2 491→477、p3 1859→1735、p4 462→479)。
+    """
+    if not isinstance(corrected, str) or not corrected.strip():
+        logger.warning("LLM 校正回傳空值,退回校正前文字(原文 %d 字)", len(original))
+        return original
+
+    if original.strip() and len(corrected.strip()) < len(original.strip()) / 2:
+        logger.warning(
+            "LLM 校正結果過短(%d → %d 字),疑似截斷或拒絕,退回校正前文字",
+            len(original), len(corrected),
+        )
+        return original
+
+    return corrected
 
 
 class TranscriptPostprocessor:
@@ -182,6 +213,16 @@ class TranscriptPostprocessor:
                 corrected, stats = await self.llm_processor.correct_fields(text)
             else:
                 return {"text": text, "used": False, "cost": 0.0}
+
+            # ⚠️ 校正結果不得吃掉原文。2026-09-03 線上實測:一份謄本的 p1
+            # OCR 讀出 1600 字,校正後變成 **0 字**——整頁文字靜默消失,
+            # 而回應仍是 llm_used=True、cost=$0.04、HTTP 200。
+            # 對照該頁的文字層真值(1326 字),等於 CER 100%。
+            #
+            # 校正的職責是「修正字元」,不是「刪除內容」。輸出遠短於輸入時
+            # 幾乎必然是模型回了空值、拒絕、或截斷,而不是原文真的那麼短。
+            # 保守處理:退回校正前的文字並記錄事由,不中斷流程。
+            corrected = _reject_destructive_correction(text, corrected)
 
             last = getattr(self.llm_processor, "last_result", None) or {}
             return {
