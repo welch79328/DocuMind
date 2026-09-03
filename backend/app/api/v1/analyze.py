@@ -14,7 +14,7 @@ from sqlalchemy import func as sa_func
 from sqlalchemy.orm import Session
 
 from app.schemas.analyze import AnalyzeResponse
-from app.services.analyze_service import AnalyzeService
+from app.services.analyze_service import AnalyzeService, _merge_page_structured_data
 from app.database import get_db
 from app.models.api_usage_log import ApiUsageLog
 from app.lib.document_types import (
@@ -96,13 +96,20 @@ def _apply_confidence_gating(result: dict, db: Session) -> None:
     """
     信心度攔截(任務 3.3)
 
-    逐頁彙整信心度,以 QualityAssessor 判定是否需人工複核;低信心自動入複核佇列,
+    跨頁彙整信心度,以 QualityAssessor 判定是否需人工複核;低信心自動入複核佇列,
     並於回應加上 needs_review / review_item_id / field_confidences。高信心則放行。
     就地修改 result。
+
+    2026-09-03 修正:原本用 `field_confidences.update(page_fields)` 逐頁覆蓋,
+    後面頁面即使沒抽到某欄位(信心度 0.0)也會蓋掉前面頁面已抽到的高信心度值
+    ——實測一份 4 頁謄本,4/5 個欄位的信心度因此被錯誤地覆蓋成 0.0,
+    導致明明已抽到的欄位仍被判定需要複核。改用 `_merge_page_structured_data`
+    (與 document_fields 同一套邏輯):field_confidences 取各頁最大值,
+    反映「這份文件目前看到的最佳信心度」,而不是任意一頁的殘值。
     """
     pages = result.get("pages") or []
 
-    # OCR 信心度取各頁最小值(保守);欄位信心度彙整自各頁 structured_data
+    # OCR 信心度取各頁最小值(保守):任一頁辨識困難都應反映在整體判斷
     page_confidences = [
         p["ocr_raw"]["confidence"]
         for p in pages
@@ -110,12 +117,10 @@ def _apply_confidence_gating(result: dict, db: Session) -> None:
     ]
     overall_ocr_confidence = min(page_confidences) if page_confidences else 1.0
 
-    field_confidences: dict = {}
-    for page in pages:
-        structured = page.get("structured_data") or {}
-        page_fields = structured.get("field_confidences")
-        if isinstance(page_fields, dict):
-            field_confidences.update(page_fields)
+    merged = _merge_page_structured_data(pages) or {}
+    field_confidences: dict = merged.get("field_confidences") or {}
+    if not isinstance(field_confidences, dict):
+        field_confidences = {}
 
     decision = QualityAssessor().assess(overall_ocr_confidence, field_confidences)
 
