@@ -75,7 +75,77 @@ def _merge_page_structured_data(pages: List[dict]) -> Optional[Dict[str, Any]]:
             continue
         seen_any = True
         _merge_fill_missing(merged, data)
-    return merged if seen_any else None
+
+    if not seen_any:
+        return None
+
+    # needs_confirmation 與 extraction_confidence 必須在彙整後**重算**,
+    # 不能沿用任一頁的值——它們描述的是「這一頁」的狀態,套到整份文件上是錯的。
+    #
+    # 2026-09-04 實測:一份 4 頁謄本彙整後,document_fields 同時出現
+    #   building_number = "00004-000"（p3 抽到,信心度 0.9）
+    #   needs_confirmation 卻包含 building_number（沿用 p1 的清單,p1 沒抽到）
+    # 八個待確認欄位裡六個其實已經抽到,下游會把已知的值也丟給人工確認。
+    _recompute_merged_status(merged, pages)
+    return merged
+
+
+def _scored_fields_from_pages(pages: List[dict]) -> set:
+    """反推「應納入評分的欄位」= 各頁 needs_confirmation 的聯集 ∪ 已抽到的欄位。
+
+    抽取器已依 REQUIRED_FIELDS 算好每頁的 needs_confirmation（只含必要欄位），
+    所以聯集就是「必要且至少在某頁沒抽到」的集合；再併入「有值且高信心」的欄位，
+    才不會漏掉每頁都成功抽到的必要欄位。
+
+    刻意不從 analyze_service 直接讀 REQUIRED_FIELDS：抽取器是 processor 內部
+    臨時建立的，這裡取不到實例，而為此建立耦合不值得——各頁輸出已含足夠資訊。
+
+    副作用是選配欄位若剛好在某頁抽到，也會進入評分；那是加分項（信心度 0.9），
+    不會造成先前那種「選配欄位缺席拉低分數」的稀釋問題。
+    """
+    scored: set = set()
+    for page in pages:
+        data = page.get("structured_data")
+        if not isinstance(data, dict):
+            continue
+        needs = data.get("needs_confirmation")
+        if isinstance(needs, (list, tuple)):
+            scored.update(needs)
+        confidences = data.get("field_confidences")
+        if isinstance(confidences, dict):
+            scored.update(
+                k for k, v in confidences.items()
+                if isinstance(v, (int, float)) and v > 0
+            )
+    return scored
+
+
+def _recompute_merged_status(merged: Dict[str, Any], pages: List[dict]) -> None:
+    """依彙整後的 field_confidences 重算待確認清單與整體信心度。
+
+    只計「應納入評分的欄位」，避免把從未出現在任何一頁的選配欄位算進分母
+    （那正是 2026-09-04 REQUIRED_FIELDS 修正要解決的稀釋問題）。
+    """
+    confidences = merged.get("field_confidences")
+    if not isinstance(confidences, dict) or not confidences:
+        return
+
+    scored_keys = _scored_fields_from_pages(pages)
+    if not scored_keys:
+        return
+
+    threshold = settings.OCR_QUALITY_THRESHOLD
+    merged["needs_confirmation"] = sorted(
+        name for name in scored_keys
+        if isinstance(confidences.get(name), (int, float))
+        and confidences[name] < threshold
+    )
+    scored = [
+        confidences[k] for k in scored_keys
+        if isinstance(confidences.get(k), (int, float))
+    ]
+    if scored:
+        merged["extraction_confidence"] = round(sum(scored) / len(scored), 4)
 
 
 def _merge_fill_missing(target: Dict[str, Any], source: Dict[str, Any]) -> None:
