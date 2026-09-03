@@ -9,7 +9,7 @@ import logging
 from typing import Optional, Dict, Any, Union, List
 
 from app.config import settings
-from app.lib.llm_service.providers import openai_token_limit_kwargs
+from app.lib.llm_service.providers import openai_call_kwargs
 
 from .types import LLMProvider, LLMStats
 
@@ -224,8 +224,7 @@ class LLMService:
                 "role": "user",
                 "content": content
             }],
-            temperature=temperature,
-            **openai_token_limit_kwargs(self.model, max_tokens),
+            **openai_call_kwargs(self.model, max_tokens, temperature),
         )
 
         # 更新統計

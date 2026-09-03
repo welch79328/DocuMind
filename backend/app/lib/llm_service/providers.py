@@ -42,26 +42,44 @@ _PRICING: Dict[str, tuple] = {
 _DEFAULT_PRICE = (0.150, 0.600)
 
 
-def openai_token_limit_kwargs(model: str, max_tokens: int) -> Dict[str, Any]:
-    """回傳 OpenAI chat.completions 的輸出上限參數,依模型家族選鍵名。
+def openai_call_kwargs(
+    model: str,
+    max_tokens: Optional[int] = None,
+    temperature: Optional[float] = None,
+) -> Dict[str, Any]:
+    """組出 OpenAI chat.completions 可接受的參數,依模型家族剔除不支援的。
 
-    2026-09-03 實測:GPT-5 系列拒絕 `max_tokens`——
+    2026-09-03 換到 gpt-5.6-terra 後連續被兩個 400 擋下,每次都是同一類問題:
 
-        400 invalid_request_error
         Unsupported parameter: 'max_tokens' is not supported with this model.
         Use 'max_completion_tokens' instead.
 
-    當天把模型從 gpt-4o-mini 換成 gpt-5.6-terra 後,每一次 LLM 呼叫都以這個
-    400 失敗,而系統的降級設計讓它**靜默退回正則結果**:HTTP 200、
-    llm_pages_used=0、estimated_cost=$0,回應裡完全看不出 LLM 從未跑過。
-    只有翻日誌才找得到。
+        Unsupported value: 'temperature' does not support 0.0 with this model.
+        Only the default (1) value is supported.
 
-    以「舊模型用舊鍵」而非「新模型用新鍵」判斷,是因為新模型會一直出,
-    而舊模型清單是封閉的——預設走新鍵,漏掉的新模型才不會壞。
+    **這類錯誤在本系統是靜默的**——降級設計會退回正則結果,HTTP 200、
+    llm_pages_used=0、estimated_cost=$0,API 回應看不出 LLM 從未成功跑過。
+    第一次修完 max_tokens 重跑,數字一模一樣,才發現後面還排著 temperature。
+    所以這裡一次處理整類,不要再一個參數一個參數修。
+
+    GPT-5 系列的規則:
+      - 輸出上限用 `max_completion_tokens`,不是 `max_tokens`
+      - `temperature` 只接受預設值 1 → **一律不傳**,讓 API 用預設
+
+    方向刻意是「舊模型走舊行為」而非「新模型走新行為」:新模型會一直出,
+    舊模型清單是封閉的。預設當成新模型,漏掉的新模型才不會壞。
     """
-    legacy_prefixes = ("gpt-4", "gpt-3.5", "o1", "o3")
-    key = "max_tokens" if model.startswith(legacy_prefixes) else "max_completion_tokens"
-    return {key: max_tokens}
+    legacy = model.startswith(("gpt-4", "gpt-3.5", "o1", "o3"))
+    kwargs: Dict[str, Any] = {}
+
+    if max_tokens is not None:
+        kwargs["max_tokens" if legacy else "max_completion_tokens"] = max_tokens
+
+    # 新模型不接受非預設 temperature;傳了就是 400,不傳則走預設 1
+    if temperature is not None and legacy:
+        kwargs["temperature"] = temperature
+
+    return kwargs
 
 
 def _new_stats() -> Dict[str, Any]:
@@ -171,8 +189,7 @@ class OpenAIProvider(LLMProvider):
         response = await self._get_client().chat.completions.create(
             model=self.model,
             messages=[{"role": "user", "content": content}],
-            temperature=temperature,
-            **openai_token_limit_kwargs(self.model, max_tokens),
+            **openai_call_kwargs(self.model, max_tokens, temperature),
         )
 
         self.stats["llm_calls"] += 1

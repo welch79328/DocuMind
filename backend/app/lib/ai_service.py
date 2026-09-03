@@ -4,6 +4,7 @@ AI Service - OpenAI / Anthropic Claude
 
 from openai import AsyncOpenAI
 from app.config import settings
+from app.lib.llm_service.providers import openai_call_kwargs
 from app.prompts.classification import CLASSIFICATION_PROMPT
 from app.prompts.extraction import get_extraction_prompt
 from app.prompts.summary import SUMMARY_PROMPT
@@ -30,8 +31,8 @@ async def classify_document(ocr_text: str) -> dict:
     response = await openai_client.chat.completions.create(
         model=settings.OPENAI_MODEL_MINI,
         messages=[{"role": "user", "content": prompt}],
-        temperature=0,
-        response_format={"type": "json_object"}
+        response_format={"type": "json_object"},
+        **openai_call_kwargs(settings.OPENAI_MODEL_MINI, temperature=0),
     )
 
     result = json.loads(response.choices[0].message.content)
@@ -50,8 +51,8 @@ async def extract_fields(ocr_text: str, doc_type: str) -> dict:
     response = await openai_client.chat.completions.create(
         model=settings.OPENAI_MODEL,
         messages=[{"role": "user", "content": prompt}],
-        temperature=0,
-        response_format={"type": "json_object"}
+        response_format={"type": "json_object"},
+        **openai_call_kwargs(settings.OPENAI_MODEL_MINI, temperature=0),
     )
 
     result = json.loads(response.choices[0].message.content)
@@ -70,7 +71,7 @@ async def generate_summary(ocr_text: str, doc_type: str) -> str:
     response = await openai_client.chat.completions.create(
         model=settings.OPENAI_MODEL_MINI,
         messages=[{"role": "user", "content": prompt}],
-        temperature=0.3
+        **openai_call_kwargs(settings.OPENAI_MODEL_MINI, temperature=0.3),
     )
 
     return response.choices[0].message.content
@@ -98,7 +99,7 @@ async def answer_question(question: str, context: dict) -> str:
     response = await openai_client.chat.completions.create(
         model=settings.OPENAI_MODEL,
         messages=[{"role": "user", "content": prompt}],
-        temperature=0.3
+        **openai_call_kwargs(settings.OPENAI_MODEL_MINI, temperature=0.3),
     )
 
     return response.choices[0].message.content

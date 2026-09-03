@@ -16,7 +16,7 @@ estimated_cost=$0,API 回應裡完全看不出 LLM 從未成功跑過。只有�
 import pytest
 
 from app.config import settings
-from app.lib.llm_service.providers import _PRICING, openai_token_limit_kwargs
+from app.lib.llm_service.providers import _PRICING, openai_call_kwargs
 
 
 class TestKeyNameByModelFamily:
@@ -25,23 +25,47 @@ class TestKeyNameByModelFamily:
         "gpt-5.5", "gpt-5.4", "gpt-5-nano",
     ])
     def test_gpt5_family_uses_max_completion_tokens(self, model):
-        assert openai_token_limit_kwargs(model, 2048) == {"max_completion_tokens": 2048}
+        assert openai_call_kwargs(model, 2048) == {"max_completion_tokens": 2048}
 
     @pytest.mark.parametrize("model", ["gpt-4o", "gpt-4o-mini", "gpt-3.5-turbo", "o3-mini"])
     def test_legacy_family_keeps_max_tokens(self, model):
-        assert openai_token_limit_kwargs(model, 2048) == {"max_tokens": 2048}
+        assert openai_call_kwargs(model, 2048) == {"max_tokens": 2048}
 
     def test_unknown_model_defaults_to_the_new_key(self):
         """未知模型走新鍵——新模型會一直出,預設猜新的才不會壞"""
-        assert openai_token_limit_kwargs("gpt-7-something", 2048) == {
+        assert openai_call_kwargs("gpt-7-something", 2048) == {
             "max_completion_tokens": 2048
         }
 
     def test_configured_model_produces_exactly_one_key(self):
         """實際設定的模型必須產出恰好一個鍵,兩個都傳會被 API 拒絕"""
-        kwargs = openai_token_limit_kwargs(settings.OPENAI_MODEL, 2048)
+        kwargs = openai_call_kwargs(settings.OPENAI_MODEL, 2048)
         assert len(kwargs) == 1
         assert set(kwargs) <= {"max_tokens", "max_completion_tokens"}
+
+
+class TestTemperatureIsDroppedForNewModels:
+    """GPT-5 只接受預設 temperature(1);傳任何值都是 400。
+
+    2026-09-03 修完 max_tokens 重跑,數字一模一樣——因為後面還排著 temperature。
+    這條就是為了讓「還有下一個不支援的參數」不會再靠翻日誌才發現。
+    """
+
+    @pytest.mark.parametrize("model", ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"])
+    def test_gpt5_never_receives_temperature(self, model):
+        for temp in (0.0, 0.1, 0.3, 1.0):
+            assert "temperature" not in openai_call_kwargs(model, 2048, temp), (
+                f"{model} 收到 temperature={temp},API 會回 400 unsupported_value"
+            )
+
+    @pytest.mark.parametrize("model", ["gpt-4o", "gpt-4o-mini"])
+    def test_legacy_still_receives_temperature(self, model):
+        """舊模型的既有行為不得改變——temperature=0 是抽取任務要的確定性"""
+        assert openai_call_kwargs(model, 2048, 0.0)["temperature"] == 0.0
+
+    def test_omitted_args_produce_no_keys(self):
+        """兩個參數都不給時回傳空 dict,呼叫端可安全展開"""
+        assert openai_call_kwargs("gpt-5.6-terra") == {}
 
 
 class TestConfiguredModelsHavePrices:
