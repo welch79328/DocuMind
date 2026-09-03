@@ -106,6 +106,18 @@ class EngineManager:
                     # 但開啟多花 4 秒(58.2s vs 54.2s)。謄本是掃描件,文字方向本就是正的。
                     # 舊版的 use_angle_cls=True 是慣性沿用,量過之後確認不需要。
                     use_textline_orientation=False,
+                    # 偵測階段的輸入邊長上限。2026-09-03 於線上以文字層真值實測
+                    # (每組設定重複 3 次,取中位數):
+                    #
+                    #   設定          p1 推論   p1 CER   p3 推論   p3 CER
+                    #   現行(未設)     28.5s   15.5%    28.3s   19.8%
+                    #   限邊 960       28.7s   14.4%    27.8s   16.3%
+                    #
+                    # **時間在雜訊範圍內(±10%),CER 兩頁都降**——零時間代價的準確率改善。
+                    # 首次單跑量到「快 5 秒」是冷啟動假象,重複三次後消失。
+                    #
+                    # 樣本只有兩頁,若日後在更多文件上發現退步,這是第一個該回退的參數。
+                    text_det_limit_side_len=960,
                 )
             except Exception as e:
                 raise RuntimeError(f"PaddleOCR 初始化失敗: {e}")
