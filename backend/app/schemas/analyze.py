@@ -56,6 +56,10 @@ class AnalyzeResponse(BaseModel):
     document_type: str
     total_pages: int
     pages: List[OcrPageResult]
+    # 跨頁彙整後的結構化欄位（新增，2026-09-03）。謄本關鍵欄位散在多頁時
+    # （地號在 p1、建號在 p3），單頁 structured_data 必然殘缺；此欄位是
+    # 各頁「只填補缺值」合併後的完整結果。None 表示所有頁面皆無 structured_data。
+    document_fields: Optional[Dict[str, Any]] = None
     answer: Optional[str] = None
     stats: ProcessingStats
     # 信心度攔截(任務 3.3)

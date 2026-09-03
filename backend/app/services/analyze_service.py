@@ -7,7 +7,7 @@
 import asyncio
 from app.config import settings
 import logging
-from typing import Optional, List, Tuple
+from typing import Optional, List, Tuple, Dict, Any
 
 from app.lib.storage_service import storage_service
 from app.lib.multi_type_ocr.processor_factory import ProcessorFactory
@@ -54,6 +54,61 @@ def _render_scale(rect) -> float:
 
     # 面積與倍率平方成正比,故以平方根等比例縮
     return base * (cap / pixels_at_base) ** 0.5
+
+def _merge_page_structured_data(pages: List[dict]) -> Optional[Dict[str, Any]]:
+    """跨頁彙整結構化欄位，只填補缺值，不用後面頁面覆蓋已抽到的值。
+
+    2026-09-03 發現：謄本的關鍵欄位散在多頁（地號在 p1、建號在 p3，
+    權利範圍可能在 p2 或 p4），而每頁各自跑一次正則抽取——單頁必然殘缺，
+    但四頁合起來其實完整。
+
+    既有的 `_answer_question` 已經做過一次合併（`all_structured.update(structured)`），
+    但那是「後面覆蓋前面」，且只供問答使用、沒有進最終回應。若某頁把值誤判為
+    None 或空字串，update 會把前面頁已經抽對的值蓋掉——本函式改為只填補缺值，
+    且遞迴處理巢狀結構（合約是 `{parties: {party_a: ...}}` 巢狀，謄本是扁平）。
+    """
+    merged: Dict[str, Any] = {}
+    seen_any = False
+    for page in pages:
+        data = page.get("structured_data")
+        if not isinstance(data, dict):
+            continue
+        seen_any = True
+        _merge_fill_missing(merged, data)
+    return merged if seen_any else None
+
+
+def _merge_fill_missing(target: Dict[str, Any], source: Dict[str, Any]) -> None:
+    """遞迴地把 source 裡「target 缺少或為空」的欄位填進 target。
+
+    field_confidences 等中繼欄位不遞迴合併值本身，改為取各頁最高信心度——
+    分數應反映「這份文件裡目前看到的最佳信心度」，而不是任意一頁的殘值。
+    """
+    for key, value in source.items():
+        if key == "field_confidences" and isinstance(value, dict):
+            existing = target.get(key)
+            existing = existing if isinstance(existing, dict) else {}
+            for fk, fv in value.items():
+                if not isinstance(fv, (int, float)):
+                    continue
+                if fk not in existing or fv > existing[fk]:
+                    existing[fk] = fv
+            target[key] = existing
+            continue
+
+        if isinstance(value, dict):
+            existing = target.get(key)
+            if not isinstance(existing, dict):
+                existing = {}
+                target[key] = existing
+            _merge_fill_missing(existing, value)
+            continue
+
+        current = target.get(key)
+        is_missing = current is None or current == "" or current == [] 
+        if is_missing and value not in (None, "", []):
+            target[key] = value
+
 
 
 class AnalyzeService:
@@ -292,12 +347,21 @@ class AnalyzeService:
             logger.warning(f"用量記錄失敗: {e}")
 
         # 6. 組裝回應
+        #
+        # ⚠️ document_fields：跨頁彙整後的結構化欄位（新增，2026-09-03）。
+        # 謄本的關鍵欄位散在多頁（地號在 p1、建號在 p3），單頁抽取必然殘缺——
+        # 實測一份 4 頁謄本，每頁 structured_data 各自只有 1-3 個欄位，
+        # 合起來卻是完整的一份。舊欄位 `pages[].structured_data` 不變，
+        # 呼叫端要逐頁結果可用舊欄位，要完整文件結果改讀這個新欄位。
+        document_fields = _merge_page_structured_data(pages)
+
         return {
             "file_name": filename,
             "file_url": file_url,
             "document_type": document_type,
             "total_pages": total_pages,
             "pages": pages,
+            "document_fields": document_fields,
             "answer": answer,
             "stats": {
                 "total_time_ms": elapsed_ms,
@@ -322,7 +386,6 @@ class AnalyzeService:
         try:
             # 合併所有頁面的最佳文字
             all_text = []
-            all_structured = {}
             for page in pages:
                 # 優先用 LLM 修正文字，其次規則修正，最後原始 OCR
                 llm = page.get("llm_postprocessed")
@@ -336,10 +399,11 @@ class AnalyzeService:
                 else:
                     all_text.append(raw.get("text", ""))
 
-                # 合併結構化欄位
-                structured = page.get("structured_data")
-                if structured:
-                    all_structured.update(structured)
+            # 合併結構化欄位：改用 _merge_page_structured_data（只填補缺值，
+            # 不用後面頁面的殘值覆蓋前面已抽到的值）。原本這裡是
+            # `all_structured.update(structured)`，後頁若把某欄位判成 None
+            # 會蓋掉前頁已抽對的值。
+            all_structured = _merge_page_structured_data(pages) or {}
 
             context = {
                 "ocr_text": "\n".join(all_text),
