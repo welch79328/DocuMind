@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import unicodedata
 from typing import Any, Dict, List, Optional, Pattern
 
 from app.config import settings
@@ -109,7 +110,35 @@ class RegexFieldExtractor:
         return self.REQUIRED_FIELDS or self.KEY_FIELDS
 
     # ------------------------------------------------------------------ #
+    @staticmethod
+    def _normalize_for_matching(text: str) -> str:
+        """比對前一律做 NFKC:同一個字有多種碼位,不正規化就比不到。
+
+        2026-09-04 實測:一份真實電子謄本的 PDF 文字層裡,「權利範圍」的「利」是
+        U+F9DD(CJK 相容表意文字)而不是一般的 U+5229——**外觀完全一樣,碼位不同**,
+        `"權利範圍" in text` 永遠是 False。同一份文件受影響的還有「權利種類」
+        與「他項權利」,NFKC 之後才數得到 5／2／4 次。
+
+        為什麼以前沒事、現在才浮現:走 OCR 時是「看圖重新辨識」,輸出的是正常碼位;
+        改成文字層直讀之後,PDF 內嵌的相容字原樣進來,樣式就比不到了。
+        該份謄本用文字層路徑時規則抽中 13/23,加上這一步之後 17/23。
+
+        地政謄本常見的三類特殊字 NFKC 都能處理:
+          相容表意文字 U+F900–FAFF   利(U+F9DD) → 利(U+5229)
+          表意註記符號 U+3190–32FF   ㆞ → 地、㈰ → 日
+          全形英數     U+FF00–FFEF   １１１ → 111、： → :
+
+        放在基底而非個別抽取器:合約與帳單只要來源是 PDF 文字層,會踩到同一個坑。
+
+        ⚠️ 只影響「比對用」的文字。回傳給呼叫端的 pages[].text 不動,
+        那是使用者要看的原文,不該被我們改寫。
+        """
+        if not text:
+            return ""
+        return unicodedata.normalize("NFKC", text)
+
     def _extract_with_regex(self, text: str):
+        text = self._normalize_for_matching(text)
         fields: Dict[str, Any] = {}
         confidences: Dict[str, float] = {}
         for key in self.KEY_FIELDS:
