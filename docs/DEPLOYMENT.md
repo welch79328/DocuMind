@@ -26,8 +26,8 @@
 | 機型 | **t3.medium 級:2 vCPU / 3.7 GB 可用** | 機上 `nproc` / `free`;**機型名為推定,未經 Console 確認** |
 | 月費 | **約 $33–35**(推算) | §3.1 表 t3.medium `$30`(us-east-1)× 東京 +10–15% |
 | 走哪個選項 | **選項 B — 雲端 OpenAI** | `backend/app/config.py:40` `LLM_PROVIDER="openai"`,`.env` 未覆寫 |
-| LLM 模型 | `gpt-4o` | `config.py:32` |
-| OCR 引擎(`ocr_enhanced` 路徑) | **`["paddleocr", "tesseract"]`** 兩個 | `config.py` 的 `OCR_ENGINES` |
+| LLM 模型 | **`gpt-5.6-terra`**(主)/ `gpt-5.6-luna`(分類、摘要、問答) | `.env`,2026-09-03 更新 |
+| OCR 引擎(`ocr_enhanced` 路徑) | **`["paddleocr"]`** 單引擎 | `.env` 的 `OCR_ENGINES`,2026-09-03 定案 |
 | OCR 引擎(`document_service` 路徑) | **`pytesseract` 單獨** | 兩台 `.env` 的 `OCR_SERVICE` |
 | PaddleOCR 執行器 | **ONNX Runtime**(非 paddle 執行器) | `engine_manager.py` `engine="onnxruntime"` |
 | GPU | **無,也不需要** | 選項 B 明訂「無需 GPU」 |
@@ -118,6 +118,39 @@ load average (2 vCPU)            →  51.35
 | 3 | 單頁渲染像素上限 `OCR_MAX_RENDER_PIXELS`(預設 4M);A4 由 300 DPI/8.7M 降為 203 DPI/4.0M | `services/analyze_service.py` |
 
 ⚠️ **防線 1 需重啟容器才生效,尚未套用到線上。**
+
+### 2026-09-03 的實測與變更
+
+**一、含文字層的 PDF 一律略過 OCR。** 同一份 4 頁電子謄本:
+
+| 路徑 | 耗時 | 字元錯誤率 |
+|---|---|---|
+| **文字層** | **0.6s** | **0.15%** |
+| PaddleOCR | 85s | 14.5% |
+| Tesseract | 78s | 38.2% |
+
+快 140 倍、錯誤率降到近百分之一。台灣的網路申領電子謄本一律含文字層。
+該分支原本只給 `contract`,查證 commit `5b62994` 後確認是遺漏而非決策
+(該 commit 把文字層列為合約 pipeline 的特性,謄本那段完全沒提),
+已開放給所有類型;純掃描件自動走 OCR。
+
+**二、引擎選擇的依據換了。** 先前以「記憶體、速度、讀出字數」判斷而選 Tesseract。
+有了文字層當真值後,準確率差距(38.2% vs 14.5%)大到讓其他考量變次要,
+線上已切為 `["paddleocr"]`。
+
+**三、OCR 併發閘門上線。** `OCR_MAX_CONCURRENT=1`(行程層級 Semaphore,
+放在 `EngineManager` 而非 API 層,故同一文件的多頁併發與跨使用者併發受同一上限),
+第二個請求排隊而不是把容器 OOM 掉。
+頁面層另以 `OCR_MAX_CONCURRENT_PAGES=4` 併發讓 LLM 的網路等待重疊
+——單頁 37.8s → 19.8s。
+
+**四、速度優化在此硬體上已窮舉。** `det 限邊 640/960` 時間不變;
+`rec batch 16/32` 反而更慢(2 vCPU 沒有平行度可餵)。
+28 秒是這台機器上 PP-OCRv6 的實際成本。
+`text_det_limit_side_len=960` 因零時間代價且降低 CER 而保留。
+
+⚠️ **但瓶頸不在辨識。** 文字層路徑給出 99.85% 正確的文字之後,
+地號、建號、面積仍然一個都沒抽到——**欄位抽取才是真瓶頸**。
 
 ### 決策(2026-08-24,業主定案)
 
