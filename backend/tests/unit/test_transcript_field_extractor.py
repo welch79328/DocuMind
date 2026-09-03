@@ -53,8 +53,17 @@ class TestRegexExtraction:
         跟欄位有幾個無關。核心五欄另外明確斷言,確保擴充不會把它們弄丟。"""
         result = await TranscriptFieldExtractor().extract("")
 
+        # 2026-09-04 起只列必要欄位:選配欄位(附屬建物、共有部分、查封註記等)
+        # 抽不到屬正常,不該要求人工確認。
         assert set(result["needs_confirmation"]) == set(
-            TranscriptFieldExtractor.KEY_FIELDS
+            TranscriptFieldExtractor.REQUIRED_FIELDS
+        )
+        # 選配欄位不得混進待確認清單
+        optional = set(TranscriptFieldExtractor.KEY_FIELDS) - set(
+            TranscriptFieldExtractor.REQUIRED_FIELDS
+        )
+        assert not (optional & set(result["needs_confirmation"])), (
+            "選配欄位不該進待確認清單"
         )
         # 核心五欄不得因擴充而遺失
         assert {"land_number", "building_number", "area", "rights_scope", "owner"} <= set(

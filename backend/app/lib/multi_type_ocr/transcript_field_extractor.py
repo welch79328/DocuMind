@@ -168,6 +168,35 @@ class TranscriptFieldExtractor(RegexFieldExtractor):
         "land_use_zone", "land_use_type",
     )
 
+    # 必要欄位:任何一份謄本都「應該要有」的欄位,信心度只以這些計算。
+    #
+    # 刻意排除的欄位與理由(2026-09-04):
+    #
+    #   subsection          並非每個段都有小段
+    #   sub_building_*      附屬建物(陽台、平台)不是每棟都有,單層透天通常沒有
+    #   shared_*            共有部分只有公寓大樓才有,透天沒有
+    #   other_right_type    他項權利只有設定抵押等情形才有,無貸款的房子沒有
+    #   land_use_type       使用地類別(非都市土地)與使用分區(都市土地)**互斥**,
+    #                       同一筆土地不會兩者都有
+    #   total_floors        部分版型只印層次不印層數
+    #   completion_date     土地謄本沒有建築完成日期(那是建物才有的欄位)
+    #
+    #   ⚠️ seizure_mark     查封註記**沒有才是正常且理想的**。
+    #                       把它的缺席計為信心度 0,語意上是反的——
+    #                       一份乾淨的謄本反而會被判定低信心。
+    #
+    # 這些欄位仍留在 KEY_FIELDS:抽到就回傳給下游,只是不列入評分與待確認。
+    #
+    # 動機:欄位由 5 擴充到 23 後,extraction_confidence 從 0.54 掉到 0.196,
+    # 而掉下去的原因全是「這份謄本本來就沒有這些東西」,不是抽取失敗。
+    REQUIRED_FIELDS = (
+        "land_number", "building_number", "area", "rights_scope", "owner",
+        "section", "building_address",
+        "main_usage", "main_material",
+        "floor_level", "floor_area", "total_area",
+        "land_use_zone",
+    )
+
     # 中文標籤同時是 LLM 的提問用語:規則抽不到的欄位會拿這些字去問模型,
     # 因此要用**謄本上真正印的字**,不要用內部代號或意譯。
     FIELD_LABELS = {

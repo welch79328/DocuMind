@@ -42,6 +42,21 @@ class RegexFieldExtractor:
 
     PATTERNS: Dict[str, Pattern] = {}
     KEY_FIELDS: tuple = ()
+
+    # 必要欄位:這份文件「應該要有」的欄位。信心度只以這些欄位計算,
+    # 抽不到才進 needs_confirmation、才觸發 LLM 補齊。
+    #
+    # 未宣告時退回 KEY_FIELDS(維持既有行為,帳單等尚未區分的抽取器不受影響)。
+    #
+    # 2026-09-04 引入的理由:謄本抽取器由 5 欄擴充到 23 欄後,
+    # extraction_confidence 從 0.54 掉到 0.196——但掉下去的那 10 欄
+    # (附屬建物、共有部分、他項權利、查封註記等)是**這份謄本本來就沒有的東西**,
+    # 不是抽取失敗。把它們算進分母等於懲罰「這棟房子沒有附屬建物」。
+    #
+    # `seizure_mark`(查封註記)更是相反:**沒有查封才是正常且理想的情況**,
+    # 把它的缺席計為信心度 0 在語意上是反的。
+    REQUIRED_FIELDS: tuple = ()
+
     FIELD_LABELS: Dict[str, str] = {}   # 欄位英文名 → 中文標籤(供 LLM 提示)
     DOC_LABEL: str = "文件"
 
@@ -62,7 +77,8 @@ class RegexFieldExtractor:
         few_shot: Optional[List[Dict[str, Any]]] = None,
     ) -> Dict[str, Any]:
         fields, confidences = self._extract_with_regex(text)
-        needs = [k for k in self.KEY_FIELDS if confidences[k] < self.threshold]
+        required = self._required_fields()
+        needs = [k for k in required if confidences[k] < self.threshold]
 
         llm_used = False
         if use_llm_fallback and needs and image_data:
@@ -71,18 +87,26 @@ class RegexFieldExtractor:
                 if key in self.KEY_FIELDS and value:
                     fields[key] = value
                     confidences[key] = self._LLM_CONFIDENCE
-            needs = [k for k in self.KEY_FIELDS if confidences[k] < self.threshold]
+            needs = [k for k in required if confidences[k] < self.threshold]
             llm_used = True
+
+        # 信心度只計必要欄位:選配欄位抽到是加分,抽不到不該扣分。
+        # 例:一棟沒有附屬建物的透天,不該因為抽不到「附屬建物面積」而被判低信心。
+        scored = {k: confidences[k] for k in required if k in confidences}
 
         return {
             **fields,
             "field_confidences": confidences,
             "needs_confirmation": needs,
             "extraction_confidence": round(
-                sum(confidences.values()) / len(confidences), 4
-            ) if confidences else 0.0,
+                sum(scored.values()) / len(scored), 4
+            ) if scored else 0.0,
             "llm_used_for_extraction": llm_used,
         }
+
+    def _required_fields(self) -> tuple:
+        """必要欄位;未宣告 REQUIRED_FIELDS 時退回 KEY_FIELDS(既有行為)。"""
+        return self.REQUIRED_FIELDS or self.KEY_FIELDS
 
     # ------------------------------------------------------------------ #
     def _extract_with_regex(self, text: str):
