@@ -59,6 +59,46 @@ def _render_scale(rect) -> float:
 class AnalyzeService:
     """統一文件分析服務"""
 
+    async def _extract_fields_for_text_layer(
+        self,
+        pages: list,
+        document_type: str,
+        enable_llm: bool,
+        few_shot=None,
+    ) -> list:
+        """為文字層頁面補上欄位抽取。
+
+        `extract_text_layer_pages` 只負責取文字,structured_data 留 None。
+        少了這一步,走文字層的文件會拿到完美的文字卻**一個欄位都沒有**。
+
+        文字層的信心度為 1.0(它就是產生該 PDF 的原始字串,不是辨識結果),
+        故欄位抽取的品質完全取決於抽取器本身,與 OCR 無關。
+        """
+        processor = ProcessorFactory.get_processor(document_type)
+        page_gate = asyncio.Semaphore(max(1, int(settings.OCR_MAX_CONCURRENT_PAGES)))
+
+        async def one(page: dict) -> dict:
+            async with page_gate:
+                try:
+                    structured = await processor.extract_fields(
+                        page["ocr_raw"]["text"],
+                        image_data=None,          # 文字層無需影像:文字已是精確值
+                        enable_llm=enable_llm,
+                        few_shot=few_shot,
+                    )
+                    page["structured_data"] = structured
+                    if isinstance(structured, dict):
+                        fc = structured.get("field_confidences")
+                        if isinstance(fc, dict):
+                            page["field_confidences"] = fc
+                except Exception as e:
+                    logger.error("文字層欄位抽取失敗(第 %s 頁): %s",
+                                 page.get("page_number"), e)
+                    # 不中斷:文字仍然可用,欄位留 None 由複核處理
+                return page
+
+        return list(await asyncio.gather(*(one(p) for p in pages)))
+
     async def _upload_to_s3(
         self,
         file_contents: bytes,
@@ -102,10 +142,26 @@ class AnalyzeService:
         """
         is_pdf = filename.lower().endswith(".pdf")
 
-        # 合約 PDF 且含文字層 → 直接抽取文字並分段,略過 OCR(省成本)
-        if is_pdf and document_type == "contract" and has_text_layer(file_contents):
-            logger.info("合約 PDF 含文字層,直接抽取文字並分段(略過 OCR)")
+        # PDF 含文字層 → 直接抽取文字,略過 OCR。
+        #
+        # 2026-09-03 實測(4 頁電子謄本,線上):
+        #   走 OCR      85s,字元錯誤率 14.5%
+        #   走文字層    <1s,**逐字精確**(文字層就是產生該 PDF 的原始字串)
+        # 快 85 倍且零錯誤。台灣的網路申領電子謄本一律含文字層。
+        #
+        # 原本這條路只給 contract。謄本同樣受益,而且受益更大——
+        # 謄本的 OCR 錯誤率(14.5%)高於它在合約上的表現。
+        # 純掃描件不含文字層,has_text_layer 會回 False 自動走 OCR,
+        # 判定門檻 20 字避免掃描件夾帶的少量浮水印文字造成誤判。
+        if is_pdf and has_text_layer(file_contents):
+            logger.info("PDF 含文字層,直接抽取文字(略過 OCR):%s", document_type)
             pages = extract_text_layer_pages(file_contents)
+            # ⚠️ extract_text_layer_pages 只給文字,structured_data 是 None。
+            # 少了這一步,走文字層的文件會拿到完美的文字但**一個欄位都沒有**
+            # ——比走 OCR 還糟,因為使用者看得到字卻拿不到結構化結果。
+            pages = await self._extract_fields_for_text_layer(
+                pages, document_type, enable_llm, few_shot
+            )
             return pages, len(pages)
 
         # 惰性匯入 PyMuPDF(僅 PDF 處理需要),避免未安裝環境匯入 app 失敗

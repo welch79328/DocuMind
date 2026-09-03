@@ -105,9 +105,10 @@ class LLMService:
     def _get_default_model(self) -> str:
         """獲取預設模型"""
         if self.provider == "openai":
-            # 2026-09-01 統一為 gpt-4o-mini。原值 gpt-4o,註解寫「支援視覺,準確率高」;
-            # gpt-4o-mini 同樣支援視覺輸入,雙模態校正路徑不受影響。
-            return "gpt-4o-mini"
+            # 讀 settings,**不要在這裡寫死模型名**。
+            # 2026-09-03 踩過:設定改成 gpt-5.6-terra 後這裡仍回寫死的 gpt-4o-mini,
+            # 造成同一支程式的不同進入點跑不同模型,而且不報錯。
+            return settings.OPENAI_MODEL
         elif self.provider == "anthropic":
             return "claude-3-5-haiku-20241022"  # 快速且便宜
         return ""

@@ -26,9 +26,17 @@ DUMMY_KEY = "sk-test-not-a-real-key"
 
 
 def _resolution_points():
+    """會解析出「主模型」的所有路徑。
+
+    ⚠️ 不含 OPENAI_MODEL_MINI。第一版把它放進來,是因為 2026-09-01 業主決定
+    「統一 gpt-4o-mini」時兩者剛好相同。2026-09-03 改為分工之後
+    (主路徑 gpt-5.6-terra 做校正與欄位抽取,MINI gpt-5.6-luna 做分類/摘要/問答),
+    兩者**本來就該不同**,再要求它們一致是錯的前提。
+
+    MINI 另由 TestConfiguredModelsHavePrices 確保它有價格。
+    """
     return {
         "settings.OPENAI_MODEL": settings.OPENAI_MODEL,
-        "settings.OPENAI_MODEL_MINI": settings.OPENAI_MODEL_MINI,
         "OpenAIProvider 後備": OpenAIProvider(model=None, api_key=DUMMY_KEY).model,
         "create_provider('openai')": create_provider("openai", api_key=DUMMY_KEY).model,
         "LLMService 預設": LLMService(provider="openai", api_key=DUMMY_KEY).model,
@@ -37,12 +45,25 @@ def _resolution_points():
 
 class TestAllResolutionPointsAgree:
     def test_every_point_resolves_to_the_same_model(self):
-        """五個解析點必須一致;漏改任一個就在此失敗"""
+        """主模型的四個解析點必須一致;漏改任一個就在此失敗。
+
+        難點不在改值,在於同一個模型有多個各自獨立的解析點
+        (settings 預設、Provider 後備、create_provider、LLMService 預設),
+        漏掉任一個就會出現「設定寫 A、實際跑 B」。
+        """
         points = _resolution_points()
         distinct = set(points.values())
         assert len(distinct) == 1, (
-            f"OpenAI 模型解析不一致,出現 {sorted(distinct)}:{points}"
+            f"OpenAI 主模型解析不一致,出現 {sorted(distinct)}:{points}"
         )
+
+    def test_mini_is_allowed_to_differ_from_main(self):
+        """MINI 與主模型分工,不要求相同——但兩者都必須有值。
+
+        釘住這件事,是因為第一版誤把它們綁在一起,
+        導致 2026-09-03 改為分工後測試誤報。
+        """
+        assert settings.OPENAI_MODEL and settings.OPENAI_MODEL_MINI
 
     def test_resolved_model_has_a_price_entry(self):
         """模型必須在 _PRICING 有對應,否則成本記錄會靜默用 _DEFAULT_PRICE"""

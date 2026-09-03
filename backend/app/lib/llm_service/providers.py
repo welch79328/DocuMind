@@ -143,7 +143,13 @@ class OpenAIProvider(LLMProvider):
     """OpenAI(雲端)Provider — 封裝既有 OpenAI 呼叫邏輯"""
 
     def __init__(self, model: Optional[str] = None, api_key: Optional[str] = None):
-        self.model = model or "gpt-4o-mini"   # 與 settings.OPENAI_MODEL 一致(2026-09-01 統一)
+        # 後備值一律讀 settings,**不要在這裡再寫一份預設值**。
+        # 2026-09-03 踩過:設定改成 gpt-5.6-terra 後,這裡仍是寫死的 gpt-4o-mini,
+        # 於是「create_provider 走新模型、直接 new Provider 走舊模型」——
+        # 同一支程式跑兩種模型,而且不報錯。
+        from app.config import settings as _settings
+
+        self.model = model or _settings.OPENAI_MODEL
         self._api_key = api_key
         self._client = None
         self.stats = _new_stats()

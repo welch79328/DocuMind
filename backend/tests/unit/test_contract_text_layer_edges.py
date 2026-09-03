@@ -40,8 +40,20 @@ class _FakeDoc:
 
 
 class TestBranchGating:
-    async def test_non_contract_pdf_not_optimized(self):
-        # 謄本 PDF 即使有文字層,也不套用文字層優化(閘控為合約)
+    async def test_non_contract_pdf_also_uses_text_layer(self):
+        """謄本 PDF 含文字層時同樣略過 OCR。
+
+        原本這條斷言的是相反行為(「閘控為合約」)。2026-09-03 查證後改寫:
+
+          原始 commit 5b62994 把文字層列為「合約 pipeline」的特性,
+          謄本那段只寫「PaddleOCR + 浮水印前處理」,**完全沒提文字層**。
+          該處沒有排除謄本的理由——是設計合約那條路時的遺漏,不是決策。
+
+          實測(4 頁電子謄本):走 OCR 85s / CER 14.5%,走文字層 <1s / 逐字精確。
+          謄本的 OCR 錯誤率高於合約,受益更大。
+
+        純掃描件不含文字層,has_text_layer 回 False 自動走 OCR,行為不變。
+        """
         svc = AnalyzeService()
         mock_proc = MagicMock()
         mock_proc.process = AsyncMock(return_value={
@@ -59,9 +71,10 @@ class TestBranchGating:
              patch.object(ProcessorFactory, "get_processor", return_value=mock_proc):
             await svc._process_ocr(b"pdf", "transcript.pdf", "transcript", False)
 
-        # 短路:非合約時甚至不檢查文字層,直接走 OCR
-        mock_has.assert_not_called()
-        mock_proc.process.assert_called()
+        # 現在所有 PDF 都會先問一次文字層
+        mock_has.assert_called_once()
+        # mock_has 預設回傳 MagicMock(truthy),故走文字層分支、不進 OCR
+        mock_proc.process.assert_not_called()
 
 
 class TestMultiPageChunking:
