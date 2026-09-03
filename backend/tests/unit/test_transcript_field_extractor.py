@@ -46,10 +46,20 @@ class TestRegexExtraction:
         assert "land_number" not in result["needs_confirmation"]
 
     async def test_empty_text_all_need_confirmation(self):
+        """空文字時每個 KEY_FIELD 都應進待確認清單。
+
+        2026-09-04 起改為對照 KEY_FIELDS 而非寫死五欄——欄位由 5 擴充到 21 時
+        這條測試會因清單寫死而假失敗,但它要驗的行為（沒有任何欄位被漏掉）
+        跟欄位有幾個無關。核心五欄另外明確斷言,確保擴充不會把它們弄丟。"""
         result = await TranscriptFieldExtractor().extract("")
-        assert set(result["needs_confirmation"]) == {
-            "land_number", "building_number", "area", "rights_scope", "owner"
-        }
+
+        assert set(result["needs_confirmation"]) == set(
+            TranscriptFieldExtractor.KEY_FIELDS
+        )
+        # 核心五欄不得因擴充而遺失
+        assert {"land_number", "building_number", "area", "rights_scope", "owner"} <= set(
+            result["needs_confirmation"]
+        )
         assert result["llm_used_for_extraction"] is False
 
 
