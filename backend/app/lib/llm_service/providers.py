@@ -24,6 +24,13 @@ FewShot = Optional[List[Dict[str, Any]]]
 # 每 1M token 的美元單價 (input, output);找不到時用 _DEFAULT_PRICE。
 # 自架 Provider 無按量計價,一律 0.0。
 _PRICING: Dict[str, tuple] = {
+    # GPT-5 系列(2026-09-03 由第三方彙整站取得,**未經 OpenAI 官方頁核對**)
+    "gpt-5.6-sol": (5.00, 30.00),
+    "gpt-5.6-terra": (2.00, 12.00),
+    "gpt-5.6-luna": (0.20, 1.20),
+    "gpt-5.5": (5.00, 30.00),
+    "gpt-5.4": (2.50, 15.00),
+    "gpt-5-nano": (0.05, 0.40),
     "gpt-4o-mini": (0.150, 0.600),
     "gpt-4o": (2.50, 10.00),
     "claude-opus-5": (5.00, 25.00),
@@ -33,6 +40,28 @@ _PRICING: Dict[str, tuple] = {
     "claude-3-5-haiku": (0.80, 4.00),
 }
 _DEFAULT_PRICE = (0.150, 0.600)
+
+
+def openai_token_limit_kwargs(model: str, max_tokens: int) -> Dict[str, Any]:
+    """回傳 OpenAI chat.completions 的輸出上限參數,依模型家族選鍵名。
+
+    2026-09-03 實測:GPT-5 系列拒絕 `max_tokens`——
+
+        400 invalid_request_error
+        Unsupported parameter: 'max_tokens' is not supported with this model.
+        Use 'max_completion_tokens' instead.
+
+    當天把模型從 gpt-4o-mini 換成 gpt-5.6-terra 後,每一次 LLM 呼叫都以這個
+    400 失敗,而系統的降級設計讓它**靜默退回正則結果**:HTTP 200、
+    llm_pages_used=0、estimated_cost=$0,回應裡完全看不出 LLM 從未跑過。
+    只有翻日誌才找得到。
+
+    以「舊模型用舊鍵」而非「新模型用新鍵」判斷,是因為新模型會一直出,
+    而舊模型清單是封閉的——預設走新鍵,漏掉的新模型才不會壞。
+    """
+    legacy_prefixes = ("gpt-4", "gpt-3.5", "o1", "o3")
+    key = "max_tokens" if model.startswith(legacy_prefixes) else "max_completion_tokens"
+    return {key: max_tokens}
 
 
 def _new_stats() -> Dict[str, Any]:
@@ -142,8 +171,8 @@ class OpenAIProvider(LLMProvider):
         response = await self._get_client().chat.completions.create(
             model=self.model,
             messages=[{"role": "user", "content": content}],
-            max_tokens=max_tokens,
             temperature=temperature,
+            **openai_token_limit_kwargs(self.model, max_tokens),
         )
 
         self.stats["llm_calls"] += 1
