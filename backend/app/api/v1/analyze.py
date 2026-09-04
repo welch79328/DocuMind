@@ -14,7 +14,11 @@ from sqlalchemy import func as sa_func
 from sqlalchemy.orm import Session
 
 from app.schemas.analyze import AnalyzeResponse
-from app.services.analyze_service import AnalyzeService, _merge_page_structured_data
+from app.services.analyze_service import (
+    AnalyzeService,
+    _merge_page_structured_data,
+    _scored_fields_from_pages,
+)
 from app.database import get_db
 from app.models.api_usage_log import ApiUsageLog
 from app.lib.document_types import (
@@ -122,7 +126,23 @@ def _apply_confidence_gating(result: dict, db: Session) -> None:
     if not isinstance(field_confidences, dict):
         field_confidences = {}
 
-    decision = QualityAssessor().assess(overall_ocr_confidence, field_confidences)
+    # 複核判定只看「應評分的欄位」,與 document_fields 的重算採同一組。
+    #
+    # 2026-09-04 實測:NFKC 修正後 17 個欄位全為 0.9、needs_confirmation 為空,
+    # needs_review 卻仍是 True——因為 QualityAssessor 取最差值,而
+    # field_confidences 裡還有 6 個選配欄位是 0.0(附屬建物、共有部分、
+    # 查封註記等,這份謄本本來就沒有)。等於一份抽得完整的謄本,
+    # 因為「沒有附屬建物」「沒有被查封」而被判定需要人工複核。
+    #
+    # field_confidences 仍完整回傳給下游(它要知道每個欄位的狀態),
+    # 只是判定時排除從未出現在任何一頁的選配欄位。
+    scored_keys = _scored_fields_from_pages(pages)
+    gating_confidences = (
+        {k: v for k, v in field_confidences.items() if k in scored_keys}
+        if scored_keys else field_confidences
+    )
+
+    decision = QualityAssessor().assess(overall_ocr_confidence, gating_confidences)
 
     result["needs_review"] = decision["needs_review"]
     result["field_confidences"] = field_confidences

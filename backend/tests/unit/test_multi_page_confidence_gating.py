@@ -72,3 +72,70 @@ class TestMultiPageConfidenceTakesMax:
             f"欄位彙整後皆為高信心度,不應判定需複核。實際 field_confidences="
             f"{result['field_confidences']}"
         )
+
+
+class TestOptionalFieldsDoNotForceReview:
+    """選配欄位缺席不得觸發人工複核。
+
+    2026-09-04 實測：NFKC 修正後一份謄本抽到 17/23 欄、全部 0.9、
+    needs_confirmation 為空，needs_review 卻仍是 True——因為
+    QualityAssessor 取最差值，而 field_confidences 裡還有 6 個選配欄位
+    是 0.0（附屬建物、共有部分、查封註記等，這份謄本本來就沒有）。
+
+    等於一份抽得完整的謄本，因為「沒有附屬建物」「沒有被查封」而被判需複核。
+    """
+
+    def _page_with_optional_zeros(self):
+        return {
+            "ocr_raw": {"text": "x", "confidence": 0.95},
+            "structured_data": {
+                "land_number": "0555-0000",
+                "owner": "林順山",
+                # 選配欄位：這份文件本來就沒有
+                "seizure_mark": None,
+                "shared_area": None,
+                "field_confidences": {
+                    "land_number": 0.9,
+                    "owner": 0.9,
+                    "seizure_mark": 0.0,
+                    "shared_area": 0.0,
+                },
+                # 抽取器已依 REQUIRED_FIELDS 算好：選配欄位不在待確認清單
+                "needs_confirmation": [],
+            },
+        }
+
+    def test_optional_zero_confidence_does_not_trigger_review(self, feedback_session):
+        result = {
+            "document_type": "transcript",
+            "pages": [self._page_with_optional_zeros()],
+        }
+        _apply_confidence_gating(result, feedback_session)
+
+        assert result["needs_review"] is False, (
+            "選配欄位（沒有附屬建物、沒有查封）不該讓完整的謄本被判需複核。"
+            f"實際 field_confidences={result['field_confidences']}"
+        )
+
+    def test_field_confidences_still_reported_in_full(self, feedback_session):
+        """判定時排除選配欄位，但回傳給下游的仍須完整——下游要知道每欄的狀態"""
+        result = {
+            "document_type": "transcript",
+            "pages": [self._page_with_optional_zeros()],
+        }
+        _apply_confidence_gating(result, feedback_session)
+
+        assert "seizure_mark" in result["field_confidences"]
+        assert result["field_confidences"]["seizure_mark"] == 0.0
+
+    def test_required_field_missing_still_triggers_review(self, feedback_session):
+        """必要欄位真的沒抽到時，仍須進複核——不能為了放行就全部忽略"""
+        page = self._page_with_optional_zeros()
+        page["structured_data"]["field_confidences"]["land_number"] = 0.0
+        page["structured_data"]["land_number"] = None
+        page["structured_data"]["needs_confirmation"] = ["land_number"]
+
+        result = {"document_type": "transcript", "pages": [page]}
+        _apply_confidence_gating(result, feedback_session)
+
+        assert result["needs_review"] is True
