@@ -88,5 +88,21 @@ class TestNormalizerItself:
         assert TranscriptFieldExtractor._normalize_for_matching(None) == ""
 
     def test_plain_text_unchanged(self):
-        text = "權利範圍：全部"
+        """已是標準碼位、且不含全形字元的文字,NFKC 後應原樣不動。
+
+        ⚠️ 這裡刻意用半形冒號。原本寫的是全形「：」(U+FF1A),但 NFKC 的職責
+        之一就是全形轉半形(修正說明列的第三類),全形冒號必然被轉成半形——
+        測試前提與修正目的自相矛盾,不是程式有錯。
+        """
+        text = "權利範圍:全部"          # 半形冒號,全部字元皆為標準碼位
         assert TranscriptFieldExtractor._normalize_for_matching(text) == text
+
+    def test_fullwidth_colon_is_normalized_to_halfwidth(self):
+        """全形冒號應被轉為半形——這是 NFKC 要做的事,不是副作用。
+
+        謄本標籤常見全形冒號「權利範圍：」,而樣式用的是 [:：] 兩者皆收;
+        正規化讓兩種寫法在比對階段收斂成同一形態。
+        """
+        assert TranscriptFieldExtractor._normalize_for_matching("權利範圍：全部") == (
+            "權利範圍:全部"
+        )
