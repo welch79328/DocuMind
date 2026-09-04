@@ -122,6 +122,24 @@ class Settings(BaseSettings):
     OCR_MAX_RENDER_PIXELS: int = 1_000_000                  # A4 約 102 DPI
     OCR_RENDER_DPI: int = 300                               # 目標 DPI,受上方像素上限約束
 
+    # 上傳影像(非 PDF)進入 OCR 前的點陣上限。**與上面的 PDF 常數刻意分開,不要合併。**
+    #
+    # 兩條路徑的記憶體剖面不同:
+    #   PDF   fitz 渲染 → PNG bytes → Image.open → convert RGB → ndarray
+    #   影像  原檔 bytes → Image.open → convert RGB → **再存一份 PNG** → base64(×1.33)
+    # 影像路徑多出「重新編碼 PNG + base64 原圖」這一段(見 multi_type_ocr/processor.py
+    # 的 process()),PDF 路徑沒有。而 OCR_MAX_RENDER_PIXELS 的實測表(上方)與
+    # test_oom_guards.py 的 MEASURED_SAFE_MAX_PIXELS 全都是拿 **PDF 渲染後的內文頁**
+    # 校準的,那張表自己也寫明「記憶體主要由文字密度決定,不是像素數」。
+    # 共用一個常數會讓其中一邊失準,且任一邊要調就會動到另一邊。
+    #
+    # 初值取與 PDF 相同的 1.0M,理由是下游是同一組 OCR 引擎,而 PDF 路徑已實測
+    # 1.0M 可完成。**這是承接既有實測值,不是影像路徑自己的校準結果**——
+    # 要調整前,用 scripts/measure_ocr_memory.py 餵一張影像實測,不要沿用上面那張表。
+    #
+    # 設為 0 或負數表示停用縮圖(與 OCR_MAX_RENDER_PIXELS 的 0 語意一致)。
+    OCR_MAX_IMAGE_PIXELS: int = 1_000_000
+
     # 同時可執行 OCR 的頁數上限。**這是記憶體的閘門,不是效能旋鈕。**
     # 2026-09-03 實測:單頁 OCR 峰值 1141–1778 MB,而 backend 容器可用約 1695 MB
     # (上限 2048 − 應用程式本身約 353)。兩頁同時跑必然 OOM,而在此之前

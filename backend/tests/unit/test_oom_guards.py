@@ -1,13 +1,16 @@
-"""2026-08-24 OOM 事故的三道防線。
+"""2026-08-24 OOM 事故的防線(2026-09-04 由三道增為四道)。
 
 事故:在線上機器(3.7GB、容器無 mem_limit)以 300 DPI 渲染合約頁 + 去噪 +
 雙引擎並行跑 OCR,`docker inspect .State.OOMKilled` 為 true,
 主機 load average 衝到 51.35(2 vCPU),一頁都沒產出。
 
-三道防線各自獨立,任一道被拆掉都應該讓這裡變紅:
-  1. 渲染像素上限   —— 從源頭縮小單頁的點陣尺寸
+四道防線各自獨立,任一道被拆掉都應該讓這裡變紅:
+  1. 渲染像素上限   —— 從源頭縮小單頁的點陣尺寸(PDF 路徑)
   2. 並行記憶體守衛 —— 記憶體吃緊時退回循序(峰值由「相加」變回「取大」)
   3. 容器 mem_limit —— 在 docker-compose.yml,由 test_compose_has_mem_limits 顧
+  4. 影像像素上限   —— 上傳影像(非 PDF)進 OCR 前的點陣上限,2026-09-04 補
+                       在此之前影像路徑完全沒有上限:analyze_service 對非 PDF
+                       走 `page_bytes = file_contents`,原檔直接進解碼
 """
 
 import asyncio
@@ -231,3 +234,144 @@ class TestComposeHasMemLimits:
         assert not missing, (
             f"這些容器沒有 mem_limit,可吃光主機記憶體:{sorted(missing)}"
         )
+
+
+class TestImagePixelCap:
+    """防線 4:上傳影像進 OCR 前必須被縮到 OCR_MAX_IMAGE_PIXELS 以內。
+
+    斷言刻意落在 **analyze() 實際收到的影像尺寸** 上,而不是 _cap_image_pixels()
+    的回傳值——後者是被測函式自己說的話。process() 在縮圖之後還會存一份 PNG
+    並轉 base64,那兩個消費者拿到的必須也是縮過的,所以這裡連 original_image
+    一起驗。
+    """
+
+    CAP_KEY = "OCR_MAX_IMAGE_PIXELS"
+
+    @staticmethod
+    def _png_bytes(width: int, height: int) -> bytes:
+        """產一張指定尺寸的 PNG。用雜訊而非純色——純色 PNG 會被壓到極小,
+        且某些路徑對單色影像有捷徑,測不到真實行為。"""
+        import io
+
+        import numpy as np
+        from PIL import Image
+
+        rng = np.random.default_rng(seed=1234)
+        arr = rng.integers(0, 256, size=(height, width, 3), dtype="uint8")
+        buf = io.BytesIO()
+        Image.fromarray(arr).save(buf, format="PNG")
+        return buf.getvalue()
+
+    @staticmethod
+    def _processor():
+        """最小的具體 DocumentProcessor:記下 analyze() 收到的影像尺寸。"""
+        from app.lib.multi_type_ocr.processor import DocumentProcessor
+
+        class _Recording(DocumentProcessor):
+            def __init__(self):
+                self.seen_size = None
+
+            async def analyze(self, image, image_data=None,
+                              enable_llm=False, few_shot=None):
+                self.seen_size = image.size
+                return {}
+
+        return _Recording()
+
+    async def _run(self, width, height):
+        proc = self._processor()
+        result = await proc.process(
+            file_contents=self._png_bytes(width, height),
+            filename="test.png",
+            page_number=1,
+            total_pages=1,
+            enable_llm=False,
+        )
+        return proc, result
+
+    async def test_oversized_image_is_capped(self):
+        """超過上限的影像,下游收到的必須已經縮到上限以內"""
+        cap = settings.OCR_MAX_IMAGE_PIXELS
+        # 前置斷言:測試輸入必須真的超標,否則測到的是「不縮圖」而非「縮圖」
+        assert 2000 * 1500 > cap, (
+            f"測試影像 3.0M 像素未超過上限 {cap};上限被調高了,請換更大的測試影像"
+        )
+
+        proc, _ = await self._run(2000, 1500)
+        seen_pixels = proc.seen_size[0] * proc.seen_size[1]
+        assert seen_pixels <= cap, (
+            f"analyze() 收到 {seen_pixels/1e6:.2f}M 像素,超過上限 {cap/1e6:.2f}M"
+        )
+
+    async def test_aspect_ratio_is_preserved(self):
+        """縮圖不得變形——4:3 進去必須還是 4:3 出來"""
+        proc, _ = await self._run(2000, 1500)
+        w, h = proc.seen_size
+        assert abs((w / h) - (2000 / 1500)) < 0.01, f"長寬比跑掉了:{w}x{h}"
+
+    async def test_small_image_is_untouched(self):
+        """未超標的影像不得被無謂處理——上限只在超標時生效"""
+        cap = settings.OCR_MAX_IMAGE_PIXELS
+        assert 400 * 300 < cap, "測試影像已不算小,請換更小的尺寸"
+
+        proc, _ = await self._run(400, 300)
+        assert proc.seen_size == (400, 300), (
+            f"小影像被動了:400x300 → {proc.seen_size}"
+        )
+
+    async def test_original_image_reflects_the_cap(self):
+        """回傳的 original_image base64 也必須是縮過的。
+
+        它會整份進記憶體、進 API 回應、進 VLM 的請求;若這裡還是原尺寸,
+        縮圖省下的記憶體會在這一步全部吐回去。
+        """
+        import base64
+        import io
+
+        from PIL import Image
+
+        _, result = await self._run(2000, 1500)
+        raw = result["original_image"].split("base64,", 1)[-1]
+        with Image.open(io.BytesIO(base64.b64decode(raw))) as img:
+            pixels = img.size[0] * img.size[1]
+        assert pixels <= settings.OCR_MAX_IMAGE_PIXELS, (
+            f"original_image 有 {pixels/1e6:.2f}M 像素,沒有跟著縮"
+        )
+
+    async def test_cap_can_be_disabled(self):
+        """上限設 0 時停用縮圖(與 OCR_MAX_RENDER_PIXELS 的 0 語意一致)"""
+        original = settings.OCR_MAX_IMAGE_PIXELS
+        try:
+            settings.OCR_MAX_IMAGE_PIXELS = 0
+            proc, _ = await self._run(2000, 1500)
+            assert proc.seen_size == (2000, 1500), (
+                f"上限已停用卻仍縮圖:{proc.seen_size}"
+            )
+        finally:
+            settings.OCR_MAX_IMAGE_PIXELS = original
+
+    # 影像路徑的記憶體剖面與 PDF 不同(多一份 PNG 重新編碼 + base64 的 1.33 倍),
+    # 但初值是**承接** PDF 路徑的實測值,不是影像自己量出來的。在影像路徑有自己的
+    # 實測數字之前,安全上界沿用同一個值——要調高請先用
+    # `scripts/measure_ocr_memory.py <影像檔>` 實測,不要沿用 PDF 那張表。
+    INHERITED_SAFE_MAX_PIXELS = 1_000_000
+
+    def test_cap_is_within_the_inherited_safe_ceiling(self):
+        assert 0 < settings.OCR_MAX_IMAGE_PIXELS <= self.INHERITED_SAFE_MAX_PIXELS, (
+            f"OCR_MAX_IMAGE_PIXELS={settings.OCR_MAX_IMAGE_PIXELS} 高於承接自 PDF "
+            f"路徑的安全值 {self.INHERITED_SAFE_MAX_PIXELS};影像路徑另有 PNG 重新"
+            f"編碼與 base64 放大的成本,調高前請以影像實測"
+        )
+
+    def test_image_cap_is_a_separate_knob_from_the_pdf_cap(self):
+        """兩個常數必須各自獨立存在。
+
+        合併成一個會讓 PDF 的校準表(用內文頁量的)被套到剖面不同的影像路徑上,
+        且任一邊要調就會動到另一邊。
+        """
+        assert hasattr(settings, "OCR_MAX_IMAGE_PIXELS")
+        assert hasattr(settings, "OCR_MAX_RENDER_PIXELS")
+        assert (
+            type(settings).model_fields["OCR_MAX_IMAGE_PIXELS"]
+            is not type(settings).model_fields["OCR_MAX_RENDER_PIXELS"]
+        ), "兩個上限被指向同一個設定欄位"

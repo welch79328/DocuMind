@@ -23,6 +23,49 @@ from .types import PageResult
 logger = logging.getLogger(__name__)
 
 
+def _cap_image_pixels(image: Image.Image) -> Image.Image:
+    """把上傳影像縮到 settings.OCR_MAX_IMAGE_PIXELS 以內,就地修改並回傳同一物件。
+
+    **為什麼一定要在這裡、而且要在 convert("RGB") 之前。**
+
+    PDF 那條路徑早就有上限(analyze_service._render_scale 在渲染時就把單頁壓到
+    OCR_MAX_RENDER_PIXELS),但影像路徑一直沒有對應的東西:非 PDF 的上傳在
+    analyze_service 走的是 `page_bytes = file_contents`,原檔直接送進這裡。
+    一張 12MP 手機照片因此會以完整解析度穿過整條管線,而下游還要再存一份 PNG
+    並轉 base64(×1.33)。容器 mem_limit 只有 2g、單頁 OCR 實測峰值已達 1141–1778MB。
+
+    放在 convert("RGB") **之前**是有意義的,不是順手:Image.open 是惰性的,
+    此時尚未解碼;thumbnail() 對 JPEG 會先呼叫 draft(),讓解碼器直接以縮小後的
+    尺度解出來,省掉「先解成全尺寸再縮」的那一份記憶體。放到 convert 之後就沒有
+    這個好處了——那時全尺寸的點陣已經在記憶體裡。
+
+    上限設為 0 或負數表示停用(與 OCR_MAX_RENDER_PIXELS 的 0 語意一致)。
+    """
+    from app.config import settings
+
+    cap = settings.OCR_MAX_IMAGE_PIXELS
+    if cap <= 0:
+        return image
+
+    width, height = image.size
+    pixels = width * height
+    if pixels <= cap:
+        return image
+
+    # thumbnail 就地修改且保持長寬比;給定的框以等比例縮到剛好貼齊上限
+    scale = (cap / pixels) ** 0.5
+    target = (max(1, int(width * scale)), max(1, int(height * scale)))
+    image.thumbnail(target, Image.LANCZOS)
+
+    logger.info(
+        "上傳影像超過上限,已縮小:%dx%d (%.2fM 像素) → %dx%d (%.2fM 像素),上限 %.2fM",
+        width, height, pixels / 1e6,
+        image.size[0], image.size[1], (image.size[0] * image.size[1]) / 1e6,
+        cap / 1e6,
+    )
+    return image
+
+
 class DocumentProcessor(ABC):
     """文件處理器共同基類:定義 analyze 契約與 process 模板"""
 
@@ -54,6 +97,7 @@ class DocumentProcessor(ABC):
         logger.info(f"開始處理頁面 {page_number}/{total_pages}: {filename}")
         try:
             loaded_image = Image.open(io.BytesIO(file_contents))
+            loaded_image = _cap_image_pixels(loaded_image)
             image = loaded_image.convert("RGB") if loaded_image.mode != "RGB" else loaded_image
 
             original_image_bytes = io.BytesIO()
