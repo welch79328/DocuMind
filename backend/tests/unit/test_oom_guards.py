@@ -338,6 +338,34 @@ class TestImagePixelCap:
             f"original_image 有 {pixels/1e6:.2f}M 像素,沒有跟著縮"
         )
 
+    @pytest.mark.parametrize("width,height", [
+        (2_000_000, 1),      # 實測曾得到 1.414M 像素
+        (8_000_000, 2),      # 實測曾得到 2.000M 像素
+    ])
+    async def test_degenerate_aspect_ratio_still_respects_the_cap(self, width, height):
+        """退化長寬比不得突破上限。
+
+        2026-09-04 的迴歸:縮放後短邊 < 1 會被 max(1, ...) 抬回 1,而 thumbnail
+        保持長寬比,於是長邊成了唯一約束,面積與 cap 脫鉤。這條測的正是那個缺口
+        ——若有人把 processor 裡「以面積反推長邊」那段拿掉,這裡必須變紅。
+
+        用細長條而非大方圖,是為了讓記憶體維持在測試可接受的範圍
+        (2_000_000x1 的 RGB 點陣只有 6MB)。
+        """
+        proc, result = await self._run(width, height)
+        seen = proc.seen_size[0] * proc.seen_size[1]
+        assert seen <= settings.OCR_MAX_IMAGE_PIXELS, (
+            f"{width}x{height} 縮成 {proc.seen_size} = {seen/1e6:.3f}M 像素,"
+            f"超過上限 {settings.OCR_MAX_IMAGE_PIXELS/1e6:.3f}M"
+        )
+
+    async def test_degenerate_aspect_ratio_keeps_both_sides_positive(self):
+        """修正面積的同時,兩邊都不得變成 0——0 會讓下游解碼直接爆掉"""
+        proc, _ = await self._run(2_000_000, 1)
+        assert proc.seen_size[0] >= 1 and proc.seen_size[1] >= 1, (
+            f"邊長出現 0:{proc.seen_size}"
+        )
+
     async def test_cap_can_be_disabled(self):
         """上限設 0 時停用縮圖(與 OCR_MAX_RENDER_PIXELS 的 0 語意一致)"""
         original = settings.OCR_MAX_IMAGE_PIXELS

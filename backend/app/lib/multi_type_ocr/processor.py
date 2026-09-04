@@ -34,10 +34,19 @@ def _cap_image_pixels(image: Image.Image) -> Image.Image:
     一張 12MP 手機照片因此會以完整解析度穿過整條管線,而下游還要再存一份 PNG
     並轉 base64(×1.33)。容器 mem_limit 只有 2g、單頁 OCR 實測峰值已達 1141–1778MB。
 
-    放在 convert("RGB") **之前**是有意義的,不是順手:Image.open 是惰性的,
-    此時尚未解碼;thumbnail() 對 JPEG 會先呼叫 draft(),讓解碼器直接以縮小後的
-    尺度解出來,省掉「先解成全尺寸再縮」的那一份記憶體。放到 convert 之後就沒有
-    這個好處了——那時全尺寸的點陣已經在記憶體裡。
+    放在 convert("RGB") **之前**是有意義的,不是順手——但好處比直覺小,寫清楚免得
+    下次有人拿它當理由做別的決定:
+
+    (a) 對所有格式都成立的好處:避免「先把全尺寸轉成 RGB、再縮」那一份複本。
+    (b) 對 JPEG **有條件**成立的好處:thumbnail() 會先呼叫 draft() 讓解碼器以
+        1/2、1/4、1/8 的尺度直接解碼。但 thumbnail 的 reducing_gap=2.0 會把要求的
+        框放大兩倍,而 JPEG 的 DCT 縮放只有 1/2/4/8 這幾個分母,兩者相乘的結果是
+        **像素比要 >= 16 倍才會啟動**。2026-09-04 側錄 draft 實測(Pillow 11.3.0):
+            4000x3000 (12.0M) → 1.0M:draft 被呼叫,但尺寸不變——未生效(只有 12 倍)
+            4620x3464 (16.0M) → 1.0M:(4620,3464) → (2310,1732)——減半解碼生效
+        也就是說,最常見的 12MP 手機照剛好落在門檻**下方**,只拿得到 (a)。
+
+    放到 convert 之後只會更差或持平,所以位置仍是對的。
 
     上限設為 0 或負數表示停用(與 OCR_MAX_RENDER_PIXELS 的 0 語意一致)。
     """
@@ -54,8 +63,28 @@ def _cap_image_pixels(image: Image.Image) -> Image.Image:
 
     # thumbnail 就地修改且保持長寬比;給定的框以等比例縮到剛好貼齊上限
     scale = (cap / pixels) ** 0.5
-    target = (max(1, int(width * scale)), max(1, int(height * scale)))
-    image.thumbnail(target, Image.LANCZOS)
+    target_w = max(1, int(width * scale))
+    target_h = max(1, int(height * scale))
+
+    # ⚠️ 退化長寬比的修正,不要拿掉。
+    #
+    # 上面的 max(1, ...) 是必要的(邊長不能是 0),但它會**破壞面積約束**:
+    # 當短邊 * scale < 1 被抬回 1,thumbnail 保持長寬比,於是長邊成了唯一約束,
+    # 結果面積 = 長邊 x 1,與 cap 完全脫鉤。
+    #
+    # 2026-09-04 實測(cap = 1.0M):
+    #     2_000_000 x 1  → 1_414_213 x 1 = 1.414M  超標 1.41 倍
+    #     8_000_000 x 2  → 2_000_000 x 1 = 2.000M  超標 2.00 倍
+    # 上界受 Image.MAX_IMAGE_PIXELS(Pillow 預設 89,478,485)約束,約 9.5 倍上限。
+    #
+    # 短邊已被釘在 1,沒有再縮的空間,所以改以面積反推長邊。
+    if target_w * target_h > cap:
+        if target_w >= target_h:
+            target_w = max(1, int(cap / target_h))
+        else:
+            target_h = max(1, int(cap / target_w))
+
+    image.thumbnail((target_w, target_h), Image.LANCZOS)
 
     logger.info(
         "上傳影像超過上限,已縮小:%dx%d (%.2fM 像素) → %dx%d (%.2fM 像素),上限 %.2fM",
