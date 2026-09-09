@@ -28,6 +28,7 @@ class DocumentType(str, Enum):
     BILL = "bill"                  # 帳單(水電/管理費等)
     CONTRACT = "contract"          # 合約 PDF
     REPAIR_PHOTO = "repair_photo"  # 修繕照片(影像理解)
+    HANDOVER_PHOTO = "handover_photo"  # 點交照片(影像理解)
 
 
 # 舊型別體系 → 權威列舉 的映射
@@ -77,6 +78,7 @@ TYPE_ALLOWED_EXTENSIONS: Dict[DocumentType, Set[str]] = {
     DocumentType.BILL: set(SUPPORTED_EXTENSIONS),
     DocumentType.CONTRACT: set(SUPPORTED_EXTENSIONS),
     DocumentType.REPAIR_PHOTO: set(_IMAGE_EXTENSIONS),
+    DocumentType.HANDOVER_PHOTO: set(_IMAGE_EXTENSIONS),
 }
 
 

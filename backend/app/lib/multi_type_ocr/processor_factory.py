@@ -13,6 +13,7 @@ from .transcript_processor import TranscriptProcessor
 from .contract_processor import ContractProcessor
 from .bill_processor import BillProcessor
 from .repair_photo_processor import RepairPhotoProcessor
+from .handover_photo_processor import HandoverPhotoProcessor
 
 logger = logging.getLogger(__name__)
 
@@ -131,3 +132,4 @@ ProcessorFactory.register_processor("transcript", TranscriptProcessor)
 ProcessorFactory.register_processor("contract", ContractProcessor)
 ProcessorFactory.register_processor("bill", BillProcessor)
 ProcessorFactory.register_processor("repair_photo", RepairPhotoProcessor)
+ProcessorFactory.register_processor("handover_photo", HandoverPhotoProcessor)

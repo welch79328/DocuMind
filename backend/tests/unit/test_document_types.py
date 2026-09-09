@@ -22,9 +22,11 @@ from app.lib.document_types import (
 class TestDocumentTypeEnum:
     """權威列舉定義"""
 
-    def test_has_four_canonical_types(self):
+    def test_has_five_canonical_types(self):
         values = {t.value for t in DocumentType}
-        assert values == {"transcript", "bill", "contract", "repair_photo"}
+        assert values == {
+            "transcript", "bill", "contract", "repair_photo", "handover_photo",
+        }
 
     def test_enum_member_equals_string_value(self):
         # str Enum:成員可與其字串值直接比較,確保向後相容
@@ -40,6 +42,7 @@ class TestNormalizeDocumentType:
         ("bill", DocumentType.BILL),
         ("contract", DocumentType.CONTRACT),
         ("repair_photo", DocumentType.REPAIR_PHOTO),
+        ("handover_photo", DocumentType.HANDOVER_PHOTO),
     ])
     def test_canonical_passthrough(self, value, expected):
         assert normalize_document_type(value) == expected
