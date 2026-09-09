@@ -28,8 +28,8 @@
 └── Deployment: Railway / Render
 
 AI 服務層
-├── LLM: OpenAI GPT-4 / Anthropic Claude
-├── OCR: AWS Textract / pytesseract
+├── LLM: OpenAI GPT-5.6（terra / luna，見 §4.1 現況）
+├── OCR: PaddleOCR + Tesseract（**Textract 已不使用**，見 §4.2 現況）
 ├── PDF Processing: PyPDF2 / pdfplumber
 └── Vector DB: (未來擴展)
 
@@ -323,6 +323,23 @@ class Document(Base):
 
 ### 4.1 LLM 模型選擇
 
+> 📌 **現況（2026-09-10 查證）——以下選型理由仍成立，但模型與價格已換代。**
+>
+> | 用途 | 實際模型 | 定價 / 1M |
+> |---|---|---|
+> | 欄位抽取（讀圖）、修繕/點交照片理解 | `gpt-5.6-terra` | $2.00 / $12.00 |
+> | 全文校正 | `gpt-5.6-luna` | $0.20 / $1.20 |
+> | 分類、摘要、問答 | `gpt-5.6-luna` | $0.20 / $1.20 |
+>
+> 校正與抽取刻意分開：校正是純文字改錯字且輸出重（佔 LLM 成本約七成），
+> Terra 對 Luna 只贏 0.4 分；抽取要讀圖並認出地號建號，Terra 領先 4 分。
+> 設定鍵為 `OPENAI_MODEL` 與 `OPENAI_MODEL_CORRECTION`（見 `app/config.py`）。
+>
+> 實測全域平均約 **$0.0050/頁**（只有約 28% 的頁面觸發 LLM）。
+> Anthropic 與自架 `local_qwen` 兩個 Provider 已實作但未啟用。
+>
+> 下方 GPT-4o 段落是 2026-03 的選型記錄，**價格與模型均已過期**，保留供追溯。
+
 #### **推薦方案：OpenAI GPT-4o**
 
 ✅ **優點**
@@ -401,6 +418,24 @@ npm install @anthropic-ai/sdk
 ---
 
 ### 4.2 OCR 服務選擇
+
+> 📌 **現況（2026-09-10 查證）——最終沒有採用 Textract。**
+>
+> | 路徑 | 實際引擎 |
+> |---|---|
+> | `/api/v1/analyze`（現行） | **PaddleOCR 3.7.0**（ONNX Runtime 執行器）+ Tesseract |
+> | `/api/v1/documents`（已停用） | `pytesseract` 單獨 |
+> | AWS Textract | **未使用** |
+>
+> **Textract 的預設值 2026-08-24 已被刻意改掉**：原預設會讓任何沒設
+> `OCR_SERVICE` 的部署一開機就呼叫 AWS Textract——計費，且文件內容送出到 AWS。
+> 詳見 `app/config.py` 的 `OCR_SERVICE` 註解。
+>
+> 另有一條更關鍵的分流：**含文字層的 PDF 直接讀原始字串、完全略過 OCR**
+> （4 頁 0.6 秒、字元錯誤率 0.15%，對比走 OCR 的 85 秒 / 14.5%）。
+> 台灣網路申領的電子謄本一律含文字層，所以多數請求根本不經過 OCR 引擎。
+>
+> 下方 Textract 段落是 2026-03 的選型記錄，保留供追溯。
 
 #### **推薦方案：AWS Textract**
 

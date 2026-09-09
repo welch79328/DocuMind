@@ -1,3 +1,22 @@
+> ⚠️ **本文描述的是「已停用路徑」的提示詞(2026-09-10 查證)。**
+>
+> 文中的 `app/prompts/*` 全庫只有 `app/lib/ai_service.py` 在使用,而那條路是
+> `/api/v1/documents`——已標記 `include_in_schema=False`,不進 OpenAPI,
+> **不建議新系統串接**。
+>
+> **現行 `/api/v1/analyze` 的提示詞不在這裡**,分散在:
+> - 全文校正:`app/lib/ocr_enhanced/dual_modal_corrector.py` 的 `build_correction_prompt()`
+>   (含 OCR 錯字對照表與謄本格式範例)
+> - 欄位抽取:`app/lib/multi_type_ocr/field_extraction_base.py` 的 `_extract_with_llm()`
+>   與各 field extractor 的 `FIELD_LABELS`
+> - 影像理解:`repair_photo_processor.py`、`handover_photo_processor.py` 的 `understand()`
+>
+> 另注意本文的文件分類法(`lease_contract` / `repair_quote` / `id_card`)是舊體系;
+> 權威列舉見 `app/lib/document_types.py`:
+> `transcript` / `bill` / `contract` / `repair_photo` / `handover_photo`。
+
+---
+
 # AI Document Intelligence Demo - AI Prompt 設計文檔
 
 ## 1. Prompt 設計原則

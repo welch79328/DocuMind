@@ -56,7 +56,7 @@
 | [API 對接規格](./docs/api/INTEGRATION.md) | 給外部系統的串接文件（端點、欄位、錯誤碼、實測數據） |
 | [前端設計](./docs/frontend/01-FRONTEND-DESIGN.md) | 頁面設計、元件規格 |
 | [AI Prompt 設計](./docs/ai/01-AI-PROMPT-DESIGN.md) | AI Prompt 模板 |
-| [開發實施計劃](./docs/planning/02-IMPLEMENTATION-PLAN.md) | 4 週開發計劃 |
+| [開發實施計劃（已退休）](./docs/archive/2026-03-IMPLEMENTATION-PLAN.md) | 4 週開發計劃 |
 | [技術棧選型](./docs/planning/03-TECH-STACK.md) | 技術選擇、成本估算 |
 
 ---
@@ -417,7 +417,7 @@ DocuMind/
 
 1. ✅ 閱讀 [`docs/`](./docs/) 中的完整技術文件
 2. ✅ 準備開發環境與 API Keys
-3. ✅ 按照[開發實施計劃](./docs/planning/02-IMPLEMENTATION-PLAN.md)開始 Week 1
+3. ✅ 按照[開發實施計劃（已退休）](./docs/archive/2026-03-IMPLEMENTATION-PLAN.md)開始 Week 1
 4. ✅ 享受打造 AI 產品的樂趣！
 
 **祝開發順利！🚀**

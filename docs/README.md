@@ -7,7 +7,7 @@
 | 文件 | 說明 | 狀態 |
 |------|------|------|
 | [01-MVP-SCOPE.md](./planning/01-MVP-SCOPE.md) | MVP 範圍定義、功能優先級、成功標準 | ✅ 完成 |
-| [02-IMPLEMENTATION-PLAN.md](./planning/02-IMPLEMENTATION-PLAN.md) | 4 週詳細開發計劃、每日任務清單 | ✅ 完成 |
+| [02-IMPLEMENTATION-PLAN.md（已退休）](./archive/2026-03-IMPLEMENTATION-PLAN.md) | 4 週詳細開發計劃、每日任務清單 | ✅ 完成 |
 | [03-TECH-STACK.md](./planning/03-TECH-STACK.md) | 技術棧選型、成本估算、風險評估 | ✅ 完成 |
 
 ### 2. 系統架構 (Architecture)
@@ -51,7 +51,7 @@
 1. **[MVP 範圍定義](./planning/01-MVP-SCOPE.md)** - 了解要做什麼
 2. **[系統架構設計](./architecture/01-SYSTEM-ARCHITECTURE.md)** - 了解怎麼做
 3. **[技術棧選型](./planning/03-TECH-STACK.md)** - 了解用什麼做
-4. **[開發實施計劃](./planning/02-IMPLEMENTATION-PLAN.md)** - 了解何時做
+4. **[開發實施計劃（已退休）](./archive/2026-03-IMPLEMENTATION-PLAN.md)** - 了解何時做
 5. **[資料庫設計](./database/01-DATABASE-DESIGN.md)** - 資料結構
 6. **[API 對接規格](./api/INTEGRATION.md)** - 接口設計
 7. **[前端設計](./frontend/01-FRONTEND-DESIGN.md)** - UI 實作

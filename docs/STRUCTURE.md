@@ -53,7 +53,7 @@ docs/
 
 | 文件 | 說明 | 目標讀者 | 預估閱讀時間 |
 |------|------|----------|--------------|
-| [02-IMPLEMENTATION-PLAN.md](./planning/02-IMPLEMENTATION-PLAN.md) | 4 週開發計劃、每日任務 | 全體開發團隊 | 30 分鐘 |
+| [02-IMPLEMENTATION-PLAN.md（已退休）](./archive/2026-03-IMPLEMENTATION-PLAN.md) | 4 週開發計劃、每日任務 | 全體開發團隊 | 30 分鐘 |
 
 ---
 
@@ -63,7 +63,7 @@ docs/
 
 **必讀：**
 1. [MVP 範圍定義](./planning/01-MVP-SCOPE.md) - 了解功能範圍
-2. [開發實施計劃](./planning/02-IMPLEMENTATION-PLAN.md) - 了解時程安排
+2. [開發實施計劃（已退休）](./archive/2026-03-IMPLEMENTATION-PLAN.md) - 了解時程安排
 3. [系統架構](./architecture/01-SYSTEM-ARCHITECTURE.md) - 了解技術架構
 
 **選讀：**
@@ -77,7 +77,7 @@ docs/
 1. [MVP 範圍定義](./planning/01-MVP-SCOPE.md)
 2. [系統架構](./architecture/01-SYSTEM-ARCHITECTURE.md)
 3. [技術棧選型](./planning/03-TECH-STACK.md)
-4. [開發實施計劃](./planning/02-IMPLEMENTATION-PLAN.md)
+4. [開發實施計劃（已退休）](./archive/2026-03-IMPLEMENTATION-PLAN.md)
 5. [資料庫設計](./database/01-DATABASE-DESIGN.md)
 6. [API 規格](./api/INTEGRATION.md)
 7. [前端設計](./frontend/01-FRONTEND-DESIGN.md)
@@ -92,7 +92,7 @@ docs/
 2. [系統架構](./architecture/01-SYSTEM-ARCHITECTURE.md) - 重點看前端部分
 3. [前端設計](./frontend/01-FRONTEND-DESIGN.md)
 4. [API 規格](./api/INTEGRATION.md)
-5. [開發實施計劃](./planning/02-IMPLEMENTATION-PLAN.md) - 重點看 Week 1-3
+5. [開發實施計劃（已退休）](./archive/2026-03-IMPLEMENTATION-PLAN.md) - 重點看 Week 1-3
 
 **選讀：**
 - [技術棧選型](./planning/03-TECH-STACK.md) - 了解前端技術選擇
@@ -107,7 +107,7 @@ docs/
 3. [資料庫設計](./database/01-DATABASE-DESIGN.md)
 4. [API 規格](./api/INTEGRATION.md)
 5. [AI Prompt 設計](./ai/01-AI-PROMPT-DESIGN.md)
-6. [開發實施計劃](./planning/02-IMPLEMENTATION-PLAN.md)
+6. [開發實施計劃（已退休）](./archive/2026-03-IMPLEMENTATION-PLAN.md)
 
 **選讀：**
 - [技術棧選型](./planning/03-TECH-STACK.md) - 了解後端技術選擇
@@ -120,7 +120,7 @@ docs/
 1. [MVP 範圍定義](./planning/01-MVP-SCOPE.md)
 2. [系統架構](./architecture/01-SYSTEM-ARCHITECTURE.md) - 重點看 AI 處理流程
 3. [AI Prompt 設計](./ai/01-AI-PROMPT-DESIGN.md)
-4. [開發實施計劃](./planning/02-IMPLEMENTATION-PLAN.md) - 重點看 Week 2-3
+4. [開發實施計劃（已退休）](./archive/2026-03-IMPLEMENTATION-PLAN.md) - 重點看 Week 2-3
 
 **選讀：**
 - [技術棧選型](./planning/03-TECH-STACK.md) - 了解 AI 模型選擇
