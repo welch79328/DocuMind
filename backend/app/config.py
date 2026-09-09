@@ -36,6 +36,39 @@ class Settings(BaseSettings):
     OPENAI_MODEL: str = "gpt-4o-mini"
     OPENAI_MODEL_MINI: str = "gpt-4o-mini"
 
+    # 全文校正專用模型;空字串 = 沿用 OPENAI_MODEL(既有行為不變)。
+    #
+    # 為什麼只切校正、不切欄位抽取(2026-09-09):
+    #   校正做的是純文字改錯字(十→土、膽→謄、o→0),提示詞裡的對照表已寫死,
+    #   Terra 對 Luna 在 OCR 相似度上只贏 0.4 分(88.8% vs 88.4%);而校正是
+    #   **輸出重**的一段(整頁重寫,約 800 output token),輸出單價是輸入的 6 倍,
+    #   佔了 LLM 成本的七成。換言之:最貴的一段,恰好最不需要好模型。
+    #   欄位抽取相反——它讀圖、只在正則抽不到必要欄位時才跑(即最難的那些頁),
+    #   Terra 在 identification 上領先 4 分,而它每頁只花 $0.005。故抽取維持
+    #   OPENAI_MODEL,不受此鍵影響。
+    #
+    # ⚠️ 兩件事會讓上面的結論失效,調整前先確認:
+    #   1. LLM_DUAL_MODAL_ENABLED=true 之後,校正會開始送整頁影像——那時它
+    #      也變成讀圖工作,且輸入多約 1,100 token,須重新評估。
+    #   2. 此鍵僅在 LLM_PROVIDER=openai 時套用。用 anthropic / local_qwen 時
+    #      會被忽略,以免把 OpenAI 的模型名餵給別家 Provider。
+    OPENAI_MODEL_CORRECTION: str = ""
+
+    # 推理強度(GPT-5 系列專屬);空字串 = 不傳,走 API 預設 medium。
+    #
+    # **推理 token 按輸出計價**,Terra 輸出 $12/1M 是輸入的 6 倍——這是不換模型
+    # 就能降成本的旋鈕,而且同一個模型、隨時可調回,比換模型可逆。
+    #
+    # OPENAI_REASONING_EFFORT 是 OpenAI Provider 的預設,涵蓋欄位抽取與
+    # 修繕照片理解;OPENAI_REASONING_EFFORT_CORRECTION 只蓋過全文校正那一段
+    # (校正是照對照表改錯字,最不需要推理)。
+    #
+    # ⚠️ 這兩個值對 field_accuracy 的實際影響**尚未實測**(2026-09-09)。
+    # 標註集達 BASELINE_MIN_SAMPLES 後,請用 evaluation baseline 量過再定案;
+    # 若欄位準確率下滑,清空這兩個鍵即可完全回到原行為。
+    OPENAI_REASONING_EFFORT: str = ""
+    OPENAI_REASONING_EFFORT_CORRECTION: str = ""
+
     # Anthropic Claude (Optional)
     ANTHROPIC_API_KEY: str = ""
     ANTHROPIC_MODEL: str = "claude-3-5-sonnet-20241022"

@@ -13,6 +13,7 @@ import logging
 import re
 from typing import Optional
 
+from app.config import settings
 from app.lib.llm_service.providers import create_provider
 from .dual_modal_corrector import (
     CorrectionResult,
@@ -22,6 +23,29 @@ from .dual_modal_corrector import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+
+def _resolve_correction_model(
+    provider: Optional[str], model: Optional[str]
+) -> Optional[str]:
+    """決定全文校正要用哪個模型。
+
+    校正與欄位抽取共用 `create_provider()`,但兩者對模型的需求相反:
+    校正是純文字改錯字、輸出重(整頁重寫),抽取是讀圖、只在最難的頁面才跑。
+    `OPENAI_MODEL_CORRECTION` 讓校正單獨降級而不動到抽取——**LLMPostprocessor
+    的唯一職責就是校正**(correct_full_text / correct_fields),故解析放在這裡,
+    呼叫端不需要知道有這回事。
+
+    僅在 OpenAI 生效:把 OpenAI 的模型名餵給 anthropic / local_qwen Provider
+    只會拿到 404,所以其他 Provider 一律忽略此鍵、沿用各自預設。
+    """
+    if model is not None:          # 呼叫端顯式指定優先,不被設定蓋掉
+        return model
+    name = (provider or settings.LLM_PROVIDER or "openai").lower()
+    if name != "openai":
+        return None
+    return settings.OPENAI_MODEL_CORRECTION or None
 
 
 class LLMPostprocessor:
@@ -46,7 +70,9 @@ class LLMPostprocessor:
             api_key: API 金鑰，None 從環境變數讀取
         """
         # 隱私守衛在此生效:雲端停用時 create_provider 會直接拒絕建立雲端 Provider
-        self._provider = create_provider(provider, model=model, api_key=api_key)
+        self._provider = create_provider(
+            provider, model=_resolve_correction_model(provider, model), api_key=api_key
+        )
         self._corrector = DualModalCorrector(provider=self._provider)
 
         # 保持向後兼容

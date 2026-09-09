@@ -242,6 +242,10 @@ class DualModalCorrector:
             few_shot=few_shot,
             max_tokens=3000,
             temperature=0.1,
+            # 校正只是照對照表改錯字,不需要中等推理;而推理 token 按輸出計價,
+            # 校正又是整條管線輸出最重的一段(整頁重寫),故單獨調低最划算。
+            # 空字串 = 不傳,行為與現行一致。
+            reasoning_effort=settings.OPENAI_REASONING_EFFORT_CORRECTION or None,
         )
 
         if is_refusal(response):

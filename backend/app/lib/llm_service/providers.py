@@ -25,7 +25,7 @@ FewShot = Optional[List[Dict[str, Any]]]
 # 自架 Provider 無按量計價,一律 0.0。
 _PRICING: Dict[str, tuple] = {
     # GPT-5 系列(2026-09-03 由第三方彙整站取得,**未經 OpenAI 官方頁核對**)
-    "gpt-5.6-sol": (5.00, 30.00),
+    "gpt-5.6-sol": (4.00, 20.00),   # 2026-09-09 對照官方定價頁更正:原填 5.00/30.00 是發表時的價,7/30 降價後未同步
     "gpt-5.6-terra": (2.00, 12.00),
     "gpt-5.6-luna": (0.20, 1.20),
     "gpt-5.5": (5.00, 30.00),
@@ -46,6 +46,7 @@ def openai_call_kwargs(
     model: str,
     max_tokens: Optional[int] = None,
     temperature: Optional[float] = None,
+    reasoning_effort: Optional[str] = None,
 ) -> Dict[str, Any]:
     """組出 OpenAI chat.completions 可接受的參數,依模型家族剔除不支援的。
 
@@ -78,6 +79,15 @@ def openai_call_kwargs(
     # 新模型不接受非預設 temperature;傳了就是 400,不傳則走預設 1
     if temperature is not None and legacy:
         kwargs["temperature"] = temperature
+
+    # 推理強度:GPT-5 系列專屬,舊模型沒有這個參數(傳了就是 400)。
+    #
+    # **推理 token 按輸出計價**,而輸出單價是輸入的 6 倍(Terra $12 vs $2),
+    # 所以這是不換模型也能降成本的旋鈕。GPT-5.6 預設 medium;
+    # 照 schema 填值、照對照表改錯字這類機械工作用不到中等推理。
+    # 值依模型而異,可為 none / minimal / low / medium / high / xhigh / max。
+    if reasoning_effort and not legacy:
+        kwargs["reasoning_effort"] = reasoning_effort
 
     return kwargs
 
@@ -117,8 +127,12 @@ class LLMProvider(ABC):
         few_shot: FewShot = None,
         max_tokens: int = 2048,
         temperature: float = 0.0,
+        reasoning_effort: Optional[str] = None,
     ) -> str:
-        """呼叫 LLM;支援影像(多模態)與 few-shot 範例注入,回傳文字。"""
+        """呼叫 LLM;支援影像(多模態)與 few-shot 範例注入,回傳文字。
+
+        reasoning_effort 僅 OpenAI 的 GPT-5 系列有意義,其餘 Provider 忽略。
+        """
         raise NotImplementedError
 
 
@@ -150,6 +164,8 @@ class OpenAIProvider(LLMProvider):
         from app.config import settings as _settings
 
         self.model = model or _settings.OPENAI_MODEL
+        # Provider 級的推理強度預設;個別呼叫可覆寫(校正段就是這樣做的)
+        self.reasoning_effort = _settings.OPENAI_REASONING_EFFORT or None
         self._api_key = api_key
         self._client = None
         self.stats = _new_stats()
@@ -188,6 +204,7 @@ class OpenAIProvider(LLMProvider):
         few_shot: FewShot = None,
         max_tokens: int = 2048,
         temperature: float = 0.0,
+        reasoning_effort: Optional[str] = None,
     ) -> str:
         full_prompt = self._build_prompt(prompt, few_shot)
         content = self._build_content(full_prompt, image_data)
@@ -195,7 +212,12 @@ class OpenAIProvider(LLMProvider):
         response = await self._get_client().chat.completions.create(
             model=self.model,
             messages=[{"role": "user", "content": content}],
-            **openai_call_kwargs(self.model, max_tokens, temperature),
+            **openai_call_kwargs(
+                self.model,
+                max_tokens,
+                temperature,
+                reasoning_effort or self.reasoning_effort,
+            ),
         )
 
         self.stats["llm_calls"] += 1
@@ -266,6 +288,7 @@ class AnthropicProvider(LLMProvider):
         few_shot: FewShot = None,
         max_tokens: int = 2048,
         temperature: float = 0.0,
+        reasoning_effort: Optional[str] = None,   # Anthropic 無此參數,忽略
     ) -> str:
         full_prompt = self._build_prompt(prompt, few_shot)
         content = self._build_content(full_prompt, image_data)
@@ -342,6 +365,7 @@ class LocalQwenProvider(LLMProvider):
         few_shot: FewShot = None,
         max_tokens: int = 2048,
         temperature: float = 0.0,
+        reasoning_effort: Optional[str] = None,   # 自架 vLLM 無此參數,忽略
     ) -> str:
         full_prompt = _inject_few_shot(prompt, few_shot)
         # 重用 OpenAI 相容的多模態 content 格式(vLLM 相容)
