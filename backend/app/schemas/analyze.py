@@ -32,8 +32,15 @@ class OcrPageResult(BaseModel):
     model_config = {"extra": "ignore"}
 
     page_number: int
-    ocr_raw: OcrRawOutput
-    rule_postprocessed: RulePostprocessedOutput
+    # ⚠️ ocr_raw / rule_postprocessed 對「影像理解型」而言必然是 None
+    # (repair_photo、handover_photo 走 VLM,不跑 OCR,見
+    #  multi_type_ocr/processor.py 的 ImageUnderstandingProcessor.analyze)。
+    # 這兩欄原本宣告為必填,導致那條路徑一律在回應驗證階段炸成 500;
+    # 2026-09-09 以 handover_photo 開發時實測發現,連既有的 repair_photo
+    # 也一樣中招。放寬為選填是修這個 bug,不是為新型別開後門——
+    # 不要因為「OCR 一定有值」就改回必填。
+    ocr_raw: Optional[OcrRawOutput] = None
+    rule_postprocessed: Optional[RulePostprocessedOutput] = None
     llm_postprocessed: Optional[LlmPostprocessedOutput] = None
     structured_data: Optional[Dict[str, Any]] = None
     # 欄位層共識(需求 4;新增欄位皆為選填,既有欄位語意不變)
@@ -66,3 +73,32 @@ class AnalyzeResponse(BaseModel):
     needs_review: bool = False                              # 是否需人工複核
     review_item_id: Optional[str] = None                   # 入列後的複核項目 id
     field_confidences: Dict[str, float] = {}               # 欄位信心度彙整
+
+
+class BatchItemResult(BaseModel):
+    """批次分析中單一檔案的結果。
+
+    成功時 `result` 有值、`detail`/`error_code` 為 None;失敗時相反。
+    **失敗不會中斷整批**——一張照片壞掉不該讓另外十九張重傳。
+    """
+    index: int                                    # 對應請求中 files 的順序,從 0 起算
+    file_name: str
+    status: str                                   # "ok" | "error"
+    result: Optional["AnalyzeResponse"] = None
+    detail: Optional[str] = None
+    error_code: Optional[str] = None
+
+
+class BatchAnalyzeResponse(BaseModel):
+    """批次分析 API 回應。
+
+    `results` 與請求的 files 同序,呼叫端可用 index 對回自己的檔案。
+    """
+    document_type: str
+    total: int
+    succeeded: int
+    failed: int
+    results: List[BatchItemResult]
+
+
+BatchItemResult.model_rebuild()

@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 S3_PATH_MAP = {
     "transcript": "uploads/ocr_transcripts",
     "contract": "uploads/ocr_contracts",
+    "handover_photo": "uploads/ocr_handover_photos",
 }
 
 

@@ -51,6 +51,14 @@ ADDED_PAGE_FIELDS = {"field_confidences", "consensus"}
 # 本規格開工前就支援的文件類型(凍結清單)
 FROZEN_DOCUMENT_TYPES = {"transcript", "bill", "contract", "repair_photo"}
 
+# 後續規格新增的文件類型。新增要在這裡**明文登記**——
+# 這組守門測試防的是「路由被悄悄改掉」(型別被移除、改名、或偷偷多出來),
+# 不是禁止擴充。所以清單用 FROZEN | ADDED 比對:少一個或多一個沒登記的都會失敗。
+# 2026-09-09 handover_photo(點交照片,Monday #13005982690)
+ADDED_DOCUMENT_TYPES = {"handover_photo"}
+
+ALL_DOCUMENT_TYPES = FROZEN_DOCUMENT_TYPES | ADDED_DOCUMENT_TYPES
+
 
 def _client_visible_params() -> set:
     """端點中呼叫端真的要送的參數;Depends 注入(如 db session)不算"""
@@ -136,11 +144,16 @@ class TestResponseBackwardCompatible:
 
 
 class TestDocumentTypeRoutingUnchanged:
-    def test_supported_types_exactly_match_frozen_list(self):
-        assert set(ProcessorFactory.supported_types()) == FROZEN_DOCUMENT_TYPES
+    def test_supported_types_exactly_match_declared_list(self):
+        assert set(ProcessorFactory.supported_types()) == ALL_DOCUMENT_TYPES
 
-    def test_authoritative_enum_unchanged(self):
-        assert {t.value for t in DocumentType} == FROZEN_DOCUMENT_TYPES
+    def test_no_frozen_type_was_removed(self):
+        """既有型別一個都不准消失——這才是本組測試真正要守的東西。"""
+        assert FROZEN_DOCUMENT_TYPES <= set(ProcessorFactory.supported_types())
+        assert FROZEN_DOCUMENT_TYPES <= {t.value for t in DocumentType}
+
+    def test_authoritative_enum_matches_declared_list(self):
+        assert {t.value for t in DocumentType} == ALL_DOCUMENT_TYPES
 
     @pytest.mark.parametrize(
         "legacy,expected",
@@ -157,7 +170,7 @@ class TestDocumentTypeRoutingUnchanged:
     def test_legacy_alias_normalization_unchanged(self, legacy, expected):
         assert normalize_document_type(legacy) is expected
 
-    @pytest.mark.parametrize("doc_type", sorted(FROZEN_DOCUMENT_TYPES))
+    @pytest.mark.parametrize("doc_type", sorted(ALL_DOCUMENT_TYPES))
     def test_every_type_still_resolves_to_a_processor(self, doc_type):
         assert ProcessorFactory.get_processor(doc_type) is not None
 

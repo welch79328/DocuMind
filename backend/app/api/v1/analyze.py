@@ -6,14 +6,20 @@
 
 import logging
 
+import asyncio
+
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends
 from fastapi.responses import JSONResponse
-from typing import Optional
+from typing import List, Optional
 
 from sqlalchemy import func as sa_func
 from sqlalchemy.orm import Session
 
-from app.schemas.analyze import AnalyzeResponse
+from app.schemas.analyze import (
+    AnalyzeResponse,
+    BatchAnalyzeResponse,
+    BatchItemResult,
+)
 from app.services.analyze_service import (
     AnalyzeService,
     _merge_page_structured_data,
@@ -38,6 +44,15 @@ router = APIRouter()
 
 # 檔案大小限制 (20MB)
 MAX_FILE_SIZE = 20 * 1024 * 1024
+
+# 批次一次最多幾張。上限不是技術限制,是成本與逾時的閘門:
+# 每張都是一次 VLM 呼叫,20 張已經是幾十秒等級的同步請求。
+MAX_BATCH_FILES = 20
+
+# 批次併發度。每張照片是一次遠端 VLM 呼叫(等網路,不吃本機記憶體),
+# 所以可以重疊;但仍設上限,避免一次打爆上游的速率限制。
+# 記憶體上界 = 併發度 x MAX_FILE_SIZE = 4 x 20MB = 80MB。
+BATCH_MAX_CONCURRENT = 4
 
 
 def _file_extension(file: UploadFile) -> str:
@@ -94,6 +109,25 @@ def _resolve_document_type(document_type: str) -> str:
         )
 
     return normalized.value
+
+
+async def _validate_and_read(file: UploadFile, resolved_document_type: str) -> bytes:
+    """驗證單一上傳檔並讀進記憶體。
+
+    單張與批次共用同一套驗證,避免兩條路徑對「什麼叫合法檔案」有兩種答案。
+    任何一關不過都丟 AnalyzeError,由呼叫端決定要回 4xx 還是記成該筆失敗。
+    """
+    _validate_file(file)
+    _validate_type_file_compatibility(resolved_document_type, file)
+
+    contents = await file.read()
+    if len(contents) > MAX_FILE_SIZE:
+        raise AnalyzeError(
+            status_code=413,
+            detail=f"檔案大小超過限制：{MAX_FILE_SIZE // (1024 * 1024)}MB",
+            error_code="FILE_TOO_LARGE",
+        )
+    return contents
 
 
 def _apply_confidence_gating(result: dict, db: Session) -> None:
@@ -325,23 +359,11 @@ async def analyze_document(
     | PROCESSING_ERROR | 500 | 處理過程發生錯誤 |
     """
     try:
-        # 1. 檔案格式驗證
-        _validate_file(file)
-
-        # 2. 文件類型驗證與正規化(動態白名單 + 舊型別收斂)
+        # 1. 文件類型驗證與正規化(動態白名單 + 舊型別收斂)
         resolved_document_type = _resolve_document_type(document_type)
 
-        # 3. 型別-檔案格式相容性驗證
-        _validate_type_file_compatibility(resolved_document_type, file)
-
-        # 4. 讀取檔案內容並檢查大小
-        contents = await file.read()
-        if len(contents) > MAX_FILE_SIZE:
-            raise AnalyzeError(
-                status_code=413,
-                detail=f"檔案大小超過限制：{MAX_FILE_SIZE // (1024 * 1024)}MB",
-                error_code="FILE_TOO_LARGE",
-            )
+        # 2. 檔案格式、型別相容性、大小驗證(與批次端點共用)
+        contents = await _validate_and_read(file, resolved_document_type)
 
         # 5. 選取 few-shot 範例(依文件類型;校正累積後越用越準)
         few_shot = FewShotSelector(CorrectionSampleService(db)).select(
@@ -427,4 +449,146 @@ def get_usage(db: Session = Depends(get_db)):
         "total_pages": total_pages,
         "total_llm_cost": total_llm_cost,
         "period": "all_time",
+    }
+
+
+@router.post(
+    "/analyze/batch",
+    response_model=BatchAnalyzeResponse,
+    summary="批次文件分析",
+    responses={
+        400: {
+            "description": "參數錯誤（沒帶檔案、超過張數上限、不支援的文件類型）",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "too_many": {
+                            "summary": "超過張數上限",
+                            "value": {
+                                "detail": "一次最多 20 個檔案，本次收到 25 個",
+                                "error_code": "TOO_MANY_FILES",
+                            },
+                        },
+                        "empty": {
+                            "summary": "沒帶檔案",
+                            "value": {
+                                "detail": "請至少上傳一個檔案",
+                                "error_code": "NO_FILES",
+                            },
+                        },
+                    }
+                }
+            },
+        }
+    },
+)
+async def analyze_batch(
+    files: List[UploadFile] = File(
+        ..., description=f"檔案陣列，一次最多 {MAX_BATCH_FILES} 個，單檔上限 20MB"
+    ),
+    document_type: str = Form(
+        default="handover_photo",
+        description="文件類型，整批共用（handover_photo: 點交照片）",
+    ),
+    enable_llm: bool = Form(default=True, description="是否啟用 LLM 文字校正"),
+    db: Session = Depends(get_db),
+):
+    """
+    ## 批次文件分析
+
+    一次上傳多個檔案，逐一分析後一次回傳。為點交照片而設：現場一次拍十幾張，
+    逐張呼叫要送十幾次請求，中間斷一次就不知道補哪幾張。
+
+    ### 單張失敗不會中斷整批
+    每個檔案獨立處理，某一張壞掉只會讓那一筆 `status` 是 `"error"`，
+    其餘照常回傳。呼叫端用 `index` 對回自己的檔案順序即可（與送出順序一致）。
+
+    ### 使用範例
+    ```bash
+    curl -X POST "http://<host>:8000/api/v1/analyze/batch" \\
+      -F "files=@客廳.jpg" \\
+      -F "files=@廚房.jpg" \\
+      -F "files=@衛浴.jpg" \\
+      -F "document_type=handover_photo"
+    ```
+
+    ### 注意
+    - 整批共用同一個 `document_type`，不能一張謄本一張照片混送。
+    - 這是**同步**端點：全部處理完才回應。張數上限 20 就是為了壓住等待時間。
+    """
+    if not files:
+        return JSONResponse(
+            status_code=400,
+            content={"detail": "請至少上傳一個檔案", "error_code": "NO_FILES"},
+        )
+
+    if len(files) > MAX_BATCH_FILES:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "detail": f"一次最多 {MAX_BATCH_FILES} 個檔案，本次收到 {len(files)} 個",
+                "error_code": "TOO_MANY_FILES",
+            },
+        )
+
+    # 文件類型不合法是整批的問題,不是某一筆的問題,直接 400。
+    try:
+        resolved_document_type = _resolve_document_type(document_type)
+    except AnalyzeError as e:
+        return JSONResponse(
+            status_code=e.status_code,
+            content={"detail": e.detail, "error_code": e.error_code},
+        )
+
+    # few-shot 依文件類型選取,整批共用。放在迴圈外有兩個理由:
+    # 一是省掉 N 次相同的 DB 查詢,二是讓後面的併發區段完全不碰 Session。
+    few_shot = FewShotSelector(CorrectionSampleService(db)).select(
+        resolved_document_type
+    )
+
+    gate = asyncio.Semaphore(BATCH_MAX_CONCURRENT)
+    service = AnalyzeService()
+
+    async def _one(index: int, file: UploadFile) -> dict:
+        """回傳純 dict,不在這裡組 Pydantic 模型——
+        信心度攔截要就地改寫結果,dict 比模型好改也少一次來回轉換。"""
+        name = file.filename or "unknown"
+        async with gate:
+            try:
+                contents = await _validate_and_read(file, resolved_document_type)
+                result = await service.analyze(
+                    file_contents=contents,
+                    filename=name,
+                    document_type=resolved_document_type,
+                    enable_llm=enable_llm,
+                    question=None,
+                    few_shot=few_shot,
+                )
+                return {"index": index, "file_name": name,
+                        "status": "ok", "result": result}
+            except AnalyzeError as e:
+                return {"index": index, "file_name": name, "status": "error",
+                        "detail": e.detail, "error_code": e.error_code}
+            except Exception as e:
+                logger.error(f"批次第 {index} 筆（{name}）處理失敗: {e}", exc_info=True)
+                return {"index": index, "file_name": name, "status": "error",
+                        "detail": "文件處理失敗，請稍後再試",
+                        "error_code": "PROCESSING_ERROR"}
+
+    # gather 保序:回傳順序與傳入順序一致,index 因此可信。
+    results = list(await asyncio.gather(*(_one(i, f) for i, f in enumerate(files))))
+
+    # 信心度攔截會寫 DB。SQLAlchemy Session 不打算被多個協程同時使用,
+    # 所以放在併發區段之外循序跑——這段只有 DB,不等網路,不值得為它冒險。
+    for item in results:
+        if item["status"] == "ok" and item.get("result") is not None:
+            _apply_confidence_gating(item["result"], db)
+
+    succeeded = sum(1 for r in results if r["status"] == "ok")
+    return {
+        "document_type": resolved_document_type,
+        "total": len(results),
+        "succeeded": succeeded,
+        "failed": len(results) - succeeded,
+        "results": results,
     }
