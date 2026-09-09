@@ -314,7 +314,7 @@ docs/
 ├── database/                # 資料庫設計
 │   └── 01-DATABASE-DESIGN.md
 ├── api/                     # API 規格
-│   └── 01-API-SPECIFICATION.md
+│   └── INTEGRATION.md                     # 對外串接規格
 ├── frontend/                # 前端設計
 │   └── 01-FRONTEND-DESIGN.md
 └── ai/                      # AI 設計

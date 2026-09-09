@@ -26,7 +26,7 @@
 
 | 文件 | 說明 | 狀態 |
 |------|------|------|
-| [01-API-SPECIFICATION.md](./api/01-API-SPECIFICATION.md) | REST API 端點、請求/回應格式、錯誤處理 | ✅ 完成 |
+| [api/INTEGRATION.md](./api/INTEGRATION.md) | **對外串接規格**：端點、欄位、錯誤碼、實測速度與準確率 | ✅ 現行 |
 
 ### 5. 前端設計 (Frontend)
 
@@ -53,7 +53,7 @@
 3. **[技術棧選型](./planning/03-TECH-STACK.md)** - 了解用什麼做
 4. **[開發實施計劃](./planning/02-IMPLEMENTATION-PLAN.md)** - 了解何時做
 5. **[資料庫設計](./database/01-DATABASE-DESIGN.md)** - 資料結構
-6. **[API 規格](./api/01-API-SPECIFICATION.md)** - 接口設計
+6. **[API 對接規格](./api/INTEGRATION.md)** - 接口設計
 7. **[前端設計](./frontend/01-FRONTEND-DESIGN.md)** - UI 實作
 8. **[AI Prompt 設計](./ai/01-AI-PROMPT-DESIGN.md)** - AI 核心邏輯
 

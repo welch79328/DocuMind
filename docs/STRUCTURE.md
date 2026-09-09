@@ -18,7 +18,7 @@ docs/
 │   └── 01-DATABASE-DESIGN.md             # 資料表結構、Prisma Schema
 │
 ├── api/                                   # 🔌 API 規格
-│   └── 01-API-SPECIFICATION.md           # REST API 端點、請求/回應
+│   └── INTEGRATION.md                    # 對外串接規格（端點、欄位、錯誤碼、實測數據）
 │
 ├── frontend/                              # 🎨 前端設計
 │   └── 01-FRONTEND-DESIGN.md             # 頁面設計、元件規格
@@ -45,7 +45,7 @@ docs/
 |------|------|----------|--------------|
 | [03-TECH-STACK.md](./planning/03-TECH-STACK.md) | 技術選擇理由、對比 | 技術主管、全棧工程師 | 20 分鐘 |
 | [01-DATABASE-DESIGN.md](./database/01-DATABASE-DESIGN.md) | 資料表設計、查詢範例 | 後端工程師、DBA | 25 分鐘 |
-| [01-API-SPECIFICATION.md](./api/01-API-SPECIFICATION.md) | API 接口定義 | 前後端工程師 | 30 分鐘 |
+| [INTEGRATION.md](./api/INTEGRATION.md) | API 接口定義 | 前後端工程師 | 30 分鐘 |
 | [01-FRONTEND-DESIGN.md](./frontend/01-FRONTEND-DESIGN.md) | 頁面設計、元件規格 | 前端工程師、UI/UX | 35 分鐘 |
 | [01-AI-PROMPT-DESIGN.md](./ai/01-AI-PROMPT-DESIGN.md) | AI Prompt 設計 | AI 工程師、後端工程師 | 30 分鐘 |
 
@@ -79,7 +79,7 @@ docs/
 3. [技術棧選型](./planning/03-TECH-STACK.md)
 4. [開發實施計劃](./planning/02-IMPLEMENTATION-PLAN.md)
 5. [資料庫設計](./database/01-DATABASE-DESIGN.md)
-6. [API 規格](./api/01-API-SPECIFICATION.md)
+6. [API 規格](./api/INTEGRATION.md)
 7. [前端設計](./frontend/01-FRONTEND-DESIGN.md)
 8. [AI Prompt 設計](./ai/01-AI-PROMPT-DESIGN.md)
 
@@ -91,7 +91,7 @@ docs/
 1. [MVP 範圍定義](./planning/01-MVP-SCOPE.md)
 2. [系統架構](./architecture/01-SYSTEM-ARCHITECTURE.md) - 重點看前端部分
 3. [前端設計](./frontend/01-FRONTEND-DESIGN.md)
-4. [API 規格](./api/01-API-SPECIFICATION.md)
+4. [API 規格](./api/INTEGRATION.md)
 5. [開發實施計劃](./planning/02-IMPLEMENTATION-PLAN.md) - 重點看 Week 1-3
 
 **選讀：**
@@ -105,7 +105,7 @@ docs/
 1. [MVP 範圍定義](./planning/01-MVP-SCOPE.md)
 2. [系統架構](./architecture/01-SYSTEM-ARCHITECTURE.md) - 重點看後端部分
 3. [資料庫設計](./database/01-DATABASE-DESIGN.md)
-4. [API 規格](./api/01-API-SPECIFICATION.md)
+4. [API 規格](./api/INTEGRATION.md)
 5. [AI Prompt 設計](./ai/01-AI-PROMPT-DESIGN.md)
 6. [開發實施計劃](./planning/02-IMPLEMENTATION-PLAN.md)
 
@@ -124,7 +124,7 @@ docs/
 
 **選讀：**
 - [技術棧選型](./planning/03-TECH-STACK.md) - 了解 AI 模型選擇
-- [API 規格](./api/01-API-SPECIFICATION.md) - 了解 AI 相關 API
+- [API 規格](./api/INTEGRATION.md) - 了解 AI 相關 API
 
 ---
 

@@ -1,6 +1,8 @@
 # DocuMind OCR 對接規格（給外部系統開發者）
 
-> 版本 1.0.0 ／ 對應程式碼 commit `f8c91b6`
+> 版本 2.0.0 ／ 2026-09-10
+> 本文件由 `docs/API_INTEGRATION.md` 與 `docs/api/02-INTEGRATION-API.md` 合併而成。
+> 標示「實測」的數字皆取自線上環境(`54.248.201.66`),日期各自註明。
 > 唯一需要串的端點是 `POST /api/v1/analyze`；其餘為輔助。
 
 ---
@@ -9,9 +11,9 @@
 
 | 項目 | 值 |
 |---|---|
-| Base URL | `http://<host>:8000/api/v1` |
-| 互動式文件 | `http://<host>:8000/api/docs` |
-| OpenAPI JSON | `http://<host>:8000/api/openapi.json` |
+| Base URL | `http://54.248.201.66:8085/api/v1` |
+| 互動式文件 | `http://54.248.201.66:8085/api/docs` |
+| OpenAPI JSON | `http://54.248.201.66:8085/api/openapi.json` |
 | 認證 | **目前無**（MVP 階段未實作 Token） |
 | 編碼 | 請求 `multipart/form-data`；回應 `application/json`（UTF-8） |
 
@@ -50,19 +52,19 @@
 
 ```bash
 # 謄本，含 LLM 校正
-curl -X POST "http://<host>:8000/api/v1/analyze" \
+curl -X POST "http://54.248.201.66:8085/api/v1/analyze" \
   -F "file=@謄本.jpg" \
   -F "document_type=transcript" \
   -F "enable_llm=true"
 
 # 純 OCR，不花 LLM 成本
-curl -X POST "http://<host>:8000/api/v1/analyze" \
+curl -X POST "http://54.248.201.66:8085/api/v1/analyze" \
   -F "file=@帳單.png" \
   -F "document_type=bill" \
   -F "enable_llm=false"
 
 # 合約 + 問答
-curl -X POST "http://<host>:8000/api/v1/analyze" \
+curl -X POST "http://54.248.201.66:8085/api/v1/analyze" \
   -F "file=@合約.pdf" \
   -F "document_type=contract" \
   -F "question=合約金額是多少？"
@@ -85,7 +87,8 @@ curl -X POST "http://<host>:8000/api/v1/analyze" \
       "llm_postprocessed":  { "text": "...", "stats": { "llm_cost": 0.02 }, "used": true },  // 未啟用時 null
       "structured_data":    { /* 依 document_type 而異，見 §3 */ },
       "field_confidences":  { "land_number": 0.9, "owner": 0.0 },
-      "consensus":          null
+      "consensus":          null,
+      "text_layer":         true   // 見下方說明;走 OCR 時此鍵不存在
     }
   ],
 
@@ -130,7 +133,7 @@ curl -X POST "http://<host>:8000/api/v1/analyze" \
 | `enable_llm` | bool | ✗ | `true` | 同單張端點 |
 
 ```bash
-curl -X POST "http://<host>:8000/api/v1/analyze/batch" \
+curl -X POST "http://54.248.201.66:8085/api/v1/analyze/batch" \
   -F "files=@客廳.jpg" \
   -F "files=@廚房.jpg" \
   -F "files=@衛浴.jpg" \
@@ -163,7 +166,7 @@ curl -X POST "http://<host>:8000/api/v1/analyze/batch" \
    其餘照常回傳。**請逐筆檢查 `status`**，不要假設 `results` 每筆都有 `result`。
 2. **`results` 與送出順序一致**，用 `index` 對回你自己的檔案即可。
 3. **這是同步端點**，全部處理完才回應。併發度 4、上限 20 張，
-   最壞情況約 5 輪 VLM 呼叫 —— **client timeout 請比照單張端點設 180 秒以上**。
+   最壞情況約 5 輪 VLM 呼叫 —— **client timeout 請比照單張端點設 300 秒以上**。
 
 整批共用的錯誤（沒帶檔案 `NO_FILES`、超過張數 `TOO_MANY_FILES`、
 型別不支援 `UNSUPPORTED_DOCUMENT_TYPE`）直接回 400，不會進到 `results`。
@@ -317,14 +320,84 @@ VLM 不可用或影像無法辨識時降級為 `{"defect_labels": [], "descripti
 
 ---
 
-## 6. 對接時要知道的行為
+## 6. 速度與準確率取決於「有沒有文字層」，不是文件類型
 
-1. **含文字層的 PDF 不走 OCR。** 網路申領的電子謄本直接抽文字層，實測 4 頁 <1 秒且逐字精確；
-   走 OCR 則 85 秒、字元錯誤率 14.5%。判定門檻 20 字，掃描件會自動落回 OCR。
-2. **回應不含原始圖檔。** `original_image` 已被移除以縮小回應；需要原圖請用 `file_url`。
-3. **`enable_llm=true` 不等於每頁都花錢。** 只有 OCR 信心度 < 85% 的頁面才呼叫 LLM，
-   實際用量看 `stats.llm_pages_used` 與 `stats.estimated_cost`。
-4. **耗時。** 4 頁謄本走 OCR + LLM 實測約 151 秒（頁面併發後 LLM 段降至約 25 秒）。
-   請把 client timeout 設在 **180 秒以上**，或改為非同步輪詢架構。
-5. **另有一條舊上傳路徑** `POST /api/v1/documents/upload`（上限 10 MB，未列入 OpenAPI schema）。
-   新系統請一律用 `/analyze`。
+| 來源 | 文字層 | 4 頁耗時 | 字元錯誤率 |
+|---|---|---|---|
+| 網路申領電子謄本、Word 轉出的 PDF | ✅ | **0.6 秒** | **0.15%** |
+| 掃描件、手機拍照 | ❌ | 約 85 秒 | 14.5% |
+
+**系統自動分流，呼叫端不需要指定。** 含文字層時直接讀取產生該 PDF 的原始字串
+（不是辨識結果），略過 OCR；判定門檻 20 字，避免掃描件夾帶的少量浮水印文字造成誤判。
+該頁回應會多一個 `text_layer: true`，且 `ocr_raw.confidence` 為 `1.0`；走 OCR 時此鍵不存在。
+
+### 已量測的準確率（2026-09-03）
+
+| 處理路徑 | 字元錯誤率 |
+|---|---|
+| PDF 文字層 | **0.15%** |
+| PaddleOCR（強制走 OCR） | 14.5% |
+| Tesseract（強制走 OCR） | 38.2% |
+
+正確答案取自該 PDF 的內嵌文字層。⚠️ **樣本為 1 份 4 頁電子謄本，不是統計結果**；
+掃描件上的成績未經量測，且大概率更差。
+
+---
+
+## 7. 串接前必須知道的五件事
+
+**1. 沒有認證。** 端口對外開放，任何人都能呼叫。上線前要加。
+
+**2. 掃描件很慢，而且是同步的。** 實測 4 頁掃描謄本約 **85 秒**（約 21 秒/頁）；
+走 OCR + LLM 的完整路徑實測約 151 秒。**同步呼叫請把 timeout 設到 300 秒以上**，
+或改為非同步流程。含文字層的 PDF 不受此限（0.6 秒）。
+
+**3. 併發已有閘門，但仍是逐一處理。** OCR 由行程層級的 Semaphore 序列化
+（`OCR_MAX_CONCURRENT=1`），第二個請求會**排隊**而不是把容器打掛
+（單頁 OCR 峰值實測 1141–1778 MB，容器可用約 1695 MB）。
+排隊期間呼叫端仍在等待，故高併發場景請自行控制送件節奏。
+
+**4. `needs_review: true` 目前幾乎必然出現，而且原因不是辨識。**
+2026-09-03 實測：文字層路徑給出 **99.85% 正確**的文字，
+地號、建號、面積、權利範圍**仍然一個都沒抽到**，只抽到 owner。
+**瓶頸在欄位抽取，不在文字辨識。**
+請把結構化欄位當成「待人工確認的草稿」，不是可信輸出；
+`ocr_raw.text` 的可信度則遠高於欄位。
+
+**5. `enable_llm=true` 不等於每頁都花錢。** 只有 OCR 信心度 < 85% 的頁面才呼叫 LLM。
+實際用量看 `stats.llm_pages_used` 與 `stats.estimated_cost`。
+2026-09-09 實測全域平均約 **$0.0050/頁**（只有約 28% 的頁面真的觸發 LLM）。
+
+---
+
+## 8. 已知的辨識風險：錯值會帶著高信心度
+
+2026-09-03 實測一份 4 頁謄本時觀察到：
+
+```json
+"building_number": "過溝段00004-000",
+"area": "0555-0000",          ← 這是地號，被填進面積欄位
+"field_confidences": { "area": 0.8 }
+```
+
+**錯值帶著 0.8 的高信心度。** 字串合法、型別正確，規則檢查與信心度都攔不住，
+該頁只因整體信心度 0.320 才被拖進複核。這是生成式模型的典型失效模式
+（語法合法但數值錯誤）。
+
+**已於 2026-09-03 加上型別檢查**：數值欄位出現識別碼形狀（`\d+-\d+`）、
+日期欄位無法解析、識別碼欄位不含數字時，信心度壓到 0.3（低於門檻）並列入
+`needs_confirmation`，同時在 `structured_data.validation_warnings` 記錄原因。
+
+但該檢查只涵蓋可規則化的型別錯誤，**擋不住所有幻覺**。
+採用任何欄位前仍應自行做業務層驗證。
+
+---
+
+## 9. 其他要知道的
+
+- **回應不含原始圖檔。** `original_image` 已移除以縮小回應；需要原圖請用 `file_url`。
+- **`bill`、`repair_photo`、`handover_photo` 尚無充足真實測資**，
+  回傳結構未經端到端驗證，串接前請先實測。
+- **另有一條舊上傳路徑** `POST /api/v1/documents/upload`（上限 10 MB，
+  未列入 OpenAPI schema）。它走的是**另一條 OCR 路徑**（`pytesseract` 單引擎），
+  行為與本文件描述的不同。**新系統請一律用 `/analyze`。**

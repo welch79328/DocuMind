@@ -1,3 +1,15 @@
+> ⚠️ **已退休(2026-09-10)。這是 2026-03 的 MVP 規劃稿,不是現況。**
+>
+> 本文所述端點**全部不存在於現行系統**:`/api/documents/upload`、
+> `/api/documents/:id/process`、`/api/documents/:id/chat`、
+> `/api/documents/:id/create-record`、`/api/records/:id` ——
+> 對照線上 OpenAPI 的 17 個端點,一個都對不上。
+>
+> **現行對接文件在 [`docs/api/INTEGRATION.md`](../api/INTEGRATION.md)。**
+> 保留本檔僅供追溯當初的設計意圖,不得當作串接依據。
+
+---
+
 # AI Document Intelligence Demo - API 接口規格
 
 ## 1. API 總覽

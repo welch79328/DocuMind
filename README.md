@@ -53,7 +53,7 @@
 | [MVP 範圍](./docs/planning/01-MVP-SCOPE.md) | 功能範圍、成功標準 |
 | [系統架構](./docs/architecture/01-SYSTEM-ARCHITECTURE.md) | 架構設計、核心流程 |
 | [資料庫設計](./docs/database/01-DATABASE-DESIGN.md) | 資料表結構、Schema |
-| [API 規格](./docs/api/01-API-SPECIFICATION.md) | REST API 接口文檔 |
+| [API 對接規格](./docs/api/INTEGRATION.md) | 給外部系統的串接文件（端點、欄位、錯誤碼、實測數據） |
 | [前端設計](./docs/frontend/01-FRONTEND-DESIGN.md) | 頁面設計、元件規格 |
 | [AI Prompt 設計](./docs/ai/01-AI-PROMPT-DESIGN.md) | AI Prompt 模板 |
 | [開發實施計劃](./docs/planning/02-IMPLEMENTATION-PLAN.md) | 4 週開發計劃 |
