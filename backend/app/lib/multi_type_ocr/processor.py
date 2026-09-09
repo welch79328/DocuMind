@@ -502,7 +502,24 @@ class OcrDocumentProcessor(DocumentProcessor):
             if isinstance(fc, dict):
                 field_confidences = fc
 
-        llm_step = "✓ 完成（LLM 文字校正）" if llm_used else "⊗ 未使用"
+        # 「沒用到 LLM」與「LLM 掛掉了」必須在回應裡分得出來。
+        #
+        # 2026-09-09:一把失效的 OpenAI key 讓每次校正都失敗,而回應是
+        # llm_postprocessed=None、llm_used=False、estimated_cost=0、HTTP 200
+        # ——與「信心度夠高所以沒用 LLM」逐鍵相同。下游看不出差別,
+        # 於是那把 key 壞了多久沒人知道。這一行就是讓它現形的地方。
+        # processing_steps 是自由格式字典,加值不動 schema、不破壞既有欄位。
+        _LLM_STEP = {
+            "provider_error": "✗ 失敗（LLM 呼叫錯誤，已降級為規則結果）",
+            "high_confidence": "⊗ 未使用（OCR 信心度已足夠）",
+            "disabled": "⊗ 未使用（設定停用）",
+        }
+        if llm_used:
+            llm_step = "✓ 完成（LLM 文字校正）"
+        else:
+            llm_step = _LLM_STEP.get(
+                postprocess_stats.get("llm_skipped_reason"), "⊗ 未使用"
+            )
         result: PageResult = {
             "page_number": 0,          # 由 process 補上
             "original_image": "",      # 由 process 補上

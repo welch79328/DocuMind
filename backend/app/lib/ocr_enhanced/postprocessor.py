@@ -160,6 +160,14 @@ class TranscriptPostprocessor:
             processed_text = llm_result["text"]
             self.stats["llm_used"] = llm_result["used"]
             self.stats["llm_cost"] = llm_result.get("cost", 0.0)
+            # 未使用時一定帶原因;下游(processor.py)據此把
+            # 「沒用到」與「失敗了」在回應裡區分開來。
+            if not llm_result["used"]:
+                self.stats["llm_skipped_reason"] = llm_result.get(
+                    "skipped_reason", "unknown"
+                )
+                if llm_result.get("error"):
+                    self.stats["llm_error"] = llm_result["error"]
             # 只在真的取得信心度時才新增此鍵;未啟用時 stats 逐鍵與現行一致
             correction_confidences = llm_result.get("field_confidences") or {}
             if correction_confidences:
@@ -198,7 +206,15 @@ class TranscriptPostprocessor:
         strategy = self._determine_llm_strategy(confidence)
 
         if strategy == "none":
-            return {"text": text, "used": False, "cost": 0.0}
+            # 「沒用 LLM」有兩種完全不同的意思,回應必須分得出來:
+            # 設定關掉 vs 信心度已經夠高。第三種是下面的 provider_error。
+            disabled = (not self.enable_llm) or self.llm_strategy == "none"
+            return {
+                "text": text,
+                "used": False,
+                "cost": 0.0,
+                "skipped_reason": "disabled" if disabled else "high_confidence",
+            }
 
         try:
             if strategy == "full":
@@ -212,7 +228,12 @@ class TranscriptPostprocessor:
                 # 欄位修正
                 corrected, stats = await self.llm_processor.correct_fields(text)
             else:
-                return {"text": text, "used": False, "cost": 0.0}
+                return {
+                    "text": text,
+                    "used": False,
+                    "cost": 0.0,
+                    "skipped_reason": "disabled",
+                }
 
             # ⚠️ 校正結果不得吃掉原文。2026-09-03 線上實測:一份謄本的 p1
             # OCR 讀出 1600 字,校正後變成 **0 字**——整頁文字靜默消失,
@@ -236,8 +257,21 @@ class TranscriptPostprocessor:
             }
 
         except Exception as e:
-            print(f"⚠️  LLM 修正失敗: {e}")
-            return {"text": text, "used": False, "cost": 0.0}
+            # **這裡是靜默降級的源頭。** 2026-09-09 實測:一把失效的 OpenAI key
+            # 會讓每一次校正都走到這裡,而回應與「信心度夠高所以沒用 LLM」
+            # 逐鍵相同(used=False、cost=0、HTTP 200)——下游無從分辨,
+            # 於是一把死掉的 key 可以長期沒有人發現。
+            #
+            # 兩件事一起做:用 logger.error 而非 print(print 進不了結構化日誌,
+            # 也不會被任何告警規則接到),並把事由帶進回應。
+            logger.error("LLM 修正失敗,降級為規則結果:%s", e, exc_info=True)
+            return {
+                "text": text,
+                "used": False,
+                "cost": 0.0,
+                "skipped_reason": "provider_error",
+                "error": str(e),
+            }
 
     def _determine_llm_strategy(self, confidence: float) -> str:
         """
