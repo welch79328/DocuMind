@@ -60,11 +60,11 @@ class TestRightsScopeSection:
 
     def test_merged_transcript_takes_building_not_land(self):
         """本案例的重點:土地在前、建物在後時,不可取到土地的 4分之1"""
-        assert _rights_scope(MERGED) == "1分之1"
+        assert _rights_scope(MERGED) == "全部"   # 建物那筆,不是土地的 4分之1
 
     def test_building_only_still_works(self):
         """單張建物謄本不能因為加了區段限定而壞掉"""
-        assert _rights_scope(BUILDING_ONLY) == "1分之1"
+        assert _rights_scope(BUILDING_ONLY) == "全部"
 
     def test_falls_back_to_full_text_without_header(self):
         """找不到區段標題時退回全文,而不是抽不到"""
@@ -75,9 +75,13 @@ class TestRightsScopeSection:
         only_historical = "    歷次取得權利範圍：*********8分之1*********\n"
         assert _rights_scope(only_historical) is None
 
-    def test_quan_bu_prefix_is_skipped_for_the_fraction(self):
-        """建物印成「全部 1分之1」,取分數而非「全部」——與土地的表示法一致"""
-        assert _rights_scope(BUILDING_ONLY) != "全部"
+    def test_returns_quan_bu_not_the_fraction(self):
+        """建物印成「全部 1分之1」時回「全部」——本專案既有語意,勿改
+
+        曾試著改成回「1分之1」,3 個既有測試立刻掛掉。「全部」與「1分之1」
+        等價,而「全部」是契約用語。要改請先確認下游 JGB 那端。
+        """
+        assert _rights_scope(BUILDING_ONLY) == "全部"
 
 
 class TestOwnerCompatibilityCodepoints:
