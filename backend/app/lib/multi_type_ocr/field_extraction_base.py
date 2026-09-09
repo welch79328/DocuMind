@@ -105,6 +105,18 @@ class RegexFieldExtractor:
             "llm_used_for_extraction": llm_used,
         }
 
+    def _scope_for(self, key: str, text: str) -> str:
+        """某些欄位只在文件的特定區段才有意義,回傳該欄位應該比對的文字範圍。
+
+        預設全文,行為與現行一致。子類別覆寫來處理「同一個標籤在多個區段
+        重複出現、只有位置能區分」的欄位——這種情況**負向斷言救不了**,
+        因為干擾文字與目標文字逐字相同,差別只在它出現在哪一段。
+
+        (2026-09-10 因謄本 rights_scope 取到土地持分而加入,見
+         TranscriptFieldExtractor._scope_for)
+        """
+        return text
+
     def _required_fields(self) -> tuple:
         """必要欄位;未宣告 REQUIRED_FIELDS 時退回 KEY_FIELDS(既有行為)。"""
         return self.REQUIRED_FIELDS or self.KEY_FIELDS
@@ -143,7 +155,8 @@ class RegexFieldExtractor:
         confidences: Dict[str, float] = {}
         for key in self.KEY_FIELDS:
             pattern = self.PATTERNS.get(key)
-            match = pattern.search(text or "") if pattern else None
+            scoped = self._scope_for(key, text or "")
+            match = pattern.search(scoped) if pattern else None
             captured = _first_captured_group(match)
             if captured is not None:
                 fields[key] = captured
