@@ -249,15 +249,33 @@ class TranscriptFieldExtractor(RegexFieldExtractor):
     # `㈲`(U+3232 CIRCLED IDEOGRAPH HAVE)正規化成 **`(有)` 帶括號**,不是 `有`,
     # 所以不能直接比對「建物所有權部」——那樣一次都比不到。實測確認。
     _BUILDING_SECTION = re.compile(r"建\s*物\s*所\s*\(?\s*有\s*\)?\s*權\s*部")
+    _LAND_SECTION = re.compile(r"\(?土\)?\s*地\s*所\s*\(?有\)?\s*權\s*部")
 
     def _scope_for(self, key: str, text: str) -> str:
-        """建物專屬欄位只在建物所有權部之後比對;找不到該區段時退回全文。
+        """建物專屬欄位的比對範圍。三條路,少一條就會取到錯的值。
 
-        退回全文是刻意的:單張建物謄本沒有區段標題,但也沒有土地區段可混淆,
-        全文比對本來就會命中正確那筆。硬性要求標題會讓單頁謄本一個欄位都抽不到。
+        **抽取是逐頁跑的,不是整份跑。** 這一點決定了整個設計:
+        一份土地＋建物的合併謄本會分成「土地頁 / 土地頁 / 建物頁」,
+        而跨頁合併(_merge_page_structured_data)是「只填補缺值」——
+        第一頁先落地的值就贏了。所以光是「在建物區段之後才比對」不夠:
+        土地頁上根本沒有建物區段,它會退回全文、抽出土地的持分(4分之1),
+        然後第三頁抽到的「全部」永遠補不進去。
+        2026-09-10 實測正式服務就是這樣回 4分之1 的——**修一頁之內的範圍
+        不等於修好這個缺陷**,務必用多頁合併謄本驗收,不要只驗單頁。
+
+        1. 有建物所有權部 → 從那裡往後比對。
+        2. 沒有建物、但有土地所有權部 → **回空字串,這一頁不抽**。
+           讓合併時由建物頁提供正確值。
+        3. 兩個標題都沒有(單張建物謄本、版型殘缺)→ 退回全文。
+           沒有土地區段可混淆,全文比對本來就會命中正確那筆;
+           硬性要求標題會讓單頁謄本一個欄位都抽不到。
         """
         if key not in self._BUILDING_SECTION_FIELDS:
             return text
         m = self._BUILDING_SECTION.search(text)
-        return text[m.start():] if m else text
+        if m:
+            return text[m.start():]
+        if self._LAND_SECTION.search(text):
+            return ""
+        return text
 

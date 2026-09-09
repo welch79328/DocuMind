@@ -113,3 +113,38 @@ class TestOwnerCompatibilityCodepoints:
         ex = TranscriptFieldExtractor()
         fields, _ = ex._extract_with_regex("      登記名義人：某丙\n")
         assert fields.get("owner") == "某丙"
+
+
+# 逐頁的版面。**正式管線是逐頁抽取再跨頁合併,不是整份一次抽。**
+# 2026-09-10:只驗「整份文字」的測試會過,但線上仍回 4分之1——
+# 因為土地頁自己抽出 4分之1、合併時「只填補缺值」先落地,建物頁補不進去。
+LAND_PAGE = """
+*************  ㈯㆞所㈲權部  ***************
+    （0001）登記次序：0005
+    權利範圍：*********4分之1*********
+"""
+
+BUILDING_PAGE = """
+*************  建物所㈲權部  ***************
+    （0001）登記次序：0002
+    權利範圍：全部 *********1分之1*********
+"""
+
+
+class TestPerPageExtractionThenMerge:
+    """這一組才是會抓到線上缺陷的測試——只驗整份文字抓不到"""
+
+    def test_land_page_yields_nothing(self):
+        """土地頁不得提供 rights_scope,否則合併時它會先落地並贏過建物頁"""
+        assert _rights_scope(LAND_PAGE) is None
+
+    def test_building_page_yields_the_value(self):
+        assert _rights_scope(BUILDING_PAGE) == "全部"
+
+    def test_merge_of_pages_takes_building(self):
+        """模擬 _merge_page_structured_data 的「只填補缺值」:取第一個非空"""
+        pages = [LAND_PAGE, LAND_PAGE, BUILDING_PAGE]
+        values = [_rights_scope(p) for p in pages]
+        merged = next((v for v in values if v), None)
+        assert values == [None, None, "全部"]
+        assert merged == "全部"
