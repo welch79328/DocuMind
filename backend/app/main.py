@@ -4,6 +4,7 @@ Main application entry point
 """
 
 import logging
+import threading
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -28,8 +29,21 @@ async def lifespan(_app: FastAPI):
 
     只警告不阻擋:設定衝突是判斷問題而非錯誤,
     擋下啟動會把一個可運行(只是效果打折)的系統變成完全不能用。
+
+    PaddleOCR 預載同一個原則:在背景執行緒跑,不擋啟動、不擋健康檢查,
+    失敗只記 log。預載期間進來的請求會在建構鎖上等它完成,不會重複載入。
     """
     log_setting_conflicts(settings)
+    if settings.OCR_PRELOAD_MODEL and "paddleocr" in settings.OCR_ENGINES:
+        from app.lib.ocr_enhanced.engine_manager import preload_paddleocr
+        # daemon 執行緒而不是 asyncio.to_thread:後者走預設執行緒池,
+        # 關機時事件迴圈會等它跑完,剛啟動就重啟會被卡住十幾秒。
+        threading.Thread(
+            target=preload_paddleocr,
+            args=(settings.OCR_PADDLEOCR_LANG,),
+            name="paddleocr-preload",
+            daemon=True,
+        ).start()
     yield
 
 

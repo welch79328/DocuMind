@@ -15,6 +15,9 @@ import pytest
 _TEST_UPLOAD_DIR = tempfile.mkdtemp(prefix="documind_test_uploads_")
 os.environ.setdefault("LOCAL_STORAGE_PATH", _TEST_UPLOAD_DIR)
 os.environ.setdefault("STORAGE_TYPE", "local")
+# 測試不預載 PaddleOCR:用 `with TestClient(app)` 觸發 lifespan 時,
+# 裝了 paddle 的環境會在每個測試背景載入整個模型
+os.environ.setdefault("OCR_PRELOAD_MODEL", "false")
 
 
 @pytest.fixture

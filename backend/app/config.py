@@ -187,6 +187,11 @@ class Settings(BaseSettings):
     # 2026-09-03 實測 4 頁謄本:LLM 佔 24.6s/頁、逐頁串接共 98s;重疊後約 25s。
     # 調高會讓更多頁的原圖 base64 同時在記憶體裡,故不宜過大。
     OCR_MAX_CONCURRENT_PAGES: int = 4
+    # 啟動時在背景預載 PaddleOCR(僅在 OCR_ENGINES 含 paddleocr 時)。
+    # 2026-09-21 線上實測:當天第一個 OCR 請求 27.2 秒、之後 15.0–18.4 秒,
+    # 多出的約 12 秒是模型載入。模型本來就常駐,預載不改變穩態記憶體,
+    # 只是讓容器一重啟就吃到模型那一份,而不是等第一個請求。
+    OCR_PRELOAD_MODEL: bool = True
     OCR_ENGINES: List[str] = ["paddleocr", "tesseract"]     # 使用的引擎列表
     OCR_QUALITY_THRESHOLD: float = 0.8                      # 信心度門檻(0-1),低於此值進入人工複核
     OCR_MAX_RETRIES: int = 3                                # 最大重試次數

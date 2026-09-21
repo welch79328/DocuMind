@@ -5,16 +5,48 @@ OCR 引擎管理模組，支援多引擎並行處理與結果融合。
 """
 
 from typing import Literal, Any, Optional
+import logging
 import numpy as np
+import threading
 import time
 import asyncio
 import cv2
 
 from .types import EngineResult, FusionMethod, OCREngineName
 
+logger = logging.getLogger(__name__)
+
 
 _ocr_gate: Optional["asyncio.Semaphore"] = None
 _ocr_gate_limit: int = -1
+
+# PaddleOCR 單例的建構鎖。
+#
+# 啟動時會在背景執行緒預載模型(preload_paddleocr),而預載還沒完成時
+# 第一個請求就可能進來。沒有這把鎖,兩邊都會看到 instance 是 None、各建一份——
+# 模型兩份同時在記憶體裡,而單頁 OCR 峰值已達 1141–1778 MB、容器上限 2 GB,
+# 必然 OOM。有了鎖,後到的一方等前者建完、直接拿同一份。
+_paddleocr_init_lock = threading.Lock()
+
+
+def preload_paddleocr(lang: str) -> None:
+    """啟動時預載 PaddleOCR,消除第一個 OCR 請求的冷啟動(2026-09-21)。
+
+    線上實測(t3.medium):當天第一個 OCR 請求 27.2 秒,之後同類請求 15.0–18.4 秒——
+    多出的約 12 秒全是模型載入(log 只在第一筆出現 "Model files already exist")。
+    模型本來就是常駐單例,預載只是把載入時間從「第一位使用者」挪到「啟動時」,
+    穩態記憶體不變。
+
+    失敗只記 log、不拋出:沒裝 paddle 的環境(本機、測試)照常啟動,
+    線上若真的載入失敗,第一個請求會照舊惰性載入並回報真正的錯誤。
+    """
+    started = time.perf_counter()
+    try:
+        EngineManager(engines=["paddleocr"], paddleocr_lang=lang)._ensure_paddleocr()
+    except Exception as e:
+        logger.warning("PaddleOCR 預載失敗,改為首次請求時載入: %s", e)
+        return
+    logger.info("PaddleOCR 預載完成,耗時 %.1f 秒", time.perf_counter() - started)
 
 
 def _get_ocr_gate() -> "asyncio.Semaphore":
@@ -73,8 +105,13 @@ class EngineManager:
         # 避免未安裝 paddleocr 的環境在建構時即失敗
 
     def _ensure_paddleocr(self):
-        """惰性初始化 PaddleOCR(單例);僅在實際辨識時載入"""
-        if EngineManager._paddleocr_instance is None:
+        """惰性初始化 PaddleOCR(單例);啟動時預載,或首次辨識時載入"""
+        if EngineManager._paddleocr_instance is not None:
+            return EngineManager._paddleocr_instance
+        with _paddleocr_init_lock:
+            # 鎖內再檢查一次:等鎖期間,預載執行緒可能已經建好了
+            if EngineManager._paddleocr_instance is not None:
+                return EngineManager._paddleocr_instance
             try:
                 from paddleocr import PaddleOCR
 
