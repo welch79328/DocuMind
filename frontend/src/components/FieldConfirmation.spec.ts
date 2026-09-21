@@ -78,6 +78,12 @@ describe('攤平欄位', () => {
     })
   })
 
+  it('謄本的建物跡證旗標是 meta,不列為欄位', () => {
+    expect(
+      flattenFields({ land_number: '0221-0000', has_building_evidence: true }),
+    ).toEqual({ land_number: '0221-0000' })
+  })
+
   it('空輸入回傳空物件而非拋錯', () => {
     expect(flattenFields(null)).toEqual({})
     expect(flattenFields(undefined)).toEqual({})

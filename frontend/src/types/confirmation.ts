@@ -55,6 +55,7 @@ export const META_KEYS: ReadonlySet<string> = new Set([
   'needs_confirmation',
   'extraction_confidence',
   'llm_used_for_extraction',
+  'has_building_evidence',
 ])
 
 /**

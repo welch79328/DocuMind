@@ -35,6 +35,10 @@ _META_KEYS = frozenset({
     "needs_confirmation",
     "extraction_confidence",
     "llm_used_for_extraction",
+    # 謄本抽取器的建物跡證旗標,供合併層判斷能否以土地持分遞補 rights_scope。
+    # 漏列會被當成欄位,拿到一筆 0.0 信心度混進 field_confidences 與共識比對。
+    # 前端 confirmation.ts 的 META_KEYS 須同步。
+    "has_building_evidence",
 })
 
 

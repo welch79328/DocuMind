@@ -87,8 +87,64 @@ def _merge_page_structured_data(pages: List[dict]) -> Optional[Dict[str, Any]]:
     #   building_number = "00004-000"（p3 抽到,信心度 0.9）
     #   needs_confirmation 卻包含 building_number（沿用 p1 的清單,p1 沒抽到）
     # 八個待確認欄位裡六個其實已經抽到,下游會把已知的值也丟給人工確認。
+    #
+    # 遞補必須在重算**之前**:重算依 field_confidences 決定 needs_confirmation,
+    # 放在後面會得到「rights_scope 有值、信心度 0、卻仍列在待確認」的自相矛盾輸出。
+    _backfill_land_rights_scope(merged, pages)
     _recompute_merged_status(merged, pages)
+    # 旗標描述的是「某一頁」,合併後的值只是第一頁的殘值(先到先贏),沒有意義。
+    # 各頁 structured_data 仍保留它——那是中繼資料的既有管道(同 llm_used_for_extraction),
+    # 已登記在 field_consensus._META_KEYS 與前端 META_KEYS,不會被當成欄位。
+    # 不能從各頁移除:本函式在 document_fields 與複核閘控各被呼叫一次,
+    # 第一次移除會讓第二次無從判斷、兩處結果不一致。
+    merged.pop("has_building_evidence", None)
     return merged
+
+
+def _backfill_land_rights_scope(merged: Dict[str, Any], pages: List[dict]) -> None:
+    """純土地謄本的 rights_scope 以土地持分遞補(2026-09-21)。
+
+    抽取器在土地頁刻意不給 rights_scope,等建物頁補值——防的是合併謄本
+    取到土地持分(0658077)。但純土地謄本沒有建物頁,值就永久遺失。
+
+    ⚠️ 條件是「**每一頁**都沒有建物跡證」,不是「rights_scope 缺值」。
+    後者會在合併謄本的建物頁剛好抽不到值時(標題被 OCR 打壞、那一行讀不出來),
+    把土地持分靜默補進去——原本是缺值進複核,變成有值但是錯的,
+    錯的方向正是 0658077 的災情。合併謄本寧可留缺值。
+
+    旗標必須對各頁逐一檢查,不能讀合併後的值:_merge_fill_missing 是
+    先到先贏,第一頁的 False 會擋住後面建物頁的 True。
+
+    已知限制(兩項,皆未處理):
+
+    1. 建物頁劣化到連標題與所有建物專屬欄位都抽不到時,
+       文字上與純土地謄本無從區分,仍會遞補。
+    2. 只在「沒有任何一頁提供 rights_scope」時遞補。純土地謄本若有一頁
+       兩種所有權部標題都沒有(單獨的他項權利部頁、所有權人清單的續頁),
+       _scope_for 第 3 分支會退回全文,把抵押權的權利範圍或另一位所有權人
+       的持分當成 rights_scope(信心度 0.9、不進複核)。這個缺陷 0658077
+       就有,不是本函式造成的,本函式也無從覆寫——修法在 _scope_for。
+    """
+    land_value = merged.get("land_rights_scope")
+    if not land_value or merged.get("rights_scope"):
+        return
+    if any(
+        isinstance(page.get("structured_data"), dict)
+        and page["structured_data"].get("has_building_evidence")
+        for page in pages
+    ):
+        return
+
+    merged["rights_scope"] = land_value
+    confidences = merged.get("field_confidences")
+    if isinstance(confidences, dict) and "land_rights_scope" in confidences:
+        confidences["rights_scope"] = confidences["land_rights_scope"]
+
+
+# 只供遞補用的輔助欄位,不納入信心度評分。
+# land_rights_scope 在土地頁抽到就是 0.9,放進評分會讓所有含土地區段的謄本
+# 分數無故上升——那不是抽取品質變好,只是多算了一個分子。
+_NON_SCORED_FIELDS = {"land_rights_scope"}
 
 
 def _scored_fields_from_pages(pages: List[dict]) -> set:
@@ -118,7 +174,7 @@ def _scored_fields_from_pages(pages: List[dict]) -> set:
                 k for k, v in confidences.items()
                 if isinstance(v, (int, float)) and v > 0
             )
-    return scored
+    return scored - _NON_SCORED_FIELDS
 
 
 def _recompute_merged_status(merged: Dict[str, Any], pages: List[dict]) -> None:

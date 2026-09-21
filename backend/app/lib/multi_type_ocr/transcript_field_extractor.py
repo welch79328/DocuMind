@@ -22,6 +22,7 @@ needs_confirmation,再由 LLM Vision 以 FIELD_LABELS 的中文標籤補齊。
 """
 
 import re
+from typing import Any, Dict, List, Optional
 
 from .field_extraction_base import RegexFieldExtractor
 
@@ -93,6 +94,16 @@ class TranscriptFieldExtractor(RegexFieldExtractor):
         #    土地與建物所有權部印的標籤逐字相同,只有位置不同——
         #    這種情況負向斷言救不了,見 _scope_for 的說明。
         "rights_scope": re.compile(
+            r"(?<!歷次取得)權利範圍[:：\s]*[*\s]*([^\s\n*]+)"
+        ),
+        # 土地所有權部的權利範圍(持分)。樣式與 rights_scope 逐字相同,
+        # 差別全在 _scope_for 給的比對範圍:這一欄只看土地所有權部那一段。
+        #
+        # 為什麼需要它(2026-09-21):rights_scope 在土地頁刻意回空字串,
+        # 等建物頁補值——但**純土地謄本沒有建物頁**,值就永久遺失。
+        # 這一欄讓合併層在「整份文件都沒有建物跡證」時拿來遞補,
+        # 見 analyze_service._backfill_land_rights_scope。
+        "land_rights_scope": re.compile(
             r"(?<!歷次取得)權利範圍[:：\s]*[*\s]*([^\s\n*]+)"
         ),
         # `所\(?有\)?權人` 的括號不是手滑。謄本原文用相容碼位「所㈲權㆟」,
@@ -187,6 +198,8 @@ class TranscriptFieldExtractor(RegexFieldExtractor):
         "other_right_type", "seizure_mark",
         # 土地標示部
         "land_use_zone", "land_use_type",
+        # 土地所有權部
+        "land_rights_scope",
     )
 
     # 必要欄位:任何一份謄本都「應該要有」的欄位,信心度只以這些計算。
@@ -231,6 +244,9 @@ class TranscriptFieldExtractor(RegexFieldExtractor):
         "shared_build_number": "共有部分建號", "shared_area": "共有部分面積",
         "other_right_type": "他項權利種類", "seizure_mark": "查封或限制登記",
         "land_use_zone": "使用分區", "land_use_type": "使用地類別",
+        # 謄本上印的其實也是「權利範圍」。不列入 REQUIRED_FIELDS,
+        # 所以永遠不會進 needs_confirmation、不會拿這個標籤去問模型。
+        "land_rights_scope": "土地權利範圍",
     }
     DOC_LABEL = "土地/建物謄本"
 
@@ -251,6 +267,56 @@ class TranscriptFieldExtractor(RegexFieldExtractor):
     _BUILDING_SECTION = re.compile(r"建\s*物\s*所\s*\(?\s*有\s*\)?\s*權\s*部")
     _LAND_SECTION = re.compile(r"\(?土\)?\s*地\s*所\s*\(?有\)?\s*權\s*部")
 
+    # 只在「土地所有權部」那一段才有意義的欄位,範圍截到建物所有權部為止。
+    _LAND_SECTION_FIELDS = ("land_rights_scope",)
+
+    # ---- 建物跡證:判定「這一頁有沒有建物」 ----
+    #
+    # 合併層靠它決定能不能拿土地持分遞補 rights_scope:任一頁有建物跡證就不遞補。
+    # 判錯的代價不對稱——把合併謄本誤判成純土地,土地持分會被當成建物權利範圍
+    # 送進下游契約欄位,正是 0658077 修掉的災情;反過來誤判只是留缺值進複核。
+    # 所以寧可多認、不可漏認。
+    #
+    # ⚠️ 不能只看建物所有權部標題。標題正是 OCR 最容易打壞的一行,
+    # 打壞時整份會被當成純土地謄本。因此另看建物標示部標題,
+    # 以及任何一個建物專屬欄位有沒有抽到值——標題壞了,門牌、層次面積通常還在。
+    _BUILDING_MARK_SECTION = re.compile(r"建\s*物\s*標\s*示\s*部")
+
+    # 土地謄本不可能有的欄位。building_number 可以放心列入:
+    # 它的樣式以 (?<!地上建物) 排除了土地標示部的「地上建物建號」。
+    _BUILDING_EVIDENCE_FIELDS = (
+        "building_number", "building_address", "main_usage", "main_material",
+        "total_floors", "floor_level", "floor_area", "total_area", "completion_date",
+        "sub_building_usage", "sub_building_area",
+        "shared_build_number", "shared_area",
+    )
+
+    async def extract(
+        self,
+        text: str,
+        image_data: Optional[str] = None,
+        use_llm_fallback: bool = False,
+        few_shot: Optional[List[Dict[str, Any]]] = None,
+    ) -> Dict[str, Any]:
+        result = await super().extract(
+            text,
+            image_data=image_data,
+            use_llm_fallback=use_llm_fallback,
+            few_shot=few_shot,
+        )
+        # 另外單獨跑一次規則抽取來判定跡證,不用 result 裡的欄位:
+        # result 可能含 LLM 補齊的值,模型對土地謄本回一個「建號」
+        # 也會被當成建物跡證。跡證只能來自文件本身的文字。
+        regex_fields, _ = self._extract_with_regex(text)
+        # 標題比對必須用正規化後的文字:原文的「㈲」不正規化就一次都比不到。
+        norm = self._normalize_for_matching(text)
+        result["has_building_evidence"] = bool(
+            self._BUILDING_SECTION.search(norm)
+            or self._BUILDING_MARK_SECTION.search(norm)
+            or any(regex_fields.get(k) for k in self._BUILDING_EVIDENCE_FIELDS)
+        )
+        return result
+
     def _scope_for(self, key: str, text: str) -> str:
         """建物專屬欄位的比對範圍。三條路,少一條就會取到錯的值。
 
@@ -269,7 +335,17 @@ class TranscriptFieldExtractor(RegexFieldExtractor):
         3. 兩個標題都沒有(單張建物謄本、版型殘缺)→ 退回全文。
            沒有土地區段可混淆,全文比對本來就會命中正確那筆;
            硬性要求標題會讓單頁謄本一個欄位都抽不到。
+
+        土地專屬欄位(_LAND_SECTION_FIELDS)另走一條:從土地所有權部標題開始,
+        截到建物所有權部為止;沒有土地標題就不抽。上面三條路對 rights_scope 不變。
         """
+        if key in self._LAND_SECTION_FIELDS:
+            land = self._LAND_SECTION.search(text)
+            if not land:
+                return ""
+            scoped = text[land.start():]
+            building = self._BUILDING_SECTION.search(scoped)
+            return scoped[:building.start()] if building else scoped
         if key not in self._BUILDING_SECTION_FIELDS:
             return text
         m = self._BUILDING_SECTION.search(text)
