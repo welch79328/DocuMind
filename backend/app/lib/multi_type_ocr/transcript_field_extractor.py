@@ -371,6 +371,9 @@ class TranscriptFieldExtractor(RegexFieldExtractor):
             or self._BUILDING_MARK_SECTION.search(norm)
             or any(regex_fields.get(k) for k in self._BUILDING_EVIDENCE_FIELDS)
         )
+        # 清單欄位與旗標一樣只來自文件文字,不含 LLM 補齊的值。
+        result["owners"] = self._extract_owners(norm)
+        result["land_numbers"] = self._extract_land_numbers(norm)
         return result
 
     def _scope_for(self, key: str, text: str) -> str:
@@ -430,6 +433,151 @@ class TranscriptFieldExtractor(RegexFieldExtractor):
         if self._LAND_SECTION.search(text):
             return ""
         return self._cut_at_other_rights(text)
+
+    # ---- 清單欄位:owners / land_numbers(2026-09-30,slice B1) ----
+    #
+    # 單值的 owner、land_number 只回第一筆;這兩個清單把每一筆都交出來。
+    # 它們是「明細」不是「欄位」:不進 KEY_FIELDS(沒有信心度、不問 LLM、不進待確認),
+    # 並登記在 field_consensus._META_KEYS 與前端 META_KEYS。跨頁合併依身分去重,
+    # 見 analyze_service._merge_list_details。
+
+    # 所有權部每一筆的開頭「(0001)登記次序:0003」。取的是冒號後那一段(0003),
+    # 不是括號裡的流水號;「相關他項權利登記次序:0003-000」不在行首,不會命中。
+    _OWNERSHIP_ENTRY_START = re.compile(
+        r"^\W*\(\s*\d{4}\s*\)\s*登\s*記\s*次\s*序\s*[:：]?\s*([0-9]{4}(?:-[0-9]{3})?)?"
+    )
+    # 姓名一定要有冒號:導讀範本的說明框「所有權人的身分資料」不是姓名。
+    _ENTRY_OWNER = re.compile(
+        r"(?:所\s*\(?\s*有\s*\)?\s*權\s*人|登記名義人)\s*[:：]\s*(\S+)"
+    )
+    _ENTRY_SCOPE = re.compile(r"(?<!歷次取得)(?<!設定)權利範圍[:：\s]*[*\s]*([^\s\n*]+)")
+    # 只在一筆所有權資料之內才接受 OCR 讀壞的標籤(「利:」「檬利:」,線上實測),
+    # 並排除同樣含「利」的相關他項權利登記次序、設定權利範圍、歷次取得權利範圍。
+    _ENTRY_SCOPE_MANGLED = re.compile(r"利\s*(?:範\s*圍)?\s*[:：][ \t]*[*\s]*([^\s\n*]+)")
+    _ENTRY_SCOPE_EXCLUDE = re.compile(r"相\s*關|設\s*定|歷\s*次|登\s*記\s*次\s*序")
+    _MARK_SECTION_ANY = re.compile(r"標\s*示\s*部")
+    # 持分值至少要有數字或「全部」;讀不出來時抓到的「:」「*」之類是雜訊,寧可缺值。
+    _SHARE_LIKE = re.compile(r"[0-9]|全部")
+
+    # 頁首抬頭:整行只有「[行政區][段][小段] 數字-數字 地號/建號」。
+    # 位置不限——續頁會重複抬頭,OCR 也可能把它排到頁尾(士林範本實測)。
+    _TITLE_NUMBER_LINE = re.compile(
+        r"^\W*(?:[一-鿿]*?[鄉鎮市區])?(?:[一-鿿\d]*段)?(?:[一-鿿\d]*小段)?"
+        r"\s*([0-9]{3,5}\s*-\s*[0-9]{2,5})\s*([地建])\s*號\s*$"
+    )
+    _SITE_LINE = re.compile(r"建\s*物\s*坐\s*落\s*地\s*號\s*[:：](.*)")
+    _NUMBER_TOKEN = re.compile(r"[0-9]{3,5}\s*-\s*[0-9]{2,5}")
+    _NUMBERS_ONLY_LINE = re.compile(r"^\s*(?:[0-9]{3,5}\s*-\s*[0-9]{2,5}\s*)+$")
+    # 沿革、擔保清單、地上建物清單:數字長得像地號,但都不是這一份的現行地號。
+    _NOT_A_PARCEL_LINE = re.compile(
+        r"重\s*[測测劃划]\s*前|共\s*同\s*擔\s*保|分\s*割|合\s*併|增\s*加|地\s*上\s*建\s*物"
+    )
+
+    def _title_number(self, lines):
+        """頁首抬頭的 (編號, '地'|'建');讀不到回 (None, None)。"""
+        for line in lines:
+            m = self._TITLE_NUMBER_LINE.match(line)
+            if m:
+                return re.sub(r"\s+", "", m.group(1)), m.group(2)
+        return None, None
+
+    def _section_text(self, line: str):
+        """段+小段,去掉行政區(「中正區中正段二小段」→「中正段二小段」)。"""
+        sec = self.PATTERNS["section"].search(line)
+        if not sec:
+            return None
+        sub = self.PATTERNS["subsection"].search(line)
+        return sec.group(1) + (sub.group(1) if sub else "")
+
+    def _extract_owners(self, text: str) -> list:
+        """所有權部的每一筆:{part, transcript_id, order, name, rights_scope}。
+
+        part 由這一筆上方最近的所有權部標題決定(土地/建物),沒有標題就不收——
+        土地持分被當成建物權利範圍是 0658077 修掉的災情,不猜。
+        """
+        lines = text.split("\n")
+        # 預設用頁上第一個抬頭(OCR 可能把抬頭排到頁尾,士林範本實測);
+        # 一頁有兩個抬頭時,改用這一筆「上方最近」的那個,不讓後一份的人掛到前一份。
+        transcript_id, _ = self._title_number(lines)
+        owners, current = [], None
+        part, in_ownership = None, False
+
+        def flush():
+            if current and current["name"]:
+                owners.append(current)
+
+        for line in lines:
+            title = self._TITLE_NUMBER_LINE.match(line)
+            if title:
+                transcript_id = re.sub(r"\s+", "", title.group(1))
+                continue
+            if self._LAND_SECTION.search(line) or self._BUILDING_SECTION.search(line):
+                flush()
+                current = None
+                part = "building" if self._BUILDING_SECTION.search(line) else "land"
+                in_ownership = True
+                continue
+            if self._OTHER_RIGHTS_SECTION.search(line) or self._MARK_SECTION_ANY.search(line):
+                flush()
+                current, in_ownership = None, False
+                continue
+            if not in_ownership:
+                continue
+            start = self._OWNERSHIP_ENTRY_START.match(line)
+            if start:
+                flush()
+                current = {
+                    "part": part, "transcript_id": transcript_id,
+                    "order": start.group(1), "name": None, "rights_scope": None,
+                }
+                continue
+            if current is None:
+                continue
+            if current["name"] is None:
+                m = self._ENTRY_OWNER.search(line)
+                if m:
+                    current["name"] = m.group(1)
+                    continue
+            if current["rights_scope"] is None:
+                m = self._ENTRY_SCOPE.search(line)
+                if not m and not self._ENTRY_SCOPE_EXCLUDE.search(line):
+                    m = self._ENTRY_SCOPE_MANGLED.search(line)
+                if m and self._SHARE_LIKE.search(m.group(1)):
+                    current["rights_scope"] = m.group(1)
+        flush()
+        return owners
+
+    def _extract_land_numbers(self, text: str) -> list:
+        """現行地號 {section, number},只取頁首地號抬頭與建物坐落地號兩個來源。"""
+        lines = text.split("\n")
+        found, seen = [], set()
+
+        def add(section, number):
+            number = re.sub(r"\s+", "", number)
+            key = (section, number)
+            if key not in seen:
+                seen.add(key)
+                found.append({"section": section, "number": number})
+
+        for i, line in enumerate(lines):
+            if self._NOT_A_PARCEL_LINE.search(line):
+                continue
+            title = self._TITLE_NUMBER_LINE.match(line)
+            if title and title.group(2) == "地":
+                add(self._section_text(line), title.group(1))
+                continue
+            site = self._SITE_LINE.search(line)
+            if site:
+                body = site.group(1)
+                numbers = self._NUMBER_TOKEN.findall(body)
+                # 數字被 OCR 折到下一行時,下一行只會有地號
+                if not numbers and i + 1 < len(lines) and self._NUMBERS_ONLY_LINE.match(lines[i + 1]):
+                    body = body + " " + lines[i + 1]
+                    numbers = self._NUMBER_TOKEN.findall(lines[i + 1])
+                section = self._section_text(body)
+                for number in numbers:
+                    add(section, number)
+        return found
 
     def _strip_shared_parts(self, text: str) -> str:
         """去掉建物標示部裡每一個共有部分區塊,邊界見 _SHARED_PART_LINE 的說明。"""

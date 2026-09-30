@@ -90,6 +90,7 @@ def _merge_page_structured_data(pages: List[dict]) -> Optional[Dict[str, Any]]:
     #
     # 遞補必須在重算**之前**:重算依 field_confidences 決定 needs_confirmation,
     # 放在後面會得到「rights_scope 有值、信心度 0、卻仍列在待確認」的自相矛盾輸出。
+    _merge_list_details(merged, pages)
     _backfill_land_rights_scope(merged, pages)
     _recompute_merged_status(merged, pages)
     # 旗標描述的是「某一頁」,合併後的值只是第一頁的殘值(先到先贏),沒有意義。
@@ -99,6 +100,52 @@ def _merge_page_structured_data(pages: List[dict]) -> Optional[Dict[str, Any]]:
     # 第一次移除會讓第二次無從判斷、兩處結果不一致。
     merged.pop("has_building_evidence", None)
     return merged
+
+
+# 謄本的清單明細:跨頁「串接」,不是「先到先贏」(_merge_fill_missing 會只留第一頁的清單)。
+_LIST_DETAIL_KEYS = ("owners", "land_numbers")
+
+
+def _list_identity(key: str, item: Any):
+    """清單項目的身分;回 None 表示身分不完整,永遠保留、不去重。
+
+    ⚠️ 依身分、不依顯示值:第二類謄本的姓名遮成「王**」、持分又常相同,
+    依值去重會把三位共有人併成一位(2026-09-30 plan review 抓到)。
+    """
+    if not isinstance(item, dict):
+        return None
+    if key == "owners":
+        ident = (item.get("part"), item.get("transcript_id"), item.get("order"))
+    elif key == "land_numbers":
+        ident = (item.get("section"), item.get("number"))
+    else:
+        return None
+    return ident if all(ident) else None
+
+
+def _merge_list_details(merged: Dict[str, Any], pages: List[dict]) -> None:
+    """依頁序串接各頁的清單明細,只丟掉身分完整且重複的項目(例如同一頁上傳兩次)。
+
+    身分不完整的項目(登記次序讀不出來、地號沒有段名)一律保留:
+    同一頁內已由抽取器去重,跨頁寧可重複也不誤併。
+    """
+    for key in _LIST_DETAIL_KEYS:
+        present = False
+        combined, seen = [], set()
+        for page in pages:
+            data = page.get("structured_data")
+            if not isinstance(data, dict) or key not in data:
+                continue
+            present = True
+            for item in data.get(key) or []:
+                ident = _list_identity(key, item)
+                if ident is not None:
+                    if ident in seen:
+                        continue
+                    seen.add(ident)
+                combined.append(item)
+        if present:
+            merged[key] = combined
 
 
 def _backfill_land_rights_scope(merged: Dict[str, Any], pages: List[dict]) -> None:

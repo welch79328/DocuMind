@@ -3,6 +3,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { reviewApi } from '@/services/api'
 import type { ReviewItem, SubmitDiff } from '@/types/review'
+import { buildRows, type FieldRow } from './reviewRows'
 
 const route = useRoute()
 const router = useRouter()
@@ -17,12 +18,6 @@ const message = ref<{ type: 'error' | 'success'; text: string } | null>(null)
 const resultDiff = ref<SubmitDiff | null>(null)
 
 const LOW_CONFIDENCE = 0.8
-
-interface FieldRow {
-  key: string
-  value: string
-  confidence: number | null
-}
 
 const rows = ref<FieldRow[]>([])
 
@@ -45,24 +40,6 @@ const originalText = computed<string>(() => {
   }
   return orig ? JSON.stringify(orig, null, 2) : ''
 })
-
-function buildRows(orig: Record<string, unknown> | undefined): FieldRow[] {
-  const fc = (orig?.field_confidences as Record<string, number>) || {}
-  const fields: Record<string, unknown> = {}
-  const pages = orig?.pages
-  if (Array.isArray(pages)) {
-    pages.forEach((p) => {
-      const sd = (p as { structured_data?: Record<string, unknown> })?.structured_data
-      if (sd && typeof sd === 'object') Object.assign(fields, sd)
-    })
-  }
-  const keys = new Set<string>([...Object.keys(fc), ...Object.keys(fields)])
-  return [...keys].map((k) => ({
-    key: k,
-    value: fields[k] != null ? String(fields[k]) : '',
-    confidence: fc[k] ?? null,
-  }))
-}
 
 function addField() {
   rows.value.push({ key: '', value: '', confidence: null })
