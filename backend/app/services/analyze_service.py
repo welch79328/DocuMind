@@ -120,10 +120,10 @@ def _backfill_land_rights_scope(merged: Dict[str, Any], pages: List[dict]) -> No
     1. 建物頁劣化到連標題與所有建物專屬欄位都抽不到時,
        文字上與純土地謄本無從區分,仍會遞補。
     2. 只在「沒有任何一頁提供 rights_scope」時遞補。純土地謄本若有一頁
-       兩種所有權部標題都沒有(單獨的他項權利部頁、所有權人清單的續頁),
-       _scope_for 第 3 分支會退回全文,把抵押權的權利範圍或另一位所有權人
-       的持分當成 rights_scope(信心度 0.9、不進複核)。這個缺陷 0658077
-       就有,不是本函式造成的,本函式也無從覆寫——修法在 _scope_for。
+       兩種所有權部標題都沒有、又不是他項權利部(所有權人清單的續頁),
+       _scope_for 第 3 分支會退回全文,把另一位所有權人的持分當成
+       rights_scope(信心度 0.9、不進複核)。這個缺陷 0658077 就有,
+       本函式無從覆寫。單獨的他項權利部頁已在 _scope_for 截掉(2026-09-23)。
     """
     land_value = merged.get("land_rights_scope")
     if not land_value or merged.get("rights_scope"):

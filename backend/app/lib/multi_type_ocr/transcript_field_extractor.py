@@ -81,7 +81,7 @@ class TranscriptFieldExtractor(RegexFieldExtractor):
         # `[*\s]*` 吃掉謄本的補位星號(****3,406.98)。
         # 星號補位在金額欄位也會出現,不是這一份的特例。
         "area": re.compile(r"面\s*積[:：\s]*[*\s]*([0-9][0-9,.]*[0-9]|[0-9])"),
-        # 三個陷阱,缺一個就取到錯的值(2026-09-10 以杭州南路一段那份合併謄本實測):
+        # 四個陷阱,缺一個就取到錯的值(前三個 2026-09-10 以杭州南路一段那份合併謄本實測):
         #
         # 1. `(?<!歷次取得)` —— 謄本同時印「權利範圍」與「歷次取得權利範圍」,
         #    後者是歷史值,不是現況。該份文件全文命中 5 次,其中 2 次是它。
@@ -93,8 +93,12 @@ class TranscriptFieldExtractor(RegexFieldExtractor):
         # 3. **區段限定在 `_scope_for()`,不在這條正規式裡。**
         #    土地與建物所有權部印的標籤逐字相同,只有位置不同——
         #    這種情況負向斷言救不了,見 _scope_for 的說明。
+        #
+        # 4. `(?<!設定)` —— 他項權利部(抵押權等)印的是「設定權利範圍」,
+        #    那是抵押權的範圍,不是所有權的持分。主要防線是 _scope_for 截到
+        #    他項權利部標題為止;這個斷言是標題被 OCR 打壞時的第二道(2026-09-23)。
         "rights_scope": re.compile(
-            r"(?<!歷次取得)權利範圍[:：\s]*[*\s]*([^\s\n*]+)"
+            r"(?<!歷次取得)(?<!設定)權利範圍[:：\s]*[*\s]*([^\s\n*]+)"
         ),
         # 土地所有權部的權利範圍(持分)。樣式與 rights_scope 逐字相同,
         # 差別全在 _scope_for 給的比對範圍:這一欄只看土地所有權部那一段。
@@ -104,7 +108,7 @@ class TranscriptFieldExtractor(RegexFieldExtractor):
         # 這一欄讓合併層在「整份文件都沒有建物跡證」時拿來遞補,
         # 見 analyze_service._backfill_land_rights_scope。
         "land_rights_scope": re.compile(
-            r"(?<!歷次取得)權利範圍[:：\s]*[*\s]*([^\s\n*]+)"
+            r"(?<!歷次取得)(?<!設定)權利範圍[:：\s]*[*\s]*([^\s\n*]+)"
         ),
         # `所\(?有\)?權人` 的括號不是手滑。謄本原文用相容碼位「所㈲權㆟」,
         # 而 NFKC 把 `㈲`(U+3232 CIRCLED IDEOGRAPH HAVE)正規化成 **`(有)` 帶括號**
@@ -120,7 +124,9 @@ class TranscriptFieldExtractor(RegexFieldExtractor):
         # 段名非貪婪才不會把「小段」吞進去——貪婪會讓「中正段二小段」整串變成段名。
         # 行政區(鄉鎮市區)剝掉:下游的段欄位只要「中正段」,混進行政區會印出「中正區中正段」。
         "section": re.compile(
-            r"(?:[一-鿿]+?[鄉鎮市區])?([一-鿿]+?段)"
+            # (?<!小):抬頭被 OCR 拆行時,「小段0361-0000地號」單獨一行,
+            # 段名會變成「小段」(2026-09-30 線上實測)。寧可缺值。
+            r"(?:[一-鿿]+?[鄉鎮市區])?([一-鿿]+?(?<!小)段)"
             r"(?:[一-鿿\d]*小段)?\s*[0-9Oo]{3,5}\s*[-－]"
         ),
         "subsection": re.compile(r"[一-鿿]+?段\s*([一-鿿\d]+小段)"),
@@ -132,12 +138,19 @@ class TranscriptFieldExtractor(RegexFieldExtractor):
             r"主\s*要\s*建\s*材[:：][ \t]*([^\n]*?)(?=\s{2,}\S+\s*[:：]|\n|$)"
         ),
         # 層數(整棟共幾層)與層次(本建號位在第幾層)是兩件事,不可混用。
-        "total_floors": re.compile(r"層\s*數[:：][ \t]*[*\s]*([0-9]{1,3}\s*層)"),
+        #
+        # OCR 異體(2026-09-30 線上實測):「層數」常被讀成簡體「数」,「層」讀成「唇」
+        # 或整個掉字(「数:007層」)。標籤只放寬到這幾種;值仍要求「數字+層」,
+        # 且掉字時排除「筆數/棟數/頁數」這類同樣以「數:」結尾的標籤。
+        "total_floors": re.compile(
+            r"(?:[層唇]\s*[數数]|(?<![筆棟頁冊件])[數数])[:：][ \t]*[*\s]*([0-9]{1,3}\s*層)"
+        ),
+        # (?<!建物):公設自己的其他登記事項印「建物層次:公共設施」,不是本戶在幾樓。
         "floor_level": re.compile(
-            r"層\s*次[:：][ \t]*([^\n]*?)(?=\s{2,}\S+\s*[:：]|\n|$)"
+            r"(?<!建物)[層唇]\s*次[:：][ \t]*([^\n]*?)(?=\s{2,}\S+\s*[:：]|\n|$)"
         ),
         "floor_area": re.compile(
-            r"層\s*次\s*面\s*積[:：][ \t]*[*\s]*([0-9][0-9,.]*[0-9]|[0-9])"
+            r"[層唇]\s*次\s*面\s*積[:：][ \t]*[*\s]*([0-9][0-9,.]*[0-9]|[0-9])"
         ),
         # 與核心的 area 分開:一份土地+建物合併謄本裡 area 可能抓到土地面積,
         # 而「總面積」明確是建物的共計面積,下游要用哪一個由它自己判斷。
@@ -145,7 +158,8 @@ class TranscriptFieldExtractor(RegexFieldExtractor):
             r"總\s*面\s*積[:：][ \t]*[*\s]*([0-9][0-9,.]*[0-9]|[0-9])"
         ),
         "completion_date": re.compile(
-            r"建築完成日期[:：][ \t]*([^\n]*?)(?=\s{2,}\S+\s*[:：]|\n|$)"
+            # 文字層原文是「建築完成㈰期」,NFKC 後為「(日)」(同 owner 的 ㈲ 陷阱)
+            r"建築完成\(?日\)?期[:：][ \t]*([^\n]*?)(?=\s{2,}\S+\s*[:：]|\n|$)"
         ),
 
         # ---- 附屬建物(陽台、平台之類;單層透天通常沒有) ----
@@ -270,6 +284,48 @@ class TranscriptFieldExtractor(RegexFieldExtractor):
     # 只在「土地所有權部」那一段才有意義的欄位,範圍截到建物所有權部為止。
     _LAND_SECTION_FIELDS = ("land_rights_scope",)
 
+    # 所有權部之後的他項權利部(抵押權等)也有「權利範圍」,只是印成「設定權利範圍」。
+    # 兩種所有權部的比對範圍都截到這個標題為止,見 _scope_for。
+    _OTHER_RIGHTS_SECTION = re.compile(r"他\s*項\s*權\s*利\s*部")
+
+    # ---- 公設(共有部分)與舊地段:位置不對的同名標籤 ----
+    #
+    # 建物標示部的共有部分是一個小區塊:
+    #     共有部分:○○段00697-000建號*****19.62平方公尺
+    #     權利範圍:*****5分之1*****           ← 公設的持分,不是本戶的
+    #     (含車位編號2號,權利範圍:…)
+    #     其他登記事項:主要用途:水箱、樓梯間
+    #                  建物層次:公共設施        ← 公設的層次,不是本戶的
+    #                  重測前:…01272-000建號     ← 公設的舊建號
+    #     其他登記事項:使用執照字號:…           ← 這一行起回到本戶
+    # 區塊裡的建號、權利範圍、層次跟本戶的標籤逐字相同,只有位置能區分。
+    # 縮排能分辨區塊邊界,但 OCR 輸出不保留縮排,所以以「區塊內第二個其他登記事項」
+    # 為界;碰到部別標題或下一個共有部分也結束。(2026-09-30 線上實測,見
+    # tests/unit/test_transcript_shared_part_scope.py)
+    # 必須是行首的「共有部分:」——行中出現的「共有部分」(如公設自己謄本的
+    # 「主要用途:共有部分」、所有權部的註記文字)不是區塊開頭。
+    _SHARED_PART_LINE = re.compile(r"^\W*共\s*有\s*部\s*分\s*[:：]")
+    _OTHER_ITEMS_LINE = re.compile(r"^\W*其他登記事項")
+    # 區塊一定在所有權人名單之前結束。部別標題被 OCR 讀壞時,
+    # 靠這些行首標籤止血,不然會把所有權人一併切掉、改取到下一位。
+    _OWNERSHIP_ENTRY_LINE = re.compile(r"登\s*記\s*次\s*序|所\s*\(?\s*有\s*\)?\s*權\s*人")
+    _PART_HEADING = re.compile(
+        r"(?:標\s*示|所\s*\(?\s*有\s*\)?\s*權|他\s*項\s*權\s*利)\s*部"
+    )
+    # 只有 shared_* 看得到公設區塊;其餘欄位一律在去掉公設區塊的文字上比對。
+    # 段、小段例外:公設與本戶在同一棟、同一段,共有部分那一行的段名是對的
+    # (高雄範本的段名只出現在那一行)。舊地段另由 _NOT_CURRENT_LOCATION_LINE 擋。
+    _SHARED_PART_FIELDS = ("shared_build_number", "shared_area", "section", "subsection")
+
+    # 「重測前/重劃前:舊段名 舊地號/建號」是沿革,不是現況,四個位置欄位都不能用。
+    _NOT_CURRENT_LOCATION_LINE = re.compile(r"重\s*[測测劃划]\s*前")
+    _LOCATION_FIELDS = ("section", "subsection", "land_number", "building_number")
+    # 「共同擔保地號/建號」是抵押標的清單,編號可能是別筆,不能當本戶的地號、建號;
+    # 但清單一定含本筆,段名與小段是對的——抬頭被 OCR 讀壞時常是唯一來源
+    # (士林、汐止範本實測,2026-09-30 verifier 抓到誤擋)。只對編號擋。
+    _COLLATERAL_LIST_LINE = re.compile(r"共\s*同\s*擔\s*保")
+    _NUMBER_FIELDS = ("land_number", "building_number")
+
     # ---- 建物跡證:判定「這一頁有沒有建物」 ----
     #
     # 合併層靠它決定能不能拿土地持分遞補 rights_scope:任一頁有建物跡證就不遞補。
@@ -336,22 +392,75 @@ class TranscriptFieldExtractor(RegexFieldExtractor):
            沒有土地區段可混淆,全文比對本來就會命中正確那筆;
            硬性要求標題會讓單頁謄本一個欄位都抽不到。
 
+        兩項前處理先於三條路(2026-09-30):除了 shared_* 之外,所有欄位都在
+        去掉公設區塊的文字上比對;地段與編號另去掉「重測前」那幾行,地號與建號再去掉「共同擔保」那幾行。
+        見 _SHARED_PART_LINE 的說明。
+
         土地專屬欄位(_LAND_SECTION_FIELDS)另走一條:從土地所有權部標題開始,
         截到建物所有權部為止;沒有土地標題就不抽。上面三條路對 rights_scope 不變。
+
+        **所有路徑的範圍都再截到「他項權利部」標題為止**(2026-09-23)。
+        他項權利部緊接在所有權部之後,它的「設定權利範圍」是抵押權的範圍。
+        不截的話會取錯兩種情況,都是信心度 0.9、不進複核:
+          - 所有權部那一行讀不出來 → 比對延伸到同頁的他項權利部。
+          - 單獨一頁的他項權利部沒有所有權部標題 → 走第 3 條路退回全文。
+            純土地謄本因此拿到抵押權的範圍,土地持分的遞補也被擋掉。
+        截斷後這兩種情況都變成缺值:合併謄本進複核,純土地謄本由土地持分遞補。
         """
+        if key not in self._SHARED_PART_FIELDS:
+            text = self._strip_shared_parts(text)
+        if key in self._LOCATION_FIELDS:
+            text = self._drop_lines(text, self._NOT_CURRENT_LOCATION_LINE)
+        if key in self._NUMBER_FIELDS:
+            text = self._drop_lines(text, self._COLLATERAL_LIST_LINE)
         if key in self._LAND_SECTION_FIELDS:
             land = self._LAND_SECTION.search(text)
             if not land:
                 return ""
             scoped = text[land.start():]
             building = self._BUILDING_SECTION.search(scoped)
-            return scoped[:building.start()] if building else scoped
+            if building:
+                scoped = scoped[:building.start()]
+            return self._cut_at_other_rights(scoped)
         if key not in self._BUILDING_SECTION_FIELDS:
             return text
         m = self._BUILDING_SECTION.search(text)
         if m:
-            return text[m.start():]
+            return self._cut_at_other_rights(text[m.start():])
         if self._LAND_SECTION.search(text):
             return ""
-        return text
+        return self._cut_at_other_rights(text)
+
+    def _strip_shared_parts(self, text: str) -> str:
+        """去掉建物標示部裡每一個共有部分區塊,邊界見 _SHARED_PART_LINE 的說明。"""
+        kept = []
+        in_block = False
+        other_items_seen = 0
+        for line in text.split("\n"):
+            if self._SHARED_PART_LINE.search(line):
+                in_block, other_items_seen = True, 0
+                continue
+            if in_block:
+                if self._PART_HEADING.search(line) or self._OWNERSHIP_ENTRY_LINE.search(line):
+                    in_block = False
+                elif self._OTHER_ITEMS_LINE.search(line):
+                    other_items_seen += 1
+                    if other_items_seen >= 2:
+                        in_block = False
+            if not in_block:
+                kept.append(line)
+        return "\n".join(kept)
+
+    @staticmethod
+    def _drop_lines(text: str, pattern) -> str:
+        return "\n".join(line for line in text.split("\n") if not pattern.search(line))
+
+    def _cut_at_other_rights(self, text: str) -> str:
+        """截到第一個「他項權利部」標題為止。
+
+        呼叫端傳進來的文字已從所有權部標題開始(或整頁都沒有所有權部標題),
+        所以第一個他項權利部標題之後都不屬於所有權部。
+        """
+        m = self._OTHER_RIGHTS_SECTION.search(text)
+        return text[:m.start()] if m else text
 
