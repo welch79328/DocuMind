@@ -1,6 +1,6 @@
 # DocuMind OCR 對接規格（給外部系統開發者）
 
-> 版本 2.0.0 ／ 2026-09-10
+> 版本 2.1.0 ／ 2026-10-01（2.1.0：謄本新增 6 個清單欄位與 `land_rights_scope`，並寫明各單值欄位的取值範圍，見 §3.1）
 > 本文件由 `docs/API_INTEGRATION.md` 與 `docs/api/02-INTEGRATION-API.md` 合併而成。
 > 標示「實測」的數字皆取自線上環境(`54.248.201.66`),日期各自註明。
 > 唯一需要串的端點是 `POST /api/v1/analyze`；其餘為輔助。
@@ -179,7 +179,10 @@ curl -X POST "http://54.248.201.66:8085/api/v1/analyze/batch" \
 `field_confidences`（逐欄位 0.0–1.0）、`needs_confirmation`（信心不足、建議人工確認的欄位名陣列）、
 `extraction_confidence`（必要欄位平均）、`llm_used_for_extraction`（bool）。
 
-### 3.1 `transcript` — 扁平結構，23 欄
+### 3.1 `transcript` — 24 個單值欄位 + 6 個清單欄位
+
+單值欄位每個只有**一個值**；一份謄本有多筆（多位所有權人、多筆地號、多層、多筆公設）時，
+單值欄位只放第一筆，**完整資料請讀 §3.1.1 的清單欄位**。
 
 | key | 中文 | 必要欄位* |
 |---|---|:--:|
@@ -206,10 +209,55 @@ curl -X POST "http://54.248.201.66:8085/api/v1/analyze/batch" \
 | `seizure_mark` | 查封或限制登記 | |
 | `land_use_zone` | 使用分區 | ✅ |
 | `land_use_type` | 使用地類別 | |
+| `land_rights_scope` | 土地持分（土地所有權部的權利範圍） | |
 
 \* 只有「必要欄位」列入信心度計分。非必要欄位是**本來就可能不存在**
 （透天沒有共有部分、無貸款沒有他項權利、`seizure_mark` 沒有才是好事），
 抽不到不代表辨識失敗，下游不要當成錯誤。
+
+**單值欄位的取值範圍**（同名標籤在謄本上會出現好幾次，以下是系統取的那一個）：
+
+| key | 取的是 | 不會取到 |
+|---|---|---|
+| `rights_scope` | **建物**所有權部的權利範圍；純土地謄本（整份沒有任何建物跡證）改填土地持分 | 土地持分（合併謄本時）、他項權利部的「設定權利範圍」、公設的權利範圍、歷次取得權利範圍 |
+| `land_rights_scope` | 土地所有權部的權利範圍 | 同上 |
+| `building_number` | 本戶建號 | 公設（共有部分）建號、重測前舊建號、共同擔保建號 |
+| `section` / `subsection` | 現行地段 | 重測前、重劃前的舊地段 |
+| `land_number` | 第一個比對到的地號（通常是頁首抬頭） | 共同擔保地號、重測前地號（完整且排除沿革的清單請讀 `land_numbers`） |
+| `floor_level` / `floor_area` | 第一個層次與其面積 | 公設的「建物層次:公共設施」 |
+| `shared_area` | **整棟公設的面積**（照謄本印的） | ⚠️ 不是本戶分到的面積——那是 `shared_parts[].share_area` |
+| `owner` | 第一位所有權人 | — |
+
+`has_building_evidence`（bool）只出現在各頁的 `structured_data`，是合併時判斷「純土地謄本」用的旗標，不是欄位；
+`document_fields` 不含它。
+
+#### 3.1.1 清單欄位（2026-09-30 起）
+
+每筆都是物件；讀不到的子欄位為 `null`，**寧可缺值，不給猜測值**。
+清單是明細，不是單一欄位：**不出現在 `field_confidences`、`needs_confirmation`，也不計入信心度**。
+
+| key | 每筆內容 | 規則 |
+|---|---|---|
+| `owners` | `part`（`"land"`／`"building"`／`null`）、`transcript_id`（該筆所屬謄本的地號或建號）、`order`（登記次序）、`name`、`rights_scope` | 每位所有權人一筆；`part` 依上方的所有權部標題決定，看不出就 `null`、不猜。第二類謄本姓名是遮蔽的 |
+| `land_numbers` | `section`（段＋小段）、`number` | 只取頁首地號抬頭與建物坐落地號；同一筆地出現在土地抬頭與建物坐落時只算一次；沿革（分割、重測前）、共同擔保地號不算 |
+| `floors` | `transcript_id`、`level`（如 `"二層"`、`"騎樓"`）、`area` | **只在各層面積加總等於總面積時才輸出**，否則為 `[]`（原因見 `floor_area_checks`）。名稱與面積數量對不上時不配對，`level` 為 `null` |
+| `floor_area_checks` | `transcript_id`、`sum`、`total`、`matches`（`true`／`false`／`null`＝沒讀到總面積） | 每個有層次資料的建物頁一筆 |
+| `sub_buildings` | `transcript_id`、`usage`（陽台、雨遮、平台、露台、花台…固定詞彙）、`area` | 用途與面積數量對不上時不配對 |
+| `shared_parts` | `transcript_id`、`build_number`、`area`（整棟公設面積）、`rights_scope`（本戶持分）、`share_area`（＝`area`×持分，四捨五入兩位）、`parking`（`[{number, rights_scope, share_area}]`）、`parking_total`（如 `"5位"`） | 每筆共有部分一筆；`rights_scope` 只留分數或「全部」 |
+
+```jsonc
+// 範例（士林地政事務所公開範本，線上實測）
+"shared_parts": [{
+  "transcript_id": "19998-000", "build_number": "11994-000", "area": "509.05",
+  "rights_scope": "1000分之193", "share_area": "98.25",
+  "parking": [{ "number": "2號", "rights_scope": "1000分之55", "share_area": "28.00" }],
+  "parking_total": "5位"
+}]
+```
+
+多頁文件合併時，清單依頁序串接，只去掉**身分完全相同**的重複項（例如同一頁上傳兩次）；
+身分不完整（例如沒有建號抬頭）的項目一律保留，不會被誤併。
+各範本的實測結果與已知限制見 [`docs/testing/transcript-online-acceptance.md`](../testing/transcript-online-acceptance.md)。
 
 ### 3.2 `contract` — 巢狀結構
 
@@ -391,11 +439,17 @@ VLM 不可用或影像無法辨識時降級為 `{"defect_labels": [], "descripti
 但該檢查只涵蓋可規則化的型別錯誤，**擋不住所有幻覺**。
 採用任何欄位前仍應自行做業務層驗證。
 
+**謄本欄位的位置錯誤已於 2026-09-23～10-01 修正**：抵押權的設定權利範圍、公設的建號與權利範圍、
+重測前的舊地段，以前會以 0.9 信心度被當成本戶的值，現在不再取到（見 §3.1 取值範圍表）。
+目前已知仍會讀錯、但尚未修正的兩種版面列在
+[`docs/testing/transcript-online-acceptance.md`](../testing/transcript-online-acceptance.md) §4。
+
 ---
 
 ## 9. 其他要知道的
 
 - **回應不含原始圖檔。** `original_image` 已移除以縮小回應；需要原圖請用 `file_url`。
+  ⚠️ 2026-10-01 實測線上的 `file_url` 一律為 `null`（線上 S3 設定問題，檔案沒有上傳成功），目前拿不到原圖。
 - **`bill`、`repair_photo`、`handover_photo` 尚無充足真實測資**，
   回傳結構未經端到端驗證，串接前請先實測。
 - **另有一條舊上傳路徑** `POST /api/v1/documents/upload`（上限 10 MB，

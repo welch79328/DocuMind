@@ -1,0 +1,180 @@
+{
+  "01_shilin_land": {
+    "kind": "土地",
+    "land_number": "0361-0000",
+    "section": "測試段",
+    "subsection": "一小段",
+    "area": "359.00",
+    "land_use_zone": "(空白)",
+    "owner": "皮**",
+    "land_rights_scope": "70分之11",
+    "other_right_type": "最高限額抵押權"
+  },
+  "02_shilin_build": {
+    "kind": "建物",
+    "building_number": "19998-000",
+    "section": "測試段",
+    "subsection": "一小段",
+    "land_number": "0361-0000",
+    "building_address": "測試路439號五樓",
+    "main_usage": "住家用",
+    "main_material": "鋼筋混凝土造",
+    "total_floors": "007層",
+    "floors": {
+      "五層": "153.25"
+    },
+    "total_area": "153.25",
+    "completion_date": "民國091年05月03日",
+    "sub_buildings": {
+      "陽台": "15.36",
+      "雨遮": "2.95"
+    },
+    "shared": [
+      {
+        "no": "11994-000",
+        "area": "509.05",
+        "scope": "1000分之193",
+        "parking": "編號2號 1000分之55"
+      }
+    ],
+    "owner": "皮**",
+    "rights_scope": "全部",
+    "other_right_type": "最高限額抵押權"
+  },
+  "03_kcg_build_multifloor": {
+    "kind": "建物(僅標示部)",
+    "main_usage": "住商用",
+    "main_material": "鋼筋混凝土造",
+    "total_floors": "004層",
+    "floors": {
+      "一層": "37.52",
+      "二層": "37.52",
+      "三層": "37.52",
+      "四層": "15.76"
+    },
+    "total_area": "128.32",
+    "completion_date": "民國084年02月22日",
+    "sub_buildings": {
+      "陽台": "10.29",
+      "平台": "8.80",
+      "露台": "8.00",
+      "花台": "3.23"
+    }
+  },
+  "04_kcg_apartment_shared": {
+    "kind": "建物(僅標示部)",
+    "section": "吉慶段",
+    "main_usage": "住家用",
+    "main_material": "鋼筋混凝土造",
+    "total_floors": "005層",
+    "floors": {
+      "五層": "69.52"
+    },
+    "total_area": "69.52",
+    "sub_buildings": {
+      "陽台": "8.71",
+      "花台": "2.39"
+    },
+    "shared": [
+      {
+        "no": "00697-000",
+        "area": "19.62",
+        "scope": "5分之1",
+        "use": "水箱、樓梯間"
+      }
+    ]
+  },
+  "05_ntpc_land_mortgage": {
+    "kind": "土地他項權利部(僅此部)",
+    "rights_scope": null,
+    "other_right_type": "普通抵押權",
+    "note": "設定權利範圍 100000分之16667 是抵押範圍，不可當持分"
+  },
+  "06_ruifang_build": {
+    "kind": "建物",
+    "building_number": "00071-000",
+    "section": "測試段",
+    "land_number": [
+      "0139-0000",
+      "0140-0000"
+    ],
+    "building_address": "逢甲路236號四樓",
+    "main_usage": "住家用",
+    "main_material": "鋼筋混凝土造",
+    "total_floors": "005層",
+    "floors": {
+      "四層": "75.63"
+    },
+    "total_area": "75.63",
+    "completion_date": "民國083年07月15日",
+    "sub_buildings": {
+      "陽台": "5.54"
+    },
+    "shared": [
+      {
+        "no": "00067-000",
+        "area": "18.00",
+        "scope": "10分之1"
+      }
+    ],
+    "owner": "王**",
+    "rights_scope": "全部",
+    "other_right_type": "抵押權"
+  },
+  "07_repo_build_scan": {
+    "kind": "建物(建號全部)",
+    "building_number": "01391-000",
+    "section": "文化北段",
+    "land_number": [
+      "0931-0000",
+      "0932-0000",
+      "0933-0000",
+      "0934-0000"
+    ],
+    "main_usage": "住家用",
+    "main_material": "磚造",
+    "total_floors": "003層",
+    "floors": {
+      "一層": "62.19",
+      "二層": "79.98",
+      "三層": "47.39",
+      "騎樓": "13.39"
+    },
+    "total_area": "202.95",
+    "completion_date": "民國049年10月01日",
+    "owners": [
+      [
+        "王**",
+        "3分之1"
+      ],
+      [
+        "王**",
+        "3分之1"
+      ],
+      [
+        "王**",
+        "3分之1"
+      ]
+    ],
+    "related_other_right": "0003-000"
+  },
+  "08_repo_etranscript": {
+    "kind": "電子謄本PDF：土地x2+建物x1",
+    "land_number": [
+      "0221-0000",
+      "0221-0001"
+    ],
+    "building_number": "00465-000",
+    "area_land": "153.00",
+    "building_address": "杭州南路一段111巷3之1號二樓",
+    "main_usage": "住家用",
+    "main_material": "加強磚造",
+    "total_floors": "004層",
+    "floors": {
+      "二層": "95.41"
+    },
+    "total_area": "95.41",
+    "rights_scope": "全部",
+    "land_rights_scope": "4分之1"
+  }
+}

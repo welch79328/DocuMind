@@ -1,0 +1,99 @@
+{
+  "area": "153.00",
+  "building_address": "杭州南路一段111巷3之1號二樓",
+  "building_number": "00465-000",
+  "completion_date": "民國---年--(月)--(日)",
+  "extraction_confidence": 0.9,
+  "field_confidences": {
+    "area": 0.9,
+    "building_address": 0.9,
+    "building_number": 0.9,
+    "completion_date": 0.9,
+    "floor_area": 0.9,
+    "floor_level": 0.9,
+    "land_number": 0.9,
+    "land_rights_scope": 0.9,
+    "land_use_type": 0.9,
+    "land_use_zone": 0.9,
+    "main_material": 0.9,
+    "main_usage": 0.9,
+    "other_right_type": 0.0,
+    "owner": 0.9,
+    "rights_scope": 0.9,
+    "section": 0.9,
+    "seizure_mark": 0.0,
+    "shared_area": 0.0,
+    "shared_build_number": 0.0,
+    "sub_building_area": 0.0,
+    "sub_building_usage": 0.0,
+    "subsection": 0.9,
+    "total_area": 0.9,
+    "total_floors": 0.9
+  },
+  "floor_area": "95.41",
+  "floor_area_checks": [
+    {
+      "matches": true,
+      "sum": "95.41",
+      "total": "95.41",
+      "transcript_id": "00465-000"
+    }
+  ],
+  "floor_level": "二層",
+  "floors": [
+    {
+      "area": "95.41",
+      "level": "二層",
+      "transcript_id": "00465-000"
+    }
+  ],
+  "land_number": "0221-0000",
+  "land_numbers": [
+    {
+      "number": "0221-0000",
+      "section": "中正段二小段"
+    },
+    {
+      "number": "0221-0001",
+      "section": "中正段二小段"
+    }
+  ],
+  "land_rights_scope": "4分之1",
+  "land_use_type": "(空白)",
+  "land_use_zone": "(空白)",
+  "llm_used_for_extraction": false,
+  "main_material": "加強磚造",
+  "main_usage": "住家用",
+  "needs_confirmation": [],
+  "owner": "黃**",
+  "owners": [
+    {
+      "name": "黃**",
+      "order": "0005",
+      "part": "land",
+      "rights_scope": "4分之1",
+      "transcript_id": "0221-0000"
+    },
+    {
+      "name": "黃**",
+      "order": "0005",
+      "part": "land",
+      "rights_scope": "4分之1",
+      "transcript_id": "0221-0001"
+    },
+    {
+      "name": "黃**",
+      "order": "0002",
+      "part": "building",
+      "rights_scope": "全部",
+      "transcript_id": "00465-000"
+    }
+  ],
+  "rights_scope": "全部",
+  "section": "中正段",
+  "shared_parts": [],
+  "sub_buildings": [],
+  "subsection": "二小段",
+  "total_area": "95.41",
+  "total_floors": "004層"
+}

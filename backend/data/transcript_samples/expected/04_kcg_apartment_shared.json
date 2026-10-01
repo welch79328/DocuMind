@@ -1,0 +1,89 @@
+{
+  "area": "69.52",
+  "completion_date": "民國---年--月--日",
+  "extraction_confidence": 0.5294,
+  "field_confidences": {
+    "area": 0.9,
+    "building_address": 0.0,
+    "building_number": 0.0,
+    "completion_date": 0.9,
+    "floor_area": 0.9,
+    "floor_level": 0.0,
+    "land_number": 0.0,
+    "land_rights_scope": 0.0,
+    "land_use_type": 0.0,
+    "land_use_zone": 0.0,
+    "main_material": 0.9,
+    "main_usage": 0.9,
+    "other_right_type": 0.0,
+    "owner": 0.0,
+    "rights_scope": 0.0,
+    "section": 0.9,
+    "seizure_mark": 0.0,
+    "shared_area": 0.9,
+    "shared_build_number": 0.9,
+    "sub_building_area": 0.0,
+    "sub_building_usage": 0.9,
+    "subsection": 0.0,
+    "total_area": 0.9,
+    "total_floors": 0.0
+  },
+  "floor_area": "69.52",
+  "floor_area_checks": [
+    {
+      "matches": true,
+      "sum": "69.52",
+      "total": "69.52",
+      "transcript_id": null
+    }
+  ],
+  "floors": [
+    {
+      "area": "69.52",
+      "level": "五層",
+      "transcript_id": null
+    }
+  ],
+  "land_numbers": [],
+  "llm_used_for_extraction": false,
+  "main_material": "鋼筋混凝上造",
+  "main_usage": "住家用",
+  "needs_confirmation": [
+    "building_address",
+    "building_number",
+    "floor_level",
+    "land_number",
+    "land_use_zone",
+    "owner",
+    "rights_scope"
+  ],
+  "owners": [],
+  "section": "吉慶段",
+  "shared_area": "19.62",
+  "shared_build_number": "00697-000",
+  "shared_parts": [
+    {
+      "area": "19.62",
+      "build_number": "00697-000",
+      "parking": [],
+      "parking_total": null,
+      "rights_scope": "5分之1",
+      "share_area": "3.92",
+      "transcript_id": null
+    }
+  ],
+  "sub_building_usage": "陽台",
+  "sub_buildings": [
+    {
+      "area": "8.71",
+      "transcript_id": null,
+      "usage": "陽台"
+    },
+    {
+      "area": "2.39",
+      "transcript_id": null,
+      "usage": "花台"
+    }
+  ],
+  "total_area": "69.52"
+}

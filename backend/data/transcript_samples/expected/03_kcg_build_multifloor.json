@@ -1,0 +1,103 @@
+{
+  "area": "128.32",
+  "building_address": "花旗二路",
+  "completion_date": "民國084年02月日",
+  "extraction_confidence": 0.5063,
+  "field_confidences": {
+    "area": 0.9,
+    "building_address": 0.9,
+    "building_number": 0.0,
+    "completion_date": 0.9,
+    "floor_area": 0.9,
+    "floor_level": 0.0,
+    "land_number": 0.0,
+    "land_rights_scope": 0.0,
+    "land_use_type": 0.0,
+    "land_use_zone": 0.0,
+    "main_material": 0.9,
+    "main_usage": 0.9,
+    "other_right_type": 0.0,
+    "owner": 0.0,
+    "rights_scope": 0.0,
+    "section": 0.0,
+    "seizure_mark": 0.0,
+    "shared_area": 0.0,
+    "shared_build_number": 0.0,
+    "sub_building_area": 0.0,
+    "sub_building_usage": 0.9,
+    "subsection": 0.0,
+    "total_area": 0.9,
+    "total_floors": 0.9
+  },
+  "floor_area": "37.52",
+  "floor_area_checks": [
+    {
+      "matches": true,
+      "sum": "128.32",
+      "total": "128.32",
+      "transcript_id": null
+    }
+  ],
+  "floors": [
+    {
+      "area": "37.52",
+      "level": null,
+      "transcript_id": null
+    },
+    {
+      "area": "37.52",
+      "level": null,
+      "transcript_id": null
+    },
+    {
+      "area": "37.52",
+      "level": null,
+      "transcript_id": null
+    },
+    {
+      "area": "15.76",
+      "level": null,
+      "transcript_id": null
+    }
+  ],
+  "land_numbers": [],
+  "llm_used_for_extraction": false,
+  "main_material": "鋼筋混凝土造",
+  "main_usage": "住商用",
+  "needs_confirmation": [
+    "building_number",
+    "floor_level",
+    "land_number",
+    "land_use_zone",
+    "owner",
+    "rights_scope",
+    "section"
+  ],
+  "owners": [],
+  "shared_parts": [],
+  "sub_building_usage": "陽台",
+  "sub_buildings": [
+    {
+      "area": "10.29",
+      "transcript_id": null,
+      "usage": null
+    },
+    {
+      "area": "8.80",
+      "transcript_id": null,
+      "usage": null
+    },
+    {
+      "area": "8.00",
+      "transcript_id": null,
+      "usage": null
+    },
+    {
+      "area": "3.23",
+      "transcript_id": null,
+      "usage": null
+    }
+  ],
+  "total_area": "128.32",
+  "total_floors": "004層"
+}

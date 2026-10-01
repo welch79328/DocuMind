@@ -1,0 +1,103 @@
+{
+  "area": "75.63",
+  "building_address": "逢甲路236號四樓",
+  "building_number": "00071-000",
+  "completion_date": "民國083年07月15日",
+  "extraction_confidence": 0.8526,
+  "field_confidences": {
+    "area": 0.9,
+    "building_address": 0.9,
+    "building_number": 0.9,
+    "completion_date": 0.9,
+    "floor_area": 0.9,
+    "floor_level": 0.9,
+    "land_number": 0.9,
+    "land_rights_scope": 0.0,
+    "land_use_type": 0.0,
+    "land_use_zone": 0.0,
+    "main_material": 0.9,
+    "main_usage": 0.9,
+    "other_right_type": 0.9,
+    "owner": 0.9,
+    "rights_scope": 0.9,
+    "section": 0.9,
+    "seizure_mark": 0.0,
+    "shared_area": 0.9,
+    "shared_build_number": 0.9,
+    "sub_building_area": 0.0,
+    "sub_building_usage": 0.9,
+    "subsection": 0.0,
+    "total_area": 0.9,
+    "total_floors": 0.9
+  },
+  "floor_area": "75.63",
+  "floor_area_checks": [
+    {
+      "matches": true,
+      "sum": "75.63",
+      "total": "75.63",
+      "transcript_id": "00071-000"
+    }
+  ],
+  "floor_level": "四層",
+  "floors": [
+    {
+      "area": "75.63",
+      "level": "四層",
+      "transcript_id": "00071-000"
+    }
+  ],
+  "land_number": "0139-0000",
+  "land_numbers": [
+    {
+      "number": "0139-0000",
+      "section": "測試段"
+    },
+    {
+      "number": "0140-0000",
+      "section": "測試段"
+    }
+  ],
+  "llm_used_for_extraction": false,
+  "main_material": "鋼筋混凝土造",
+  "main_usage": "住家用",
+  "needs_confirmation": [
+    "land_use_zone"
+  ],
+  "other_right_type": "抵押權",
+  "owner": "王",
+  "owners": [
+    {
+      "name": "王",
+      "order": "0002",
+      "part": "building",
+      "rights_scope": "全部1分之1",
+      "transcript_id": "00071-000"
+    }
+  ],
+  "rights_scope": "全部1分之1",
+  "section": "測試段",
+  "shared_area": "18.00",
+  "shared_build_number": "00067-000",
+  "shared_parts": [
+    {
+      "area": "18.00",
+      "build_number": "00067-000",
+      "parking": [],
+      "parking_total": null,
+      "rights_scope": "10分之1",
+      "share_area": "1.80",
+      "transcript_id": "00071-000"
+    }
+  ],
+  "sub_building_usage": "陽台",
+  "sub_buildings": [
+    {
+      "area": "5.54",
+      "transcript_id": "00071-000",
+      "usage": "陽台"
+    }
+  ],
+  "total_area": "75.63",
+  "total_floors": "005層"
+}
