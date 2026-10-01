@@ -103,7 +103,9 @@ def _merge_page_structured_data(pages: List[dict]) -> Optional[Dict[str, Any]]:
 
 
 # 謄本的清單明細:跨頁「串接」,不是「先到先贏」(_merge_fill_missing 會只留第一頁的清單)。
-_LIST_DETAIL_KEYS = ("owners", "land_numbers", "floors", "sub_buildings", "floor_area_checks")
+_LIST_DETAIL_KEYS = (
+    "owners", "land_numbers", "floors", "sub_buildings", "floor_area_checks", "shared_parts",
+)
 
 
 def _list_identity(key: str, item: Any, position: int = 0):
@@ -123,6 +125,8 @@ def _list_identity(key: str, item: Any, position: int = 0):
         ident = (item.get("transcript_id"), position + 1)
     elif key == "floor_area_checks":
         ident = (item.get("transcript_id"),)
+    elif key == "shared_parts":
+        ident = (item.get("transcript_id"), item.get("build_number"))
     else:
         return None
     return ident if all(ident) else None

@@ -378,6 +378,7 @@ class TranscriptFieldExtractor(RegexFieldExtractor):
         result["floors"] = floors
         result["floor_area_checks"] = [check] if check else []
         result["sub_buildings"] = self._extract_sub_buildings(norm)
+        result["shared_parts"] = self._extract_shared_parts(norm)
         return result
 
     def _scope_for(self, key: str, text: str) -> str:
@@ -698,25 +699,114 @@ class TranscriptFieldExtractor(RegexFieldExtractor):
         except (TypeError, ValueError):
             return None
 
-    def _strip_shared_parts(self, text: str) -> str:
-        """去掉建物標示部裡每一個共有部分區塊,邊界見 _SHARED_PART_LINE 的說明。"""
-        kept = []
-        in_block = False
+    def _shared_blocks(self, lines) -> list:
+        """每一個共有部分區塊的行號清單(首行即「共有部分:」),邊界見 _SHARED_PART_LINE 的說明。
+
+        _strip_shared_parts 與 _extract_shared_parts 共用這一個切法:
+        其他欄位排除掉的,正好就是公設清單收進來的。
+        """
+        blocks, current = [], None
         other_items_seen = 0
-        for line in text.split("\n"):
+        for i, line in enumerate(lines):
             if self._SHARED_PART_LINE.search(line):
-                in_block, other_items_seen = True, 0
+                current, other_items_seen = [i], 0
+                blocks.append(current)
                 continue
-            if in_block:
-                if self._PART_HEADING.search(line) or self._OWNERSHIP_ENTRY_LINE.search(line):
-                    in_block = False
-                elif self._OTHER_ITEMS_LINE.search(line):
-                    other_items_seen += 1
-                    if other_items_seen >= 2:
-                        in_block = False
-            if not in_block:
-                kept.append(line)
-        return "\n".join(kept)
+            if current is None:
+                continue
+            if self._PART_HEADING.search(line) or self._OWNERSHIP_ENTRY_LINE.search(line):
+                current = None
+            elif self._OTHER_ITEMS_LINE.search(line):
+                other_items_seen += 1
+                if other_items_seen >= 2:
+                    current = None
+            if current is not None:
+                current.append(i)
+        return blocks
+
+    def _strip_shared_parts(self, text: str) -> str:
+        """去掉建物標示部裡每一個共有部分區塊。"""
+        lines = text.split("\n")
+        inside = {i for block in self._shared_blocks(lines) for i in block}
+        return "\n".join(line for i, line in enumerate(lines) if i not in inside)
+
+    # ---- 清單欄位:shared_parts(2026-10-01,slice B3) ----
+    _SHARED_BUILD_NUMBER = re.compile(r"([0-9]{3,5}\s*-\s*[0-9]{3})\s*建\s*號")
+    _SCOPE_LABEL = re.compile(r"權\s*利\s*範\s*圍\s*[:：]?(.*)")
+    _FRACTION = re.compile(r"([0-9]+)\s*分\s*之\s*([0-9]+)")
+    _PARKING_LINE = re.compile(r"含\s*停?\s*車\s*位")
+    _PARKING_NUMBER = re.compile(r"編\s*號\s*([^\s,，、()()權]+?號)")
+    _PARKING_TOTAL = re.compile(r"停\s*車\s*位\s*共\s*計\s*[:：]?\s*([0-9]+\s*位)")
+
+    def _share_token(self, text: str):
+        """持分只留分數本身或「全部」;OCR 雜訊(「冰」、星號)去掉,認不出回 None。"""
+        m = self._FRACTION.search(text or "")
+        if m:
+            return f"{m.group(1)}分之{m.group(2)}"
+        return "全部" if "全部" in (text or "") else None
+
+    def _share_area(self, area, share):
+        """本戶分到的面積 = 面積 × 持分,四捨五入到小數兩位;任一讀不到回 None。"""
+        from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+        if not area or not share:
+            return None
+        try:
+            value = Decimal(str(area).replace(",", ""))
+        except InvalidOperation:
+            return None
+        if share != "全部":
+            m = self._FRACTION.search(share)
+            if not m or int(m.group(1)) == 0:
+                return None
+            value = value * Decimal(m.group(2)) / Decimal(m.group(1))
+        return str(value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+
+    def _extract_shared_parts(self, text: str) -> list:
+        """每一筆公設 {transcript_id, build_number, area, rights_scope, share_area, parking, parking_total}。
+
+        不收「主要用途」:那是照抄 OCR 的文字(「樓梯間」會被讀成「樓梯問」),品質無從保證。
+        """
+        lines = text.split("\n")
+        parts = []
+        for block in self._shared_blocks(lines):
+            header = lines[block[0]]
+            number = self._SHARED_BUILD_NUMBER.search(header)
+            area = self._AREA_VALUE.search(header)
+            area = area.group(1) if area else None
+            scope, parking, total = None, [], None
+            body = [lines[i] for i in block[1:]]
+            for k, line in enumerate(body):
+                if self._PARKING_LINE.search(line):
+                    label = self._SCOPE_LABEL.search(line)
+                    p_scope = self._share_token(label.group(1) if label else line)
+                    p_number = self._PARKING_NUMBER.search(line)
+                    parking.append({
+                        "number": re.sub(r"\s+", "", p_number.group(1)) if p_number else None,
+                        "rights_scope": p_scope,
+                        "share_area": self._share_area(area, p_scope),
+                    })
+                    continue
+                if total is None:
+                    t = self._PARKING_TOTAL.search(line)
+                    if t:
+                        total = re.sub(r"\s+", "", t.group(1))
+                if scope is None:
+                    label = self._SCOPE_LABEL.search(line)
+                    if label:
+                        scope = self._share_token(label.group(1))
+                        # 值被 OCR 折到下一行(士林範本實測)
+                        if scope is None and k + 1 < len(body) and not self._PARKING_LINE.search(body[k + 1]):
+                            scope = self._share_token(body[k + 1])
+            parts.append({
+                "transcript_id": self._building_title_above(lines, block[0]),
+                "build_number": re.sub(r"\s+", "", number.group(1)) if number else None,
+                "area": area,
+                "rights_scope": scope,
+                "share_area": self._share_area(area, scope),
+                "parking": parking,
+                "parking_total": total,
+            })
+        return parts
 
     @staticmethod
     def _drop_lines(text: str, pattern) -> str:

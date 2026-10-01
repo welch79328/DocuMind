@@ -62,6 +62,7 @@ export const META_KEYS: ReadonlySet<string> = new Set([
   'floors',
   'sub_buildings',
   'floor_area_checks',
+  'shared_parts',
 ])
 
 /**
