@@ -59,6 +59,9 @@ export const META_KEYS: ReadonlySet<string> = new Set([
   // 謄本的清單明細(所有權人全部、現行地號全部),不是單一欄位值
   'owners',
   'land_numbers',
+  'floors',
+  'sub_buildings',
+  'floor_area_checks',
 ])
 
 /**

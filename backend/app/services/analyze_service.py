@@ -103,10 +103,10 @@ def _merge_page_structured_data(pages: List[dict]) -> Optional[Dict[str, Any]]:
 
 
 # 謄本的清單明細:跨頁「串接」,不是「先到先贏」(_merge_fill_missing 會只留第一頁的清單)。
-_LIST_DETAIL_KEYS = ("owners", "land_numbers")
+_LIST_DETAIL_KEYS = ("owners", "land_numbers", "floors", "sub_buildings", "floor_area_checks")
 
 
-def _list_identity(key: str, item: Any):
+def _list_identity(key: str, item: Any, position: int = 0):
     """清單項目的身分;回 None 表示身分不完整,永遠保留、不去重。
 
     ⚠️ 依身分、不依顯示值:第二類謄本的姓名遮成「王**」、持分又常相同,
@@ -118,6 +118,11 @@ def _list_identity(key: str, item: Any):
         ident = (item.get("part"), item.get("transcript_id"), item.get("order"))
     elif key == "land_numbers":
         ident = (item.get("section"), item.get("number"))
+    elif key in ("floors", "sub_buildings"):
+        # 同一建號的第幾筆:同一頁上傳兩次時位置相同,可安全去重;值本身常重複(三層都 37.52)
+        ident = (item.get("transcript_id"), position + 1)
+    elif key == "floor_area_checks":
+        ident = (item.get("transcript_id"),)
     else:
         return None
     return ident if all(ident) else None
@@ -137,8 +142,8 @@ def _merge_list_details(merged: Dict[str, Any], pages: List[dict]) -> None:
             if not isinstance(data, dict) or key not in data:
                 continue
             present = True
-            for item in data.get(key) or []:
-                ident = _list_identity(key, item)
+            for position, item in enumerate(data.get(key) or []):
+                ident = _list_identity(key, item, position)
                 if ident is not None:
                     if ident in seen:
                         continue

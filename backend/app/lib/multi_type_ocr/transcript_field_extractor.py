@@ -374,6 +374,10 @@ class TranscriptFieldExtractor(RegexFieldExtractor):
         # 清單欄位與旗標一樣只來自文件文字,不含 LLM 補齊的值。
         result["owners"] = self._extract_owners(norm)
         result["land_numbers"] = self._extract_land_numbers(norm)
+        floors, check = self._extract_floors(norm, regex_fields.get("total_area"))
+        result["floors"] = floors
+        result["floor_area_checks"] = [check] if check else []
+        result["sub_buildings"] = self._extract_sub_buildings(norm)
         return result
 
     def _scope_for(self, key: str, text: str) -> str:
@@ -578,6 +582,121 @@ class TranscriptFieldExtractor(RegexFieldExtractor):
                 for number in numbers:
                     add(section, number)
         return found
+
+    # ---- 清單欄位:floors / sub_buildings / floor_area_checks(2026-10-01,slice B2) ----
+    #
+    # 左欄名稱(一層、陽台)與右欄面積在 OCR 輸出裡常被拆散、漏字,
+    # 所以只有兩邊數量相等才依序配對;對不上就只給面積(或只給用途),不猜。
+
+    # 層次區段起點:「層數」標籤本身,不要求值——掃描件的值會讀壞成「00.」。
+    # 同 total_floors 的標籤,涵蓋單獨「數:」、簡體「数」、「唇数」、「層    數」。
+    _FLOOR_REGION_START = re.compile(r"(?:[層唇]\s*[數数]|(?<![筆棟頁冊件])[數数])\s*[:：]")
+    # 區段終點。附屬建物要帶「用途:」——導讀範本說明框殘字「附屬建物及公」不算(瑞芳實測)。
+    _FLOOR_REGION_END = re.compile(
+        r"建\s*築\s*完\s*成|附\s*屬\s*建\s*物\s*用\s*途\s*[:：]|共\s*有\s*部\s*分|^\W*其他登記事項"
+        r"|(?:標\s*示|所\s*\(?\s*有\s*\)?\s*權|他\s*項\s*權\s*利)\s*部"
+    )
+    _SUB_REGION_START = re.compile(r"附\s*屬\s*建\s*物\s*用\s*途\s*[:：]")
+    _SUB_REGION_END = re.compile(
+        r"共\s*有\s*部\s*分|^\W*其他登記事項"
+        r"|(?:標\s*示|所\s*\(?\s*有\s*\)?\s*權|他\s*項\s*權\s*利)\s*部"
+    )
+    # 層次名稱用中文數字;「005層」是層數(總共幾層),不是層次。
+    _FLOOR_LEVEL = re.compile(
+        r"(?:地\s*下\s*)?[一二三四五六七八九十]+\s*層|騎\s*樓|夾\s*層|屋\s*頂\s*突\s*出\s*物"
+    )
+    # 附屬建物用途只認固定詞彙:OCR 雜訊(「箱」「横」)與說明框文字一律略過。
+    _SUB_USAGE = re.compile(
+        r"陽\s*台|雨\s*遮|平\s*台|露\s*台|花\s*台|屋\s*簷|車\s*位|停\s*車\s*空\s*間|機\s*房"
+        r"|梯\s*間|地\s*下\s*室|夾\s*層|屋\s*頂\s*突\s*出\s*物|防\s*空\s*避\s*難\s*室|儲\s*藏\s*室"
+    )
+    _AREA_VALUE = re.compile(r"([0-9][0-9,.]*[0-9])\s*平\s*方\s*公\s*尺")
+    _TOTAL_AREA_LABEL = re.compile(r"總\s*面\s*積")
+
+    def _region(self, lines, start, end):
+        """(區段起點行號, 區段各行);起點行本身算在區段內,找不到起點回 (None, [])。"""
+        for i, line in enumerate(lines):
+            if start.search(line):
+                body = [line]
+                for later in lines[i + 1:]:
+                    if end.search(later):
+                        break
+                    body.append(later)
+                return i, body
+        return None, []
+
+    def _building_title_above(self, lines, index):
+        """區段上方最近的建號抬頭;沒有就用頁上第一個抬頭(OCR 可能把抬頭排到頁尾)。"""
+        for line in reversed(lines[:index]):
+            m = self._TITLE_NUMBER_LINE.match(line)
+            if m and m.group(2) == "建":
+                return re.sub(r"\s+", "", m.group(1))
+        for line in lines:
+            m = self._TITLE_NUMBER_LINE.match(line)
+            if m and m.group(2) == "建":
+                return re.sub(r"\s+", "", m.group(1))
+        return None
+
+    @staticmethod
+    def _pair(names, areas, name_key):
+        if names and areas and len(names) == len(areas):
+            return [{name_key: n, "area": a} for n, a in zip(names, areas)]
+        if areas:
+            return [{name_key: None, "area": a} for a in areas]
+        return [{name_key: n, "area": None} for n in names]
+
+    def _extract_floors(self, text: str, total_area):
+        """各層 {transcript_id, level, area},以及這一頁的面積加總檢查。"""
+        lines = text.split("\n")
+        index, body = self._region(lines, self._FLOOR_REGION_START, self._FLOOR_REGION_END)
+        if index is None:
+            return [], None
+        levels, areas = [], []
+        for line in body:
+            levels += [re.sub(r"\s+", "", m) for m in self._FLOOR_LEVEL.findall(line)]
+            if not self._TOTAL_AREA_LABEL.search(line):
+                areas += self._AREA_VALUE.findall(line)
+        if not areas and not levels:
+            return [], None
+        transcript_id = self._building_title_above(lines, index)
+        floors = [
+            {"transcript_id": transcript_id, **entry}
+            for entry in self._pair(levels, areas, "level")
+        ]
+        check = None
+        values = [self._to_float(a) for a in areas]
+        if areas and all(v is not None for v in values):
+            total = self._to_float(total_area) if total_area else None
+            check = {
+                "transcript_id": transcript_id,
+                "sum": f"{sum(values):.2f}",
+                "total": total_area,
+                "matches": None if total is None else abs(sum(values) - total) < 0.015,
+            }
+        return floors, check
+
+    def _extract_sub_buildings(self, text: str) -> list:
+        """附屬建物 {transcript_id, usage, area}。"""
+        lines = text.split("\n")
+        index, body = self._region(lines, self._SUB_REGION_START, self._SUB_REGION_END)
+        if index is None:
+            return []
+        usages, areas = [], []
+        for line in body:
+            usages += [re.sub(r"\s+", "", m) for m in self._SUB_USAGE.findall(line)]
+            areas += self._AREA_VALUE.findall(line)
+        transcript_id = self._building_title_above(lines, index)
+        return [
+            {"transcript_id": transcript_id, **entry}
+            for entry in self._pair(usages, areas, "usage")
+        ]
+
+    @staticmethod
+    def _to_float(value):
+        try:
+            return float(str(value).replace(",", ""))
+        except (TypeError, ValueError):
+            return None
 
     def _strip_shared_parts(self, text: str) -> str:
         """去掉建物標示部裡每一個共有部分區塊,邊界見 _SHARED_PART_LINE 的說明。"""

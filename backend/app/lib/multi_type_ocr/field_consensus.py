@@ -43,6 +43,9 @@ _META_KEYS = frozenset({
     # 不能拿去做逐欄共識比對或計信心度。前端 confirmation.ts 的 META_KEYS 須同步。
     "owners",
     "land_numbers",
+    "floors",
+    "sub_buildings",
+    "floor_area_checks",
 })
 
 
