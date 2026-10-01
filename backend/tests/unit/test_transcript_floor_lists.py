@@ -157,7 +157,9 @@ class TestFloors:
 
     @pytest.mark.parametrize("label", ["數:004層", "数:004層", "唇数:004唇", "層    數:004層"])
     async def test_start_label_variants(self, label):
-        text = f"{label}\n層    次:二層   層次面積:*****95.41平方公尺\n建築完成日期:民國091年\n"
+        # 2026-10-01 品質加固:樓層只在加總驗證通過時輸出,所以素材補上相符的總面積
+        text = (f"{label}\n總面積:****95.41平方公尺\n"
+                "層    次:二層   層次面積:*****95.41平方公尺\n建築完成日期:民國091年\n")
         assert _floors(await _merged(text)) == [("二層", "95.41")]
 
     async def test_no_floor_count_label_no_floors(self):
@@ -252,3 +254,40 @@ class TestListsAreMetadata:
             assert key not in candidate["fields"]
             assert key not in data["field_confidences"]
             assert key not in data["needs_confirmation"]
+
+
+class TestFloorsOnlyWhenVerified:
+    """品質加固 H4/H5:各層面積只有在「加總 = 總面積」驗證通過時才輸出"""
+
+    async def test_no_total_no_floors(self):
+        text = "數:004層\n層    次:二層   層次面積:*****95.41平方公尺\n建築完成日期:x\n"
+        m = await _merged(text)
+        assert m["floors"] == []
+        assert m["floor_area_checks"][0]["matches"] is None
+
+    async def test_shifted_pairs_are_withheld(self):
+        """H4:名稱與面積各掉一筆、數量剛好相等——不可輸出 (三層, 60.00)"""
+        text = ("數:003層\n總面積:****150.00平方公尺\n層次:一層 層次面積:50.00平方公尺\n"
+                "60.00平方公尺\n三層\n建築完成日期:x\n")
+        m = await _merged(text)
+        assert m["floors"] == []
+        assert m["floor_area_checks"][0]["matches"] is False
+
+    async def test_shifted_pairs_without_total_are_withheld(self):
+        text = "數:003層\n層次:一層 層次面積:50.00平方公尺\n60.00平方公尺\n三層\n建築完成日期:x\n"
+        assert (await _merged(text))["floors"] == []
+
+    async def test_leaked_sub_building_area_is_withheld(self):
+        """H5:附屬建物標籤讀壞(沒有冒號)且沒有建築完成日期——5.54 不能變成某一層"""
+        text = ("數:005層\n總面積:75.63平方公尺\n層次:四層 層次面積:75.63平方公尺\n"
+                "附屬建物用途 陽台\n面積:5.54平方公尺\n")
+        m = await _merged(text)
+        assert m["floors"] == []
+        assert m["floor_area_checks"][0]["matches"] is False
+
+    async def test_tolerance_boundary(self):
+        """差 0.02 就算對不上(容差 0.015)"""
+        text = "數:001層\n總面積:****100.00平方公尺\n層次:一層 層次面積:****99.98平方公尺\n建築完成日期:x\n"
+        m = await _merged(text)
+        assert m["floor_area_checks"][0]["matches"] is False
+        assert m["floors"] == []

@@ -13,6 +13,8 @@ shared_parts:公設的建號、持分、本戶分到的面積與公設內車位(
 OCR 固定案例取自正式環境對公開範本跑出的 rule_postprocessed 原文,不要順手修正。
 """
 
+import pytest
+
 from app.lib.multi_type_ocr.field_consensus import field_candidate_from_extraction
 from app.lib.multi_type_ocr.transcript_field_extractor import TranscriptFieldExtractor
 from app.services.analyze_service import _merge_page_structured_data
@@ -173,3 +175,54 @@ class TestMetadata:
     async def test_no_usage_key(self):
         """主要用途是照抄 OCR 的文字,刻意不收"""
         assert "usage" not in (await _merged(KCG_OCR))["shared_parts"][0]
+
+
+class TestHardening:
+    """2026-10-01 品質加固:fresh verifier 找到的讀錯路徑,修後只能是對的值或空值"""
+
+    HEADER = "某段00071-000建號\n共有部分:某段00500-000建號****100.00平方公尺\n"
+
+    async def _part(self, body: str) -> dict:
+        return (await _merged(self.HEADER + body))["shared_parts"][0]
+
+    async def test_h1_scope_and_parking_on_one_line(self):
+        p = await self._part("權利範圍:100分之10含停車位編號7號,權利範圍:100分之3\n")
+        assert (p["rights_scope"], p["share_area"]) == ("100分之10", "10.00")
+        assert p["parking"] == [{"number": "7號", "rights_scope": "100分之3", "share_area": "3.00"}]
+
+    async def test_h1_parenthesised_clause(self):
+        p = await self._part("權利範圍:100分之10(含停車位編號7號,權利範圍:100分之3)\n")
+        assert p["rights_scope"] == "100分之10"
+        assert p["parking"][0]["rights_scope"] == "100分之3"
+
+    @pytest.mark.parametrize("next_line", [
+        "其他登記事項:持分2分之1移轉", "車位編號7號權利範圍100分之3", "例如1000分之5",
+    ])
+    async def test_h2_unrelated_next_line_is_not_the_scope(self, next_line):
+        p = await self._part(f"權利範圍:\n{next_line}\n")
+        assert (p["rights_scope"], p["share_area"]) == (None, None)
+
+    async def test_h2_label_with_other_value_does_not_borrow_next_line(self):
+        """標籤後面有值但不是持分(「見附表」):不能改拿下一行的分數"""
+        p = await self._part("權利範圍:見附表\n100分之7\n")
+        assert (p["rights_scope"], p["share_area"]) == (None, None)
+
+    async def test_h2_share_only_next_line_still_used(self):
+        """士林的「權利範圍:」換行「1000分之193」照樣讀得到"""
+        assert (await self._part("權利範圍:\n******1000分之193******\n"))["rights_scope"] == "1000分之193"
+
+    async def test_h3_callout_quanbu_is_not_the_scope(self):
+        p = await self._part("權利範圍為全部時表示單獨所有\n權利範圍:100分之10\n")
+        assert (p["rights_scope"], p["share_area"]) == ("100分之10", "10.00")
+
+    async def test_h3_noise_after_value_still_ok(self):
+        """高雄的「5分之1冰」:值在開頭,後面的雜訊不影響"""
+        assert (await self._part("權利範圍:5分之1冰\n"))["rights_scope"] == "5分之1"
+
+    async def test_first_scope_in_block_wins(self):
+        p = await self._part("權利範圍:100分之10\n權利範圍:100分之20\n")
+        assert p["rights_scope"] == "100分之10"
+
+    async def test_missing_build_number_never_deduplicated(self):
+        text = "某段00071-000建號\n共有部分:某段****100.00平方公尺\n權利範圍:100分之10\n"
+        assert len((await _merged(text, text))["shared_parts"]) == 2

@@ -265,3 +265,21 @@ class TestRulesLockedByVerifier:
         assert [(o["transcript_id"], o["name"]) for o in merged["owners"]] == [
             ("0221-0000", "甲"), ("0221-0001", "乙"),
         ]
+
+
+class TestOwnerLocksFromVerifier:
+    """2026-10-01 品質加固:B1 驗證時沒被測試鎖住的規則"""
+
+    async def test_late_title_is_the_default_transcript_id(self):
+        """01:抬頭只在頁尾出現,所有權人仍掛到它"""
+        owners = (await _extract(SHILIN_LAND_OCR))["owners"]
+        assert [o["transcript_id"] for o in owners] == ["0361-0000"]
+
+    @pytest.mark.parametrize("line", [
+        "設定權利範圍:全部",            # 他項權利部標題讀壞時混進來的抵押範圍
+        "相關他項權利:0003-000",        # 「登記次序」被 OCR 吃掉的相關他項權利
+        "登記次序利:0004",              # 登記次序與「利:」黏在一起的 OCR 殘行
+    ])
+    async def test_mangled_label_exclusions(self, line):
+        text = "建物所有權部\n(0001)登記次序:0002\n所有權人:王\n" + line + "\n"
+        assert (await _extract(text))["owners"][0]["rights_scope"] is None

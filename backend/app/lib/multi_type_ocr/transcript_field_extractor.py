@@ -674,6 +674,11 @@ class TranscriptFieldExtractor(RegexFieldExtractor):
                 "total": total_area,
                 "matches": None if total is None else abs(sum(values) - total) < 0.015,
             }
+        # 品質加固 H4/H5:各層面積只有在「加總 = 總面積」驗證通過時才輸出。
+        # 名稱與面積各掉一筆時的錯位配對、附屬建物面積混進來,都只能靠加總抓到;
+        # 對不上或沒有總面積可對,就整頁不給(檢查結果照樣輸出,看得到原因)。
+        if not check or check["matches"] is not True:
+            floors = []
         return floors, check
 
     def _extract_sub_buildings(self, text: str) -> list:
@@ -735,6 +740,7 @@ class TranscriptFieldExtractor(RegexFieldExtractor):
     _SCOPE_LABEL = re.compile(r"權\s*利\s*範\s*圍\s*[:：]?(.*)")
     _FRACTION = re.compile(r"([0-9]+)\s*分\s*之\s*([0-9]+)")
     _PARKING_LINE = re.compile(r"含\s*停?\s*車\s*位")
+    _ANY_PARKING_WORD = re.compile(r"車\s*位")
     _PARKING_NUMBER = re.compile(r"編\s*號\s*([^\s,，、()()權]+?號)")
     _PARKING_TOTAL = re.compile(r"停\s*車\s*位\s*共\s*計\s*[:：]?\s*([0-9]+\s*位)")
 
@@ -744,6 +750,34 @@ class TranscriptFieldExtractor(RegexFieldExtractor):
         if m:
             return f"{m.group(1)}分之{m.group(2)}"
         return "全部" if "全部" in (text or "") else None
+
+    # 2026-10-01 品質加固:持分值必須「緊接」在標籤後面,或自成一行。
+    # 原本在整段文字裡找第一個分數或「全部」,說明文字「權利範圍為全部時…」、
+    # 下一行不相干的「持分2分之1移轉」都會被當成持分(fresh verifier 實測)。
+    _VALUE_LEAD = re.compile(r"^[\s*:：,，.。、()()]*")
+    _SHARE_AT_START = re.compile(r"(全部|[0-9]+\s*分\s*之\s*[0-9]+)")
+    _SHARE_ONLY_LINE = re.compile(
+        r"(?:全部)?(?:[0-9]+分之[0-9]+)?(?:[^\x00-\x7F0-9])?"
+    )
+
+    def _share_at_start(self, value: str):
+        """標籤後面的值:去掉前導星號/空白/標點後,開頭必須是持分。"""
+        rest = self._VALUE_LEAD.sub("", value or "")
+        m = self._SHARE_AT_START.match(rest)
+        return self._share_token(m.group(1)) if m else None
+
+    def _is_missing_value(self, value: str) -> bool:
+        """標籤後面只剩星號、空白、標點:值被折到下一行了。"""
+        return not self._VALUE_LEAD.sub("", value or "").strip()
+
+    def _share_only_line(self, line: str):
+        """整行只有持分(可帶一個 OCR 雜字)才算數;其餘回 None。"""
+        compact = re.sub(r"[\s*:：,，.。、()()]", "", line or "")
+        if not compact or not re.search(r"全部|分之", compact):
+            return None
+        if not self._SHARE_ONLY_LINE.fullmatch(compact):
+            return None
+        return self._share_token(compact)
 
     def _share_area(self, area, share):
         """本戶分到的面積 = 面積 × 持分,四捨五入到小數兩位;任一讀不到回 None。"""
@@ -776,10 +810,18 @@ class TranscriptFieldExtractor(RegexFieldExtractor):
             scope, parking, total = None, [], None
             body = [lines[i] for i in block[1:]]
             for k, line in enumerate(body):
-                if self._PARKING_LINE.search(line):
-                    label = self._SCOPE_LABEL.search(line)
-                    p_scope = self._share_token(label.group(1) if label else line)
-                    p_number = self._PARKING_NUMBER.search(line)
+                marker = self._PARKING_LINE.search(line)
+                if marker:
+                    # 同一行前半是公設持分、後半是車位(品質加固 H1):各自解析
+                    before, clause = line[:marker.start()], line[marker.start():]
+                    if scope is None:
+                        label = self._SCOPE_LABEL.search(before)
+                        if label:
+                            scope = self._share_at_start(label.group(1))
+                    label = self._SCOPE_LABEL.search(clause)
+                    p_scope = (self._share_at_start(label.group(1)) if label
+                               else self._share_token(clause))
+                    p_number = self._PARKING_NUMBER.search(clause)
                     parking.append({
                         "number": re.sub(r"\s+", "", p_number.group(1)) if p_number else None,
                         "rights_scope": p_scope,
@@ -790,13 +832,16 @@ class TranscriptFieldExtractor(RegexFieldExtractor):
                     t = self._PARKING_TOTAL.search(line)
                     if t:
                         total = re.sub(r"\s+", "", t.group(1))
-                if scope is None:
+                # 提到車位的行(「含」被 OCR 吃掉的車位條款、停車位共計)不拿來當公設持分
+                if scope is None and not self._ANY_PARKING_WORD.search(line):
                     label = self._SCOPE_LABEL.search(line)
                     if label:
-                        scope = self._share_token(label.group(1))
-                        # 值被 OCR 折到下一行(士林範本實測)
-                        if scope is None and k + 1 < len(body) and not self._PARKING_LINE.search(body[k + 1]):
-                            scope = self._share_token(body[k + 1])
+                        scope = self._share_at_start(label.group(1))
+                        # 值被 OCR 折到下一行(士林範本實測):只在標籤後面真的沒有值、
+                        # 而且下一行整行只有持分時才採用(品質加固 H2)
+                        if (scope is None and self._is_missing_value(label.group(1))
+                                and k + 1 < len(body)):
+                            scope = self._share_only_line(body[k + 1])
             parts.append({
                 "transcript_id": self._building_title_above(lines, block[0]),
                 "build_number": re.sub(r"\s+", "", number.group(1)) if number else None,
