@@ -71,11 +71,11 @@
       "name": "王",
       "order": "0002",
       "part": "building",
-      "rights_scope": "全部1分之1",
+      "rights_scope": "全部",
       "transcript_id": "00071-000"
     }
   ],
-  "rights_scope": "全部1分之1",
+  "rights_scope": "全部",
   "section": "測試段",
   "shared_area": "18.00",
   "shared_build_number": "00067-000",

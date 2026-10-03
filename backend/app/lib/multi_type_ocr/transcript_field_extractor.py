@@ -81,35 +81,9 @@ class TranscriptFieldExtractor(RegexFieldExtractor):
         # `[*\s]*` 吃掉謄本的補位星號(****3,406.98)。
         # 星號補位在金額欄位也會出現,不是這一份的特例。
         "area": re.compile(r"面\s*積[:：\s]*[*\s]*([0-9][0-9,.]*[0-9]|[0-9])"),
-        # 四個陷阱,缺一個就取到錯的值(前三個 2026-09-10 以杭州南路一段那份合併謄本實測):
-        #
-        # 1. `(?<!歷次取得)` —— 謄本同時印「權利範圍」與「歷次取得權利範圍」,
-        #    後者是歷史值,不是現況。該份文件全文命中 5 次,其中 2 次是它。
-        # 2. **不要跳過「全部」。** 建物那筆印成「權利範圍：全部 *1分之1*」,
-        #    我曾加 `(?:全部\s*)?` 想改取分數,結果 3 個既有測試立刻掛掉——
-        #    本專案既有的語意就是回「全部」(它與「1分之1」等價,且是契約用語)。
-        #    而且 `\s*` 會吃掉換行:值剛好只有「全部」時,會跨行抓到下一行的
-        #    「所有權人:」。要改成回分數請先確認下游,不是改一條正規式的事。
-        # 3. **區段限定在 `_scope_for()`,不在這條正規式裡。**
-        #    土地與建物所有權部印的標籤逐字相同,只有位置不同——
-        #    這種情況負向斷言救不了,見 _scope_for 的說明。
-        #
-        # 4. `(?<!設定)` —— 他項權利部(抵押權等)印的是「設定權利範圍」,
-        #    那是抵押權的範圍,不是所有權的持分。主要防線是 _scope_for 截到
-        #    他項權利部標題為止;這個斷言是標題被 OCR 打壞時的第二道(2026-09-23)。
-        "rights_scope": re.compile(
-            r"(?<!歷次取得)(?<!設定)權利範圍[:：\s]*[*\s]*([^\s\n*]+)"
-        ),
-        # 土地所有權部的權利範圍(持分)。樣式與 rights_scope 逐字相同,
-        # 差別全在 _scope_for 給的比對範圍:這一欄只看土地所有權部那一段。
-        #
-        # 為什麼需要它(2026-09-21):rights_scope 在土地頁刻意回空字串,
-        # 等建物頁補值——但**純土地謄本沒有建物頁**,值就永久遺失。
-        # 這一欄讓合併層在「整份文件都沒有建物跡證」時拿來遞補,
-        # 見 analyze_service._backfill_land_rights_scope。
-        "land_rights_scope": re.compile(
-            r"(?<!歷次取得)(?<!設定)權利範圍[:：\s]*[*\s]*([^\s\n*]+)"
-        ),
+        # rights_scope、land_rights_scope 不在這裡:持分的值不能用一條正規式取,
+        # 改由 _extract_with_regex 交給共用的持分讀值器,見 _SHARE_LABEL 的說明。
+
         # `所\(?有\)?權人` 的括號不是手滑。謄本原文用相容碼位「所㈲權㆟」,
         # 而 NFKC 把 `㈲`(U+3232 CIRCLED IDEOGRAPH HAVE)正規化成 **`(有)` 帶括號**
         # ——不是 `有`。所以比對「所有權人」在真實謄本上一次都比不到。
@@ -371,6 +345,21 @@ class TranscriptFieldExtractor(RegexFieldExtractor):
             or self._BUILDING_MARK_SECTION.search(norm)
             or any(regex_fields.get(k) for k in self._BUILDING_EVIDENCE_FIELDS)
         )
+        # 持分不是規則讀到的那個值(規則讀不到由 LLM 補上,或規則讀到了卻被 LLM 回傳的值蓋掉
+        # ——基底類別會收下 LLM 回傳的每個欄位,不論有沒有問,verifier 第十一輪):
+        # 值留給複核人員參考,但信心度歸零、一律進複核。
+        # 規則讀不到持分時刻意留空(一筆一格、不往後找),LLM 卻會從整頁圖上挑一個看得到的
+        # 「權利範圍」——常常是下一位所有權人的(verifier 2026-10-03 第十輪)。0.8 剛好等於
+        # 複核門檻,會靜默送進契約欄位。歸零而不是設成門檻下的某個數:門檻可設定,0 一定進複核。
+        for key in self._SHARE_FIELDS:
+            if result.get(key) and result.get(key) != regex_fields.get(key):
+                result["field_confidences"][key] = 0.0
+                if key in self._required_fields() and key not in result["needs_confirmation"]:
+                    result["needs_confirmation"].append(key)
+        scored = [result["field_confidences"][k] for k in self._required_fields()
+                  if k in result["field_confidences"]]
+        if scored:
+            result["extraction_confidence"] = round(sum(scored) / len(scored), 4)
         # 清單欄位與旗標一樣只來自文件文字,不含 LLM 補齊的值。
         result["owners"] = self._extract_owners(norm)
         result["land_numbers"] = self._extract_land_numbers(norm)
@@ -379,7 +368,32 @@ class TranscriptFieldExtractor(RegexFieldExtractor):
         result["floor_area_checks"] = [check] if check else []
         result["sub_buildings"] = self._extract_sub_buildings(norm)
         result["shared_parts"] = self._extract_shared_parts(norm)
+        # 每個持分欄位在這一頁的「結構」:合併層據此定案(analyze_service._lock_share_slots)。
+        # 是旗標不是欄位,登記在 field_consensus._META_KEYS 與前端 META_KEYS。
+        result["share_slots"] = {
+            key: self._share_slot_report(self._scope_for(key, norm)) for key in self._SHARE_FIELDS
+        }
+        # 這一頁的謄本抬頭(建號、地號):合併層據此判斷一份上傳裡是不是有好幾張謄本
+        titles = {"building": [], "land": []}
+        for line in norm.split("\n"):
+            m = self._TITLE_NUMBER_LINE.match(line)
+            if m:
+                kind = "building" if m.group(2) == "建" else "land"
+                titles[kind].append(re.sub(r"\s+", "", m.group(1)))
+        result["share_slots"]["titles"] = titles
         return result
+
+    # 持分欄位:範圍照 _scope_for(在哪裡讀不變),值交給共用讀值器(怎麼讀)。
+    _SHARE_FIELDS = ("rights_scope", "land_rights_scope")
+
+    def _extract_with_regex(self, text: str):
+        fields, confidences = super()._extract_with_regex(text)
+        norm = self._normalize_for_matching(text)
+        for key in self._SHARE_FIELDS:
+            value = self._first_share(self._scope_for(key, norm), one_entry=True)
+            fields[key] = value
+            confidences[key] = self._MATCH_CONFIDENCE if value else 0.0
+        return fields, confidences
 
     def _scope_for(self, key: str, text: str) -> str:
         """建物專屬欄位的比對範圍。三條路,少一條就會取到錯的值。
@@ -455,14 +469,12 @@ class TranscriptFieldExtractor(RegexFieldExtractor):
     _ENTRY_OWNER = re.compile(
         r"(?:所\s*\(?\s*有\s*\)?\s*權\s*人|登記名義人)\s*[:：]\s*(\S+)"
     )
-    _ENTRY_SCOPE = re.compile(r"(?<!歷次取得)(?<!設定)權利範圍[:：\s]*[*\s]*([^\s\n*]+)")
     # 只在一筆所有權資料之內才接受 OCR 讀壞的標籤(「利:」「檬利:」,線上實測),
     # 並排除同樣含「利」的相關他項權利登記次序、設定權利範圍、歷次取得權利範圍。
-    _ENTRY_SCOPE_MANGLED = re.compile(r"利\s*(?:範\s*圍)?\s*[:：][ \t]*[*\s]*([^\s\n*]+)")
+    # 只認標籤;值一律交給 _share_after。
+    _ENTRY_SCOPE_MANGLED = re.compile(r"利\s*(?:範\s*圍)?\s*[:：]")
     _ENTRY_SCOPE_EXCLUDE = re.compile(r"相\s*關|設\s*定|歷\s*次|登\s*記\s*次\s*序")
     _MARK_SECTION_ANY = re.compile(r"標\s*示\s*部")
-    # 持分值至少要有數字或「全部」;讀不出來時抓到的「:」「*」之類是雜訊,寧可缺值。
-    _SHARE_LIKE = re.compile(r"[0-9]|全部")
 
     # 頁首抬頭:整行只有「[行政區][段][小段] 數字-數字 地號/建號」。
     # 位置不限——續頁會重複抬頭,OCR 也可能把它排到頁尾(士林範本實測)。
@@ -505,13 +517,14 @@ class TranscriptFieldExtractor(RegexFieldExtractor):
         # 一頁有兩個抬頭時,改用這一筆「上方最近」的那個,不讓後一份的人掛到前一份。
         transcript_id, _ = self._title_number(lines)
         owners, current = [], None
+        slot_seen = False
         part, in_ownership = None, False
 
         def flush():
             if current and current["name"]:
                 owners.append(current)
 
-        for line in lines:
+        for i, line in enumerate(lines):
             title = self._TITLE_NUMBER_LINE.match(line)
             if title:
                 transcript_id = re.sub(r"\s+", "", title.group(1))
@@ -531,6 +544,7 @@ class TranscriptFieldExtractor(RegexFieldExtractor):
             start = self._OWNERSHIP_ENTRY_START.match(line)
             if start:
                 flush()
+                slot_seen = False
                 current = {
                     "part": part, "transcript_id": transcript_id,
                     "order": start.group(1), "name": None, "rights_scope": None,
@@ -543,12 +557,18 @@ class TranscriptFieldExtractor(RegexFieldExtractor):
                 if m:
                     current["name"] = m.group(1)
                     continue
-            if current["rights_scope"] is None:
-                m = self._ENTRY_SCOPE.search(line)
-                if not m and not self._ENTRY_SCOPE_EXCLUDE.search(line):
+            if not slot_seen:
+                m = next((m for m in self._share_labels(lines, i)
+                          if self._is_share_slot(line, m)), None)
+                # 讀壞的標籤只在這一行完全沒有完整標籤時才看:完整標籤被排除(歷次取得)時,
+                # 「利範圍:」會在同一個標籤裡再比對到一次
+                if (not m and not self._SHARE_LABEL.search(line)
+                        and not self._ENTRY_SCOPE_EXCLUDE.search(line)):
                     m = self._ENTRY_SCOPE_MANGLED.search(line)
-                if m and self._SHARE_LIKE.search(m.group(1)):
-                    current["rights_scope"] = m.group(1)
+                if m:
+                    # 這一筆的欄位格就是它;讀不到也不再往後找(規則 3)
+                    current["rights_scope"], _ = self._share_after(lines, i, m.end())
+                    slot_seen = True
         flush()
         return owners
 
@@ -735,14 +755,49 @@ class TranscriptFieldExtractor(RegexFieldExtractor):
         inside = {i for block in self._shared_blocks(lines) for i in block}
         return "\n".join(line for i, line in enumerate(lines) if i not in inside)
 
-    # ---- 清單欄位:shared_parts(2026-10-01,slice B3) ----
-    _SHARED_BUILD_NUMBER = re.compile(r"([0-9]{3,5}\s*-\s*[0-9]{3})\s*建\s*號")
-    _SCOPE_LABEL = re.compile(r"權\s*利\s*範\s*圍\s*[:：]?(.*)")
+    # ---- 持分讀值器(2026-10-03,G1):所有讀「權利範圍」的地方共用 ----
+    #
+    # 頂層 rights_scope / land_rights_scope、owners、公設、車位原本各寫一套,
+    # 各自漏不同的洞(說明文字整句當值、值讀不到時跨行抓到下一個標籤「住址:…」、
+    # 車位持分被當成公設持分)。每次只補眼前那一種版面,下一種又是新規則——
+    # 業主 2026-10-03 裁示改成一個讀值器,規則只有三條:
+    #   1. 值必須緊接標籤(前導星號、空白、標點可略過),而且「長得像持分」:
+    #      分數,或「全部」——「全部」後面只能再接一個分數或至多一個 OCR 雜字。
+    #      「全部時表示單獨所有」是說明文字,不是持分。
+    #   2. 標籤後同行沒有值時,下一行「整行就是持分」才採用(值被 OCR 折行);
+    #      下一行是別的東西就留空——謄本上「標籤:」後空白多半是真的空欄。
+    #   3. 一筆資料只有一個「權利範圍」欄位格:取範圍內第一個欄位格(標籤後接冒號,
+    #      或直接接值),那一格讀不到就留空,不往後找。沒有冒號、後面接文字的
+    #      「權利範圍為全部時…」是說明文字,不是欄位格,跳過。
+    #      (原本「讀不到就跳過、找下一個」會撿到歷次取得、下一筆、說明框裡的持分——
+    #      OCR 把「歷次取得」讀成別的字,任何排除字串都擋不完,verifier 2026-10-03。)
+    # 輸出一律是「a分之b」或「全部」(「全部 1分之1」→「全部」,本專案的契約用語)。
+    #
+    # 否決過的通用做法:全域「行尾沒寫完就接下一行」。8 份範本重放出 5 個新錯值
+    # (主要建材→「層」、建物門牌→下一行的坐落地號…)。能不能跨行要看值的型別,不能看行尾。
+    #
+    # 不是持分的兩種同名標籤(2026-09-10、09-23 以杭州南路一段合併謄本實測):
+    #   「歷次取得權利範圍」是歷史值,不是現況。
+    #   「設定權利範圍」是他項權利部抵押權的範圍。主要防線是 _scope_for 截到
+    #   他項權利部為止,這是標題被 OCR 打壞時的第二道。
+    # 不用負向斷言:OCR 會在字間插空白、把「歷次取得」折到上一行,斷言就失效,
+    # 而規則 3 會跳過讀不到的標籤往下找,正好找到歷史值(verifier 2026-10-03)。
+    # 改由 _share_labels 忽略空白與換行看標籤前面的字。
+    # 區段限定(土地/建物所有權部只差位置)在 _scope_for,不在這裡。
+    _SHARE_LABEL = re.compile(r"權\s*利\s*範\s*圍\s*[:：]?")
+    _NOT_A_SHARE_PREFIX = ("歷次取得", "設定")
     _FRACTION = re.compile(r"([0-9]+)\s*分\s*之\s*([0-9]+)")
-    _PARKING_LINE = re.compile(r"含\s*停?\s*車\s*位")
-    _ANY_PARKING_WORD = re.compile(r"車\s*位")
-    _PARKING_NUMBER = re.compile(r"編\s*號\s*([^\s,，、()()權]+?號)")
-    _PARKING_TOTAL = re.compile(r"停\s*車\s*位\s*共\s*計\s*[:：]?\s*([0-9]+\s*位)")
+    # 標籤與值之間的分隔:非文字、非數字的符號一律當分隔(空白、星號補位、冒號,以及冒號被 OCR
+    # 讀成的「；|!『」等)。用字元類別而不是列舉清單——列舉永遠會漏下一個沒見過的符號
+    # (verifier 2026-10-03 第六輪起;業主裁示通用處理)。\W 不含中文字、數字、英文字母。
+    _VALUE_LEAD = re.compile(r"^[\W_]*")
+    _SHARE_AT_START = re.compile(r"(全部|[0-9]+\s*分\s*之\s*[0-9]+)")
+    _QUANBU_TAIL = re.compile(r"(?:[0-9]+\s*分\s*之\s*[0-9]+)?(?:[^\x00-\x7F0-9])?")
+    _SHARE_ONLY_LINE = re.compile(
+        r"(?:全部)?(?:[0-9]+分之[0-9]+)?(?:[^\x00-\x7F0-9])?"
+    )
+    _PUNCT = re.compile(r"[\W_]")
+    _NEXT_LABEL = re.compile(r"[一-鿿]{1,6}\s*[:：]")
 
     def _share_token(self, text: str):
         """持分只留分數本身或「全部」;OCR 雜訊(「冰」、星號)去掉,認不出回 None。"""
@@ -751,20 +806,23 @@ class TranscriptFieldExtractor(RegexFieldExtractor):
             return f"{m.group(1)}分之{m.group(2)}"
         return "全部" if "全部" in (text or "") else None
 
-    # 2026-10-01 品質加固:持分值必須「緊接」在標籤後面,或自成一行。
-    # 原本在整段文字裡找第一個分數或「全部」,說明文字「權利範圍為全部時…」、
-    # 下一行不相干的「持分2分之1移轉」都會被當成持分(fresh verifier 實測)。
-    _VALUE_LEAD = re.compile(r"^[\s*:：,，.。、()()]*")
-    _SHARE_AT_START = re.compile(r"(全部|[0-9]+\s*分\s*之\s*[0-9]+)")
-    _SHARE_ONLY_LINE = re.compile(
-        r"(?:全部)?(?:[0-9]+分之[0-9]+)?(?:[^\x00-\x7F0-9])?"
-    )
+    def _read_share(self, value: str):
+        """標籤後面的值(規則 1):開頭必須是持分,「全部」後面不能接說明文字。
 
-    def _share_at_start(self, value: str):
-        """標籤後面的值:去掉前導星號/空白/標點後,開頭必須是持分。"""
+        值只到同一行下一個標籤為止:OCR 把兩欄併成一行時(「全部 住址:台北市」),
+        後面那一欄不是說明文字。
+        """
         rest = self._VALUE_LEAD.sub("", value or "")
+        next_label = self._NEXT_LABEL.search(rest)
+        if next_label:
+            rest = rest[:next_label.start()]
         m = self._SHARE_AT_START.match(rest)
-        return self._share_token(m.group(1)) if m else None
+        if not m:
+            return None
+        if m.group(1) == "全部":
+            if not self._QUANBU_TAIL.fullmatch(self._PUNCT.sub("", rest[m.end():])):
+                return None
+        return self._share_token(m.group(1))
 
     def _is_missing_value(self, value: str) -> bool:
         """標籤後面只剩星號、空白、標點:值被折到下一行了。"""
@@ -772,12 +830,250 @@ class TranscriptFieldExtractor(RegexFieldExtractor):
 
     def _share_only_line(self, line: str):
         """整行只有持分(可帶一個 OCR 雜字)才算數;其餘回 None。"""
-        compact = re.sub(r"[\s*:：,，.。、()()]", "", line or "")
+        compact = self._PUNCT.sub("", line or "")
         if not compact or not re.search(r"全部|分之", compact):
             return None
         if not self._SHARE_ONLY_LINE.fullmatch(compact):
             return None
         return self._share_token(compact)
+
+    def _share_after(self, lines, i, label_end):
+        """lines[i] 在 label_end 之後的持分(規則 1、2)。回 (持分, 用到的最後一行)。"""
+        value = lines[i][label_end:]
+        share = self._read_share(value)
+        if share:
+            return share, i
+        if self._is_missing_value(value) and i + 1 < len(lines):
+            share = self._share_only_line(lines[i + 1])
+            if share:
+                return share, i + 1
+        return None, i
+
+    # 所有權部每一筆開頭括號裡的流水號「(0001)」;_OWNERSHIP_ENTRY_START 取的是冒號後的登記次序
+    _ENTRY_INDEX = re.compile(r"^\W*\(\s*(\d{4})\s*\)")
+
+    def _share_labels(self, lines, i):
+        """lines[i] 裡的持分標籤;前面(含上一行行尾,忽略空白)是「歷次取得」「設定」的不算。"""
+        previous = lines[i - 1] if i > 0 else ""
+        for m in self._SHARE_LABEL.finditer(lines[i]):
+            before = re.sub(r"\s+", "", previous + lines[i][:m.start()])
+            if not before.endswith(self._NOT_A_SHARE_PREFIX):
+                yield m
+
+    def _is_share_slot(self, line: str, m) -> bool:
+        """標籤是不是欄位格(規則 3)。
+
+        說明文字是標籤後面直接接中文字(「權利範圍為全部時…」);其餘——冒號、
+        被 OCR 讀錯的分隔(「；」「|」「l」…)、沒有東西、直接是持分——都是欄位格。
+        不能只認冒號:分隔讀錯時這一頁會被當成「沒看到欄位格」,合併層就改由
+        後面那頁(可能是另一張謄本)定案(verifier 2026-10-03 第六輪)。
+        """
+        after = line[m.end():].lstrip()
+        if m.group(0).rstrip().endswith((":", "：")) or not after:
+            return True
+        if self._read_share(after) is not None:
+            return True
+        return not re.match(r"[一-鿿]", after)
+
+    def _first_share(self, text: str, one_entry: bool = False):
+        """範圍內第一個欄位格的持分(規則 3);那一格讀不到就是 None。見 _first_share_slot。"""
+        share, _ = self._first_share_slot(text, one_entry)
+        return share
+
+    def _share_slot_report(self, text: str) -> dict:
+        """這一頁持分欄位的結構(給合併層定案用),不看標籤讀得好不好:
+
+          header  出現任何一筆所有權資料開頭——這筆持分歸這一頁(編號讀錯也算)
+          slot    看到欄位格(讀不讀得到都算)
+
+        不回報「續頁」:曾讓下一頁頂端的持分補給上一頁那筆資料,但分頁若落在 (0002) 裡,
+        補進來的是下一位所有權人的持分(verifier 2026-10-03 第九輪,P1)。
+
+        合併層曾經只看 slot,但「看到欄位格」要先把標籤讀對;冒號被 OCR 讀成「；」「一」、
+        標籤殘缺時,這一頁會被當成沒看到,改由另一張謄本定案(verifier 2026-10-03 第六、七輪)。
+        資料開頭「(0001)登記次序」是結構,不受標籤讀壞影響。
+        """
+        header = any(self._OWNERSHIP_ENTRY_START.match(line) for line in text.split("\n"))
+        _, slot = self._first_share_slot(text, one_entry=True)
+        return {"header": header, "slot": slot}
+
+    def _first_share_slot(self, text: str, one_entry: bool = False):
+        """回 (持分, 是否看到欄位格)。看到欄位格但讀不到 = (None, True)。
+
+        one_entry:只在第一筆所有權資料(編號 (0001))之內找——碰到第二筆、編號不是 0001 的一筆、
+        或下一個所有權部標題就停、留空。共有時第一位讀不到,絕不能拿第二位的持分:
+        那是看似合法、不進複核的錯值,純土地謄本還會被遞補進 rights_scope
+        (plan-verifier 2026-10-03)。
+        """
+        lines = text.split("\n")
+        entries = 0
+        for i, line in enumerate(lines):
+            if one_entry:
+                if self._OWNERSHIP_ENTRY_START.match(line):
+                    entries += 1
+                    # 只認編號 (0001) 的那一筆:抽取是逐頁跑、合併只填缺值,
+                    # 第一頁第一位讀不到時,第二頁開頭的 (0002) 會被合併層補進來
+                    # (verifier 2026-10-03)。編號跟著資料走,不受分頁影響。
+                    if entries > 1 or self._ENTRY_INDEX.match(line).group(1) != "0001":
+                        return None, False
+                elif entries and (self._LAND_SECTION.search(line)
+                                  or self._BUILDING_SECTION.search(line)):
+                    return None, False
+            for m in self._share_labels(lines, i):
+                if self._is_share_slot(line, m):
+                    share, _ = self._share_after(lines, i, m.end())
+                    return share, True
+        return None, False
+
+    # ---- 清單欄位:shared_parts(2026-10-01,slice B3;車位子句 2026-10-03,G1) ----
+    _SHARED_BUILD_NUMBER = re.compile(r"([0-9]{3,5}\s*-\s*[0-9]{3})\s*建\s*號")
+    _PARKING_NUMBER = re.compile(r"編\s*號\s*([^\s,，、()()權]+?號)")
+    _PARKING_TOTAL = re.compile(r"停\s*車\s*位\s*共\s*計\s*[:：]?\s*([0-9]+\s*位)")
+
+    # 車位條款是一段「子句」,不是一行。OCR 會把它折成兩三行:
+    #     (含車位編號2號,
+    #     權利範圍:
+    #     100分之3)
+    # 子句從「含(停)車位」或「(停)車位編號」開始(見 _CLAUSE_START;「停車位共計」不是子句),
+    # 開頭可以在行中任何位置,包括「其他登記事項:」那一行裡面。
+    # 子句結束於:它自己的右括號(內部成對括號不算)、下一個子句、讀到自己的持分,
+    # 或「行尾時語法已完整」。語法未完:「權利範圍:」後值還沒出現;或子句有車位編號,
+    # 且括號未閉合或以「,,、」結尾(沒有編號只是「提到車位」,不跨行)。
+    # 所以 `含車位編號7號` 換行 `權利範圍:100分之10`(車位在前、條款完整)的第二行是公設持分;
+    # 不能「一直往下讀到有持分為止」(plan-verifier 2026-10-03)。
+    # 子句外的文字才拿來讀公設持分。
+    # 子句要有身分:「含(停)車位」(「不含」除外),或後面接「編號」的「(停)車位」
+    # (「含」被 OCR 吃掉;中間可隔一組成對括號,不限長度)。
+    # 只是提到車位的字(「無車位」「車位另計」「主要用途:停車位」「法定停車位」)不是子句——
+    # 把它當子句,同一行的公設持分會變成一筆沒有編號的幽靈車位(verifier 2026-10-03)。
+    # 第二道防線(HEAD 原有,2026-10-03 第 5 輪 verifier 後加回):沒被認成子句、但標籤前面
+    # 有「車位」字樣的那一行,不拿來讀公設持分。「含」被 OCR 吃掉、編號寫法又不是緊接
+    # (停車位第7號、停車位(地下二層機械式)編號7號、車位B1-7號)時,子句認不出來,
+    # 它的權利範圍會變成公設持分——寧可留空。車位字樣在值後面是附註(「(不含車位)」),照讀。
+    _PARKING_WORD = re.compile(r"車\s*位")
+    _CLAUSE_START = re.compile(
+        r"(?<!不)含\s*停?\s*車\s*位"
+        r"|停?\s*車\s*位(?=\s*(?:[(（][^)）]*[)）])?\s*編\s*號)"
+    )
+    _TRAILING_SEP = re.compile(r"[,，、]\s*$")
+
+    def _is_structural(self, line: str) -> bool:
+        """部別標題、登記次序、其他登記事項:結束延續中的子句(同一行內仍可開始新子句)。"""
+        return bool(self._PART_HEADING.search(line)
+                    or self._OWNERSHIP_ENTRY_START.match(line)
+                    or self._OTHER_ITEMS_LINE.search(line))
+
+    def _feed_clause(self, clause, text: str) -> bool:
+        """把一段文字交給子句;回 False 表示這段不屬於子句(退回公設文字)。"""
+        continuation = clause["fed"]
+        if clause["await"]:
+            # 上一段是「權利範圍:」沒有值:這一段整段是持分才算(規則 2);
+            # 不是就不屬於這個子句——它可能正是公設持分(verifier 2026-10-03)
+            clause["await"] = False
+            clause["share"] = self._share_only_line(text)
+            if clause["share"] is None:
+                return False
+            clause["parts"].append(text)
+            return True
+        clause["fed"] = True
+        clause["parts"].append(text)
+        if clause["share"] is not None:
+            return True
+        label = self._SHARE_LABEL.search(text)
+        if label:
+            value = text[label.end():]
+            clause["share"] = self._read_share(value)
+            clause["await"] = clause["share"] is None and self._is_missing_value(value)
+        elif continuation:
+            # 沒有標籤的分數:只有折到下一行、整行就是持分才算(規則 2);
+            # 夾在說明文字裡的分數(「說明各70分之1」)不是車位持分(verifier 2026-10-03)
+            clause["share"] = self._share_only_line(text)
+        return True
+
+    def _clause_close(self, clause, segment: str):
+        """子句在這一段結束的位置(右括號之後),沒結束回 None。
+
+        只有「子句自己的」右括號才結束它:「(含車位…」開的那個括號,或包住子句的外層括號。
+        子句內部成對的括號(「含停車位(平面式)編號B1-7號」)不算——
+        把它當結尾,車位持分會掉進公設持分(verifier 2026-10-03)。
+        """
+        floor = 0 if clause["opened"] else -1
+        for k, ch in enumerate(segment):
+            if ch in "(（":
+                clause["depth"] += 1
+            elif ch in ")）":
+                clause["depth"] -= 1
+                if clause["depth"] == floor:
+                    return k + 1
+        return None
+
+    def _clause_unfinished(self, clause) -> bool:
+        """行尾時子句還沒寫完,下一行仍屬於它。
+
+        「權利範圍:」後面還沒有值:下一行整行是持分就是它的(值折行)。
+        其他延續(括號未閉合、結尾分隔號)要子句有車位編號才算——沒有編號的
+        「本共有部分無停車位,」「(不含車位,」只是提到車位,不能把下一行的公設持分
+        拿去當車位持分(verifier 2026-10-03)。跨行歸屬要有身分證據。
+        """
+        if clause["await"]:
+            return True
+        text = "".join(clause["parts"])
+        if not self._PARKING_NUMBER.search(text):
+            return False
+        return clause["depth"] > 0 or bool(self._TRAILING_SEP.search(text))
+
+    def _parking_clauses(self, body):
+        """區塊內文切成車位子句與其餘文字。回 (子句清單, 其餘文字的各行)。"""
+        clauses, rest_lines, current = [], [], None
+        for line in body:
+            if self._is_structural(line):
+                current = None
+            starts = [m.start() for m in self._CLAUSE_START.finditer(line)]
+            cuts = [0] + starts + [len(line)]
+            rest = []
+            for a, b in zip(cuts, cuts[1:]):
+                if a == b:
+                    continue
+                segment = line[a:b]
+                if a in starts:
+                    current = {"parts": [], "share": None, "await": False, "fed": False,
+                               "depth": 0, "opened": False}
+                    clauses.append(current)
+                    # 子句前緊鄰的左括號屬於子句,「(含車位…」才判斷得出括號未閉合
+                    before = "".join(rest).rstrip()
+                    if before.endswith(("(", "（")):
+                        rest = [before[:-1]]
+                        current["parts"].append(before[-1])
+                        current["depth"], current["opened"] = 1, True
+                if current is not None and current["share"] is None:
+                    depth = current["depth"]
+                    end = self._clause_close(current, segment)
+                    inside = segment if end is None else segment[:end]
+                    if not self._feed_clause(current, inside):
+                        current["depth"] = depth
+                        current = None
+                        rest.append(segment)
+                        continue
+                    if end is not None:
+                        current = None
+                    rest.append("" if end is None else segment[end:])
+                else:
+                    # 不在子句裡,或子句已讀到自己的持分:後面的文字不屬於它
+                    current = None
+                    rest.append(segment)
+            if current is not None and not self._clause_unfinished(current):
+                current = None
+            rest_lines.append("".join(rest))
+        # 沒有編號也沒有持分的子句(「不含車位」「車位另計」)不成一筆
+        kept = [c for c in clauses
+                if c["share"] is not None or self._PARKING_NUMBER.search("".join(c["parts"]))]
+        return kept, rest_lines
+
+    def _parking_word_before_label(self, line: str) -> bool:
+        """這一行在第一個權利範圍標籤之前出現「車位」:標籤屬於認不出的車位條款(見 _PARKING_WORD)。"""
+        label = self._SHARE_LABEL.search(line)
+        word = self._PARKING_WORD.search(line)
+        return bool(label and word and word.start() < label.start())
 
     def _share_area(self, area, share):
         """本戶分到的面積 = 面積 × 持分,四捨五入到小數兩位;任一讀不到回 None。"""
@@ -807,41 +1103,25 @@ class TranscriptFieldExtractor(RegexFieldExtractor):
             number = self._SHARED_BUILD_NUMBER.search(header)
             area = self._AREA_VALUE.search(header)
             area = area.group(1) if area else None
-            scope, parking, total = None, [], None
             body = [lines[i] for i in block[1:]]
-            for k, line in enumerate(body):
-                marker = self._PARKING_LINE.search(line)
-                if marker:
-                    # 同一行前半是公設持分、後半是車位(品質加固 H1):各自解析
-                    before, clause = line[:marker.start()], line[marker.start():]
-                    if scope is None:
-                        label = self._SCOPE_LABEL.search(before)
-                        if label:
-                            scope = self._share_at_start(label.group(1))
-                    label = self._SCOPE_LABEL.search(clause)
-                    p_scope = (self._share_at_start(label.group(1)) if label
-                               else self._share_token(clause))
-                    p_number = self._PARKING_NUMBER.search(clause)
-                    parking.append({
-                        "number": re.sub(r"\s+", "", p_number.group(1)) if p_number else None,
-                        "rights_scope": p_scope,
-                        "share_area": self._share_area(area, p_scope),
-                    })
-                    continue
-                if total is None:
-                    t = self._PARKING_TOTAL.search(line)
-                    if t:
-                        total = re.sub(r"\s+", "", t.group(1))
-                # 提到車位的行(「含」被 OCR 吃掉的車位條款、停車位共計)不拿來當公設持分
-                if scope is None and not self._ANY_PARKING_WORD.search(line):
-                    label = self._SCOPE_LABEL.search(line)
-                    if label:
-                        scope = self._share_at_start(label.group(1))
-                        # 值被 OCR 折到下一行(士林範本實測):只在標籤後面真的沒有值、
-                        # 而且下一行整行只有持分時才採用(品質加固 H2)
-                        if (scope is None and self._is_missing_value(label.group(1))
-                                and k + 1 < len(body)):
-                            scope = self._share_only_line(body[k + 1])
+            clauses, rest = self._parking_clauses(body)
+            total = None
+            for line in body:
+                t = self._PARKING_TOTAL.search(line)
+                if t:
+                    total = re.sub(r"\s+", "", t.group(1))
+                    break
+            scope = self._first_share("\n".join(
+                "" if self._parking_word_before_label(line) else line for line in rest
+            ))
+            parking = []
+            for clause in clauses:
+                p_number = self._PARKING_NUMBER.search("".join(clause["parts"]))
+                parking.append({
+                    "number": re.sub(r"\s+", "", p_number.group(1)) if p_number else None,
+                    "rights_scope": clause["share"],
+                    "share_area": self._share_area(area, clause["share"]),
+                })
             parts.append({
                 "transcript_id": self._building_title_above(lines, block[0]),
                 "build_number": re.sub(r"\s+", "", number.group(1)) if number else None,

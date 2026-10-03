@@ -1,6 +1,6 @@
 # DocuMind OCR 對接規格（給外部系統開發者）
 
-> 版本 2.1.0 ／ 2026-10-01（2.1.0：謄本新增 6 個清單欄位與 `land_rights_scope`，並寫明各單值欄位的取值範圍，見 §3.1）
+> 版本 2.1.1 ／ 2026-10-03（2.1.1：持分欄位的值統一為「分數」或「全部」，見 §3.1；2.1.0：謄本新增 6 個清單欄位與 `land_rights_scope`，並寫明各單值欄位的取值範圍）
 > 本文件由 `docs/API_INTEGRATION.md` 與 `docs/api/02-INTEGRATION-API.md` 合併而成。
 > 標示「實測」的數字皆取自線上環境(`54.248.201.66`),日期各自註明。
 > 唯一需要串的端點是 `POST /api/v1/analyze`；其餘為輔助。
@@ -227,6 +227,8 @@ curl -X POST "http://54.248.201.66:8085/api/v1/analyze/batch" \
 | `floor_level` / `floor_area` | 第一個層次與其面積 | 公設的「建物層次:公共設施」 |
 | `shared_area` | **整棟公設的面積**（照謄本印的） | ⚠️ 不是本戶分到的面積——那是 `shared_parts[].share_area` |
 | `owner` | 第一位所有權人 | — |
+
+**持分的值格式**（2.1.1 起）：`rights_scope`、`land_rights_scope`、`owners[].rights_scope`、`shared_parts[].rights_scope` 與車位持分一律只回 `a分之b` 或 `全部`（謄本印「全部 1分之1」回 `全部`）。標籤後面是說明文字、或值讀不出來時回 `null`，不猜；`rights_scope`／`land_rights_scope` 只取每張謄本第一筆所有權資料的持分：共有時第一位讀不到，不會改取第二位。一次上傳多張謄本（建號或地號抬頭不同）時，**每一張都讀得到且值相同**才回傳該值，否則回 `null` 並列入 `needs_confirmation`——各張的持分請讀 `owners`（每筆帶 `transcript_id`）。建號與地號分開判斷：一棟建物配多筆土地時，`rights_scope` 照常回傳。
 
 `has_building_evidence`（bool）只出現在各頁的 `structured_data`，是合併時判斷「純土地謄本」用的旗標，不是欄位；
 `document_fields` 不含它。

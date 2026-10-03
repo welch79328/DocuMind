@@ -39,6 +39,8 @@ _META_KEYS = frozenset({
     # 漏列會被當成欄位,拿到一筆 0.0 信心度混進 field_confidences 與共識比對。
     # 前端 confirmation.ts 的 META_KEYS 須同步。
     "has_building_evidence",
+    # 謄本各頁的持分欄位結構,供合併層定案 rights_scope(_lock_share_slots)。前端須同步。
+    "share_slots",
     # 謄本的清單明細(所有權人全部、現行地號全部)。清單不是單一欄位值,
     # 不能拿去做逐欄共識比對或計信心度。前端 confirmation.ts 的 META_KEYS 須同步。
     "owners",

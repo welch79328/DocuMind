@@ -91,6 +91,7 @@ def _merge_page_structured_data(pages: List[dict]) -> Optional[Dict[str, Any]]:
     # 遞補必須在重算**之前**:重算依 field_confidences 決定 needs_confirmation,
     # 放在後面會得到「rights_scope 有值、信心度 0、卻仍列在待確認」的自相矛盾輸出。
     _merge_list_details(merged, pages)
+    _lock_share_slots(merged, pages)
     _backfill_land_rights_scope(merged, pages)
     _recompute_merged_status(merged, pages)
     # 旗標描述的是「某一頁」,合併後的值只是第一頁的殘值(先到先贏),沒有意義。
@@ -99,6 +100,7 @@ def _merge_page_structured_data(pages: List[dict]) -> Optional[Dict[str, Any]]:
     # 不能從各頁移除:本函式在 document_fields 與複核閘控各被呼叫一次,
     # 第一次移除會讓第二次無從判斷、兩處結果不一致。
     merged.pop("has_building_evidence", None)
+    merged.pop("share_slots", None)
     return merged
 
 
@@ -155,6 +157,72 @@ def _merge_list_details(merged: Dict[str, Any], pages: List[dict]) -> None:
                 combined.append(item)
         if present:
             merged[key] = combined
+
+
+def _lock_share_slots(merged: Dict[str, Any], pages: List[dict]) -> None:
+    """持分欄位依「資料結構」跨頁定案,不靠標籤讀得好不好(2026-10-03,G1)。
+
+    合併本來是「只填缺值」:第一頁讀不到(None),後面的頁就補進來——多張謄本一起上傳時,
+    補進來的是另一張謄本的持分(verifier 2026-10-03):看起來合法、信心度 0.9、不進複核。
+
+    一、依抬頭(建號／地號)把頁分組,一組一張謄本;沒有抬頭的頁跟著前一頁,
+        最前面沒讀到抬頭的頁歸給第一個抬頭。
+        各組各自定案(見 _lock_one_transcript,不補續頁);一份上傳有好幾張時,**每一張都讀得到、
+        而且值一樣**才採用,否則留空進複核——頂層只有一個值,好幾張謄本時沒有唯一正解,
+        各張的持分在 owners 清單裡逐筆列出。(杭州南路範本兩筆土地都是 4分之1,照讀。)
+        建號、地號分開算:一棟建物配好幾筆土地是常態。一頁裡出現兩個不同抬頭,留空。
+    二、曾經只看欄位格、只認 (0001)、或「好幾張就一律留空」:冒號被讀成「；」「一」、
+        編號被讀成 (0007) 都會擊穿前兩種,第三種把範本 08 讀對的土地持分丟掉
+        (verifier 第六～八輪)。旗標必須逐頁讀,不能讀合併後的值(先到先贏)。
+    """
+    reports = [
+        (page["structured_data"], page["structured_data"].get("share_slots") or {})
+        for page in pages if isinstance(page.get("structured_data"), dict)
+    ]
+    for key, kind in (("rights_scope", "building"), ("land_rights_scope", "land")):
+        groups, title, ambiguous = [], None, False
+        for data, slots in reports:
+            titles = set((slots.get("titles") or {}).get(kind) or ())
+            ambiguous = ambiguous or len(titles) > 1
+            page_title = next(iter(titles), None)
+            if not groups or (title is not None and page_title not in (None, title)):
+                groups.append([])
+            if page_title is not None:
+                # 前面幾頁沒讀到抬頭:它們屬於這一張(抬頭只是 OCR 漏了),不另成一組
+                title = page_title
+            groups[-1].append((
+                data.get(key),
+                (data.get("field_confidences") or {}).get(key, 0.0),
+                slots.get(key),
+            ))
+        decided = [result for result in map(_lock_one_transcript, groups) if result]
+        if not decided:
+            continue
+        values = {value for value, _ in decided}
+        if ambiguous or len(values) != 1 or None in values:
+            value, confidence = None, 0.0
+        else:
+            value, confidence = decided[0][0], min(c for _, c in decided)
+        merged[key] = value
+        confidences = merged.get("field_confidences")
+        if isinstance(confidences, dict):
+            confidences[key] = confidence
+
+
+def _lock_one_transcript(entries: List[tuple]) -> Optional[tuple]:
+    """一張謄本(連續幾頁)的持分定案,回 (值, 信心度);這幾頁都沒有它的資料回 None。
+
+    第一個出現所有權資料開頭、或看到欄位格的頁定案——讀不到也一樣(編號讀錯也算開頭),
+    後面的頁一律不補。
+
+    ⚠️ 曾有「續頁補值」:定案頁沒看到欄位格時,讓下一頁頂端的持分補進來。分頁若落在
+    (0002) 那一筆裡,補進來的是下一位所有權人的持分(verifier 2026-10-03 第九輪,P1)。
+    8 份範本沒有一份用到它;拿掉的代價是「第一筆資料的權利範圍剛好落在下一頁」時留空進複核。
+    """
+    for value, confidence, report in entries:
+        if report and (report.get("header") or report.get("slot")):
+            return value, confidence
+    return None
 
 
 def _backfill_land_rights_scope(merged: Dict[str, Any], pages: List[dict]) -> None:

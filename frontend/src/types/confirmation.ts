@@ -56,6 +56,8 @@ export const META_KEYS: ReadonlySet<string> = new Set([
   'extraction_confidence',
   'llm_used_for_extraction',
   'has_building_evidence',
+  // 謄本各頁的持分欄位結構(合併層定案用),不是欄位
+  'share_slots',
   // 謄本的清單明細(所有權人全部、現行地號全部),不是單一欄位值
   'owners',
   'land_numbers',

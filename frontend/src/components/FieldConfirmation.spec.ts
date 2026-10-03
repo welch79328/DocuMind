@@ -84,6 +84,15 @@ describe('攤平欄位', () => {
     ).toEqual({ land_number: '0221-0000' })
   })
 
+  it('謄本的持分欄位結構旗標是 meta,不列為欄位', () => {
+    expect(
+      flattenFields({
+        rights_scope: '全部',
+        share_slots: { rights_scope: { header: true, slot: true } },
+      }),
+    ).toEqual({ rights_scope: '全部' })
+  })
+
   it('空輸入回傳空物件而非拋錯', () => {
     expect(flattenFields(null)).toEqual({})
     expect(flattenFields(undefined)).toEqual({})
