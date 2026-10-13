@@ -2,7 +2,7 @@
   "area": "153.00",
   "building_address": "杭州南路一段111巷3之1號二樓",
   "building_number": "00465-000",
-  "completion_date": "民國---年--(月)--(日)",
+  "completion_date": "民國---年--月--日",
   "extraction_confidence": 0.9,
   "field_confidences": {
     "area": 0.9,

@@ -17,6 +17,7 @@ import re
 import logging
 from typing import Dict, Any, Optional
 from app.lib.multi_type_ocr.contract_patterns import PATTERNS
+from app.lib.multi_type_ocr.text_normalize import normalize_for_matching, normalize_pattern
 from app.lib.llm_service import LLMService
 from app.config import settings
 
@@ -207,6 +208,10 @@ class ContractFieldExtractor:
             提取到的欄位字典（未提取到的欄位值為 None）
         """
         results = {}
+        # 文字與樣式走同一套正規化(謄本、帳單共用,見 text_normalize):全形數字與標點、
+        # 帶框字歸一後才比對,值也因此是正規化後的形式(2026-10-13;原本合約不做正規化,
+        # 全形「２５，０００元」的全形逗號會讓金額讀不到)。
+        text = normalize_for_matching(text)
 
         # 遍歷所有欄位模式
         for field_name, patterns in PATTERNS.items():
@@ -215,7 +220,7 @@ class ContractFieldExtractor:
             # 嘗試每個模式，找到第一個匹配即停止
             for pattern in patterns:
                 try:
-                    match = re.search(pattern, text, re.MULTILINE)
+                    match = re.search(normalize_pattern(pattern), text, re.MULTILINE)
                     if match:
                         # 提取匹配的文字
                         if match.lastindex and match.lastindex > 1:

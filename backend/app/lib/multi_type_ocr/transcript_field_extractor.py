@@ -84,13 +84,10 @@ class TranscriptFieldExtractor(RegexFieldExtractor):
         # rights_scope、land_rights_scope 不在這裡:持分的值不能用一條正規式取,
         # 改由 _extract_with_regex 交給共用的持分讀值器,見 _SHARE_LABEL 的說明。
 
-        # `所\(?有\)?權人` 的括號不是手滑。謄本原文用相容碼位「所㈲權㆟」,
-        # 而 NFKC 把 `㈲`(U+3232 CIRCLED IDEOGRAPH HAVE)正規化成 **`(有)` 帶括號**
-        # ——不是 `有`。所以比對「所有權人」在真實謄本上一次都比不到。
-        # 2026-09-10 實測:杭州南路一段那份謄本的 owner 因此一直是 None,
-        # 而 owner 是必要欄位,抽不到就直接壓低信心度、把整份文件拖進人工複核。
-        # 同類的還有 `㈯`→`(土)`、`㈰`→`(日)`、`㈪`→`(月)`;新增樣式時務必
-        # 先拿真實謄本跑一次 NFKC 再寫,不要照著螢幕上看到的字寫。
+        # `所\(?有\)?權人` 的括號是舊容錯,保留無害。謄本原文用相容碼位「所㈲權㆟」,
+        # 單純 NFKC 會把 `㈲` 變成 **`(有)` 帶括號**(2026-09-10 杭州南路一段實測 owner 因此一直是 None)。
+        # 2026-10-13 起比對前的正規化(text_normalize)已把帶框字還原成原字,不再有括號;
+        # 新增樣式時仍要先拿真實謄本跑一次正規化再寫,不要照著螢幕上看到的字寫。
         "owner": re.compile(r"(?:所\(?有\)?權人|登記名義人)[:：\s]*([^\s\n]+)"),
 
         # ---- 建物標示部 ----
@@ -132,7 +129,7 @@ class TranscriptFieldExtractor(RegexFieldExtractor):
             r"總\s*面\s*積[:：][ \t]*[*\s]*([0-9][0-9,.]*[0-9]|[0-9])"
         ),
         "completion_date": re.compile(
-            # 文字層原文是「建築完成㈰期」,NFKC 後為「(日)」(同 owner 的 ㈲ 陷阱)
+            # 文字層原文是「建築完成㈰期」;括號容錯同 owner(正規化已還原成「日」)
             r"建築完成\(?日\)?期[:：][ \t]*([^\n]*?)(?=\s{2,}\S+\s*[:：]|\n|$)"
         ),
 
@@ -249,9 +246,8 @@ class TranscriptFieldExtractor(RegexFieldExtractor):
     # 回歸測試務必用「土地在前、建物在後」的合併版型。
     _BUILDING_SECTION_FIELDS = ("rights_scope",)
 
-    # NFKC 之後標題長這樣:「建物所(有)權部」。
-    # `㈲`(U+3232 CIRCLED IDEOGRAPH HAVE)正規化成 **`(有)` 帶括號**,不是 `有`,
-    # 所以不能直接比對「建物所有權部」——那樣一次都比不到。實測確認。
+    # 原文標題是「建物所㈲權部」。單純 NFKC 會變成「建物所(有)權部」,所以樣式容許括號;
+    # 2026-10-13 起正規化已還原成「建物所有權部」,括號容錯保留無害(見 text_normalize)。
     _BUILDING_SECTION = re.compile(r"建\s*物\s*所\s*\(?\s*有\s*\)?\s*權\s*部")
     _LAND_SECTION = re.compile(r"\(?土\)?\s*地\s*所\s*\(?有\)?\s*權\s*部")
 

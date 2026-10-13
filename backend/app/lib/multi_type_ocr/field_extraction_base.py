@@ -11,10 +11,11 @@ from __future__ import annotations
 import json
 import logging
 import re
-import unicodedata
 from typing import Any, Dict, List, Optional, Pattern
 
 from app.config import settings
+
+from .text_normalize import normalize_for_matching
 
 logger = logging.getLogger(__name__)
 
@@ -144,10 +145,11 @@ class RegexFieldExtractor:
 
         ⚠️ 只影響「比對用」的文字。回傳給呼叫端的 pages[].text 不動,
         那是使用者要看的原文,不該被我們改寫。
+
+        2026-10-13 起改呼叫共用的 text_normalize.normalize_for_matching(合約也用同一套):
+        NFKC 之外,帶框字 ㈲ ㈥ 還原成原字、不留 NFKC 加的括號,見該模組說明。
         """
-        if not text:
-            return ""
-        return unicodedata.normalize("NFKC", text)
+        return normalize_for_matching(text)
 
     def _extract_with_regex(self, text: str):
         text = self._normalize_for_matching(text)
