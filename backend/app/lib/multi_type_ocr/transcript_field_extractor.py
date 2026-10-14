@@ -166,6 +166,14 @@ class TranscriptFieldExtractor(RegexFieldExtractor):
         "land_use_type": re.compile(
             r"使用地類別[:：][ \t]*([^\n]*?)(?=\s{2,}\S+\s*[:：]|\n|$)"
         ),
+
+        # ---- 謄本本身 ----
+        # 抬頭印「列印時間:民國108年04月02日08時43分」。下游 jgb2 社宅舊版的「申請謄本日期」
+        # (building_transcript_date)用它。只取到日,格式同 completion_date(業主 2026-10-14)。
+        # 2026-10-14 查核:電子謄本與 OCR 掃描件凡有抬頭都印這一行;只拍到標示部的裁切圖沒有。
+        "print_date": re.compile(
+            r"列\s*印\s*時\s*間[:：][ \t]*(民國\s*[0-9]{2,3}\s*年\s*[0-9]{1,2}\s*月\s*[0-9]{1,2}\s*日)"
+        ),
     }
 
     KEY_FIELDS = (
@@ -185,6 +193,8 @@ class TranscriptFieldExtractor(RegexFieldExtractor):
         "land_use_zone", "land_use_type",
         # 土地所有權部
         "land_rights_scope",
+        # 謄本本身(不屬任何一部)
+        "print_date",
     )
 
     # 必要欄位:任何一份謄本都「應該要有」的欄位,信心度只以這些計算。
@@ -204,7 +214,12 @@ class TranscriptFieldExtractor(RegexFieldExtractor):
     #                       把它的缺席計為信心度 0,語意上是反的——
     #                       一份乾淨的謄本反而會被判定低信心。
     #
+    #   print_date          只拍到標示部的裁切圖沒有抬頭
+    #
     # 這些欄位仍留在 KEY_FIELDS:抽到就回傳給下游,只是不列入評分與待確認。
+    #
+    # 另外,土地或建物**專屬**的必要欄位只在該頁有那一部時才要求,見 FIELD_SECTION 與
+    # _required_fields(2026-10-14:建物謄本原本一律被要求「使用分區」,純土地謄本一律被要求建物欄位)。
     #
     # 動機:欄位由 5 擴充到 23 後,extraction_confidence 從 0.54 掉到 0.196,
     # 而掉下去的原因全是「這份謄本本來就沒有這些東西」,不是抽取失敗。
@@ -232,6 +247,7 @@ class TranscriptFieldExtractor(RegexFieldExtractor):
         # 謄本上印的其實也是「權利範圍」。不列入 REQUIRED_FIELDS,
         # 所以永遠不會進 needs_confirmation、不會拿這個標籤去問模型。
         "land_rights_scope": "土地權利範圍",
+        "print_date": "列印時間",
     }
     DOC_LABEL = "土地/建物謄本"
 
@@ -296,26 +312,73 @@ class TranscriptFieldExtractor(RegexFieldExtractor):
     _COLLATERAL_LIST_LINE = re.compile(r"共\s*同\s*擔\s*保")
     _NUMBER_FIELDS = ("land_number", "building_number")
 
-    # ---- 建物跡證:判定「這一頁有沒有建物」 ----
+    # ---- 欄位屬於哪一部:只在這裡宣告一次(2026-10-14) ----
     #
-    # 合併層靠它決定能不能拿土地持分遞補 rights_scope:任一頁有建物跡證就不遞補。
-    # 判錯的代價不對稱——把合併謄本誤判成純土地,土地持分會被當成建物權利範圍
-    # 送進下游契約欄位,正是 0658077 修掉的災情;反過來誤判只是留缺值進複核。
-    # 所以寧可多認、不可漏認。
-    #
-    # ⚠️ 不能只看建物所有權部標題。標題正是 OCR 最容易打壞的一行,
-    # 打壞時整份會被當成純土地謄本。因此另看建物標示部標題,
-    # 以及任何一個建物專屬欄位有沒有抽到值——標題壞了,門牌、層次面積通常還在。
-    _BUILDING_MARK_SECTION = re.compile(r"建\s*物\s*標\s*示\s*部")
+    # 未列出的欄位兩種謄本都有(地號、面積、權利範圍、所有權人、段、列印時間…)。
+    # 以下兩件事都由這份宣告推導,不另列清單:
+    #   1. 必要欄位:土地/建物專屬的必要欄位,只在該頁認出那一部時才要求(_required_fields)。
+    #   2. 跡證:該部的任一欄位有讀到,就算這一頁有那一部(_page_sections)。
+    # ⚠️ 與 _BUILDING_SECTION_FIELDS、_LAND_SECTION_FIELDS 不同:那兩個是「持分要在哪一段所有權部裡找」
+    #    (_scope_for 的比對範圍)。land_use_zone 屬土地卻印在標示部,套那個範圍會讀不到。
+    FIELD_SECTION = {
+        # building_number 可以放心列入:它的樣式以 (?<!地上建物) 排除了土地標示部的「地上建物建號」。
+        **dict.fromkeys((
+            "building_number", "building_address", "main_usage", "main_material",
+            "total_floors", "floor_level", "floor_area", "total_area", "completion_date",
+            "sub_building_usage", "sub_building_area",
+            "shared_build_number", "shared_area",
+        ), "building"),
+        **dict.fromkeys(("land_use_zone", "land_use_type", "land_rights_scope"), "land"),
+    }
 
-    # 土地謄本不可能有的欄位。building_number 可以放心列入:
-    # 它的樣式以 (?<!地上建物) 排除了土地標示部的「地上建物建號」。
-    _BUILDING_EVIDENCE_FIELDS = (
-        "building_number", "building_address", "main_usage", "main_material",
-        "total_floors", "floor_level", "floor_area", "total_area", "completion_date",
-        "sub_building_usage", "sub_building_area",
-        "shared_build_number", "shared_area",
-    )
+    # ---- 這一頁有哪幾部 ----
+    #
+    # 建物這一側也供合併層決定能不能拿土地持分遞補 rights_scope(has_building_evidence):
+    # 任一頁有建物跡證就不遞補。判錯的代價不對稱——把合併謄本誤判成純土地,
+    # 土地持分會被當成建物權利範圍送進下游契約欄位,正是 0658077 修掉的災情;
+    # 反過來誤判只是留缺值進複核。所以寧可多認、不可漏認。
+    #
+    # ⚠️ 不能只看所有權部標題。標題正是 OCR 最容易打壞的一行,
+    # 打壞時整份會被當成純土地謄本。因此另看抬頭(「建物登記第二類謄本」,電子謄本每頁都印;
+    # 2026-10-14 起)、標示部標題,以及該部任一欄位有沒有讀到——標題壞了,門牌、層次面積通常還在。
+    _BUILDING_MARK_SECTION = re.compile(r"建\s*物\s*標\s*示\s*部")
+    _LAND_MARK_SECTION = re.compile(r"土\s*地\s*標\s*示\s*部")
+    _BUILDING_TITLE = re.compile(r"建\s*物\s*登\s*記\s*第\s*\S\s*類\s*謄\s*本")
+    _LAND_TITLE = re.compile(r"土\s*地\s*登\s*記\s*第\s*\S\s*類\s*謄\s*本")
+
+    def _page_sections(self, norm: str, confidences: Dict[str, float]) -> set:
+        """這一頁認出哪幾部:{"building", "land"} 的子集。norm 須為正規化後的文字。
+
+        欄位跡證看信心度 > 0(含原文印空白:讀到了「主要用途:(空白)」也代表這頁有建物標示部)。
+        """
+        read = {k for k, v in (confidences or {}).items() if v > 0}
+        found = {self.FIELD_SECTION[k] for k in read if k in self.FIELD_SECTION}
+        if (self._BUILDING_TITLE.search(norm) or self._BUILDING_SECTION.search(norm)
+                or self._BUILDING_MARK_SECTION.search(norm)):
+            found.add("building")
+        if (self._LAND_TITLE.search(norm) or self._LAND_SECTION.search(norm)
+                or self._LAND_MARK_SECTION.search(norm)):
+            found.add("land")
+        return found
+
+    def _required_fields(self, text: str = "", confidences: Optional[Dict[str, float]] = None) -> tuple:
+        """這一頁的必要欄位:兩種都有的必要欄位 ∪ 這頁認出的那一部的專屬必要欄位。
+
+        **一部都認不出 → 全部要求(現行)。** 例:只拍到他項權利部的裁切圖。
+        不能放寬成「不要求專屬欄位」:那一頁可能是讀壞的另一部。多頁上傳時合併層以各頁
+        待確認清單的聯集評分,土地頁＋讀壞的建物頁若不要求建物欄位,就不會進複核,
+        土地持分還會被遞補進 rights_scope(0658077 的災情,見 analyze_service._backfill_land_rights_scope)。
+        沒有頁面內容可看時(confidences 為 None)也回傳全部。
+        """
+        if confidences is None:
+            return self.REQUIRED_FIELDS
+        sections = self._page_sections(self._normalize_for_matching(text), confidences)
+        if not sections:
+            return self.REQUIRED_FIELDS
+        return tuple(
+            k for k in self.REQUIRED_FIELDS
+            if self.FIELD_SECTION.get(k) is None or self.FIELD_SECTION[k] in sections
+        )
 
     async def extract(
         self,
@@ -333,14 +396,11 @@ class TranscriptFieldExtractor(RegexFieldExtractor):
         # 另外單獨跑一次規則抽取來判定跡證,不用 result 裡的欄位:
         # result 可能含 LLM 補齊的值,模型對土地謄本回一個「建號」
         # 也會被當成建物跡證。跡證只能來自文件本身的文字。
-        regex_fields, _ = self._extract_with_regex(text)
+        regex_fields, regex_conf = self._extract_with_regex(text)
         # 標題比對必須用正規化後的文字:原文的「㈲」不正規化就一次都比不到。
         norm = self._normalize_for_matching(text)
-        result["has_building_evidence"] = bool(
-            self._BUILDING_SECTION.search(norm)
-            or self._BUILDING_MARK_SECTION.search(norm)
-            or any(regex_fields.get(k) for k in self._BUILDING_EVIDENCE_FIELDS)
-        )
+        result["has_building_evidence"] = "building" in self._page_sections(norm, regex_conf)
+        required = self._required_fields(text, regex_conf)
         # 持分不是規則讀到的那個值(規則讀不到由 LLM 補上,或規則讀到了卻被 LLM 回傳的值蓋掉
         # ——基底類別會收下 LLM 回傳的每個欄位,不論有沒有問,verifier 第十一輪):
         # 值留給複核人員參考,但信心度歸零、一律進複核。
@@ -350,9 +410,9 @@ class TranscriptFieldExtractor(RegexFieldExtractor):
         for key in self._SHARE_FIELDS:
             if result.get(key) and result.get(key) != regex_fields.get(key):
                 result["field_confidences"][key] = 0.0
-                if key in self._required_fields() and key not in result["needs_confirmation"]:
+                if key in required and key not in result["needs_confirmation"]:
                     result["needs_confirmation"].append(key)
-        scored = [result["field_confidences"][k] for k in self._required_fields()
+        scored = [result["field_confidences"][k] for k in required
                   if k in result["field_confidences"]]
         if scored:
             result["extraction_confidence"] = round(sum(scored) / len(scored), 4)

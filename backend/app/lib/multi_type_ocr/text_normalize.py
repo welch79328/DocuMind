@@ -20,6 +20,8 @@ RegexFieldExtractor._normalize_for_matching 的說明。
    否則文字的全形「～」正規化成「~」後,寫著全形「～」的樣式就比不到了。
 
 ⚠️ 只用在「比對」。回傳給呼叫端的 pages[].text 是使用者要看的原文,不經過這裡。
+
+另附 is_blank_marker(2026-10-14):判斷一個讀到的值是不是原文印的「空白」,見該函式。
 """
 
 import re
@@ -52,6 +54,42 @@ def normalize_for_matching(text: Optional[str]) -> str:
     if not text:
         return ""
     return unicodedata.normalize("NFKC", text.translate(_ENCLOSED_LETTERS))
+
+
+def _is_filler(ch: str) -> bool:
+    """補位字元:空白、標點、符號(Unicode 類別 Z、P、S),不是字也不是數字。"""
+    return ch.isspace() or unicodedata.category(ch)[0] in "ZPS"
+
+
+def is_blank_marker(value: Optional[str]) -> bool:
+    """讀到的值是不是原文印的「空白」(值為正規化後的文字)。
+
+    地政謄本把沒有內容的欄位印成「使用分區:(空白)」「建築完成日期:民國---年--月--日」。
+    這是**讀到了「空」**,不是讀不到;呼叫端據此回 null,但信心度照常(見 RegexFieldExtractor)。
+
+    依性質判斷,不比對特定字串(業主裁示通用處理):
+    (a) 整個值是一段括號註記——註記不是值。只認「整個值」:
+        「(一般註記)登記原因:增建」後面還有內容,是值。
+    (b) 日期的結構還在、數字位置全是補位:「年」前一個字是補位字元,且整個值沒有任何數字(Unicode 類別 N)。
+        「民國084年02月日」有數字、「民國九十年」年前是字,都是值。
+    (c) 去掉補位字元後什麼都不剩(「---」「***」)。
+    遮罩姓名「黃**」有字,是值。
+
+    2026-10-14 以 13 份謄本原文查核:整值括號註記 41 處全是「(空白)」,反例都屬「後面還有內容」。
+    """
+    if not isinstance(value, str):
+        return False
+    s = value.strip()
+    if not s:
+        return False
+    if re.fullmatch(r"\([^()]*\)", s):
+        return True
+    year = s.find("年")
+    if year > 0 and _is_filler(s[year - 1]) and not any(
+        unicodedata.category(c)[0] == "N" for c in s
+    ):
+        return True
+    return all(_is_filler(c) for c in s)
 
 
 @lru_cache(maxsize=None)

@@ -69,9 +69,11 @@ class TestFullPipeline:
 
     async def test_low_confidence_field_marked(self):
         result = await _run(_mock_ocr(TranscriptProcessor()))
-        # 缺建號 → 標記需人工確認
-        assert "building_number" in result["structured_data"]["needs_confirmation"]
+        # 缺段 → 標記需人工確認(段是土地、建物謄本都要的欄位)
+        assert "section" in result["structured_data"]["needs_confirmation"]
         assert "land_number" not in result["structured_data"]["needs_confirmation"]
+        # 2026-10-14 起土地謄本不再要求建物欄位(原本這裡斷言「缺建號 → 待確認」)
+        assert "building_number" not in result["structured_data"]["needs_confirmation"]
 
 
 class TestFewShotThreading:

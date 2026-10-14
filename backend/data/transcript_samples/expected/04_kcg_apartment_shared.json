@@ -1,7 +1,6 @@
 {
   "area": "69.52",
-  "completion_date": "民國---年--月--日",
-  "extraction_confidence": 0.5294,
+  "extraction_confidence": 0.5625,
   "field_confidences": {
     "area": 0.9,
     "building_address": 0.0,
@@ -17,6 +16,7 @@
     "main_usage": 0.9,
     "other_right_type": 0.0,
     "owner": 0.0,
+    "print_date": 0.0,
     "rights_scope": 0.0,
     "section": 0.9,
     "seizure_mark": 0.0,
@@ -53,7 +53,6 @@
     "building_number",
     "floor_level",
     "land_number",
-    "land_use_zone",
     "owner",
     "rights_scope"
   ],

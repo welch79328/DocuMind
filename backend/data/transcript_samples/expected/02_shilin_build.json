@@ -2,7 +2,7 @@
   "building_address": "測試路439號五樓",
   "building_number": "19998-000",
   "completion_date": "民國091年05月03日",
-  "extraction_confidence": 0.675,
+  "extraction_confidence": 0.72,
   "field_confidences": {
     "area": 0.0,
     "building_address": 0.9,
@@ -18,6 +18,7 @@
     "main_usage": 0.9,
     "other_right_type": 0.9,
     "owner": 0.9,
+    "print_date": 0.9,
     "rights_scope": 0.9,
     "section": 0.9,
     "seizure_mark": 0.0,
@@ -45,7 +46,6 @@
     "area",
     "floor_area",
     "floor_level",
-    "land_use_zone",
     "total_area"
   ],
   "other_right_type": "最高限額抵押權",
@@ -59,6 +59,7 @@
       "transcript_id": "19998-000"
     }
   ],
+  "print_date": "民國108年02月19日",
   "rights_scope": "全部",
   "section": "測試段",
   "shared_area": "509.05",

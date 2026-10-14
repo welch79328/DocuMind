@@ -41,9 +41,11 @@ class TestRegexExtraction:
 
     async def test_missing_fields_marked_for_confirmation(self):
         result = await TranscriptFieldExtractor().extract(SAMPLE)
-        # 建號未出現 → 需人工確認
-        assert "building_number" in result["needs_confirmation"]
+        # 段未出現 → 需人工確認(段是土地、建物謄本都要的欄位)
+        assert "section" in result["needs_confirmation"]
         assert "land_number" not in result["needs_confirmation"]
+        # 2026-10-14 起土地謄本不再要求建物欄位(原本這裡斷言「缺建號 → 待確認」)
+        assert "building_number" not in result["needs_confirmation"]
 
     async def test_empty_text_all_need_confirmation(self):
         """空文字時每個 KEY_FIELD 都應進待確認清單。

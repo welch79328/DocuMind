@@ -3,7 +3,7 @@
   "building_address": "逢甲路236號四樓",
   "building_number": "00071-000",
   "completion_date": "民國083年07月15日",
-  "extraction_confidence": 0.8526,
+  "extraction_confidence": 0.9,
   "field_confidences": {
     "area": 0.9,
     "building_address": 0.9,
@@ -19,6 +19,7 @@
     "main_usage": 0.9,
     "other_right_type": 0.9,
     "owner": 0.9,
+    "print_date": 0.9,
     "rights_scope": 0.9,
     "section": 0.9,
     "seizure_mark": 0.0,
@@ -61,9 +62,7 @@
   "llm_used_for_extraction": false,
   "main_material": "鋼筋混凝土造",
   "main_usage": "住家用",
-  "needs_confirmation": [
-    "land_use_zone"
-  ],
+  "needs_confirmation": [],
   "other_right_type": "抵押權",
   "owner": "王",
   "owners": [
@@ -75,6 +74,7 @@
       "transcript_id": "00071-000"
     }
   ],
+  "print_date": "民國112年05月23日",
   "rights_scope": "全部",
   "section": "測試段",
   "shared_area": "18.00",

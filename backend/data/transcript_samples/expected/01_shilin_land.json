@@ -1,6 +1,6 @@
 {
   "area": "359.00",
-  "extraction_confidence": 0.48,
+  "extraction_confidence": 0.9,
   "field_confidences": {
     "area": 0.9,
     "building_address": 0.0,
@@ -16,6 +16,7 @@
     "main_usage": 0.0,
     "other_right_type": 0.9,
     "owner": 0.9,
+    "print_date": 0.9,
     "rights_scope": 0.9,
     "section": 0.9,
     "seizure_mark": 0.0,
@@ -37,17 +38,8 @@
     }
   ],
   "land_rights_scope": "70分之11",
-  "land_use_zone": "(空白)",
   "llm_used_for_extraction": false,
-  "needs_confirmation": [
-    "building_address",
-    "building_number",
-    "floor_area",
-    "floor_level",
-    "main_material",
-    "main_usage",
-    "total_area"
-  ],
+  "needs_confirmation": [],
   "other_right_type": "最高限額抵押權",
   "owner": "皮",
   "owners": [
@@ -59,6 +51,7 @@
       "transcript_id": "0361-0000"
     }
   ],
+  "print_date": "民國108年02月19日",
   "rights_scope": "70分之11",
   "section": "測試段",
   "shared_parts": [],

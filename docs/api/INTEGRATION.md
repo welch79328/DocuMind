@@ -1,6 +1,6 @@
 # DocuMind OCR 對接規格（給外部系統開發者）
 
-> 版本 2.1.1 ／ 2026-10-03（2.1.1：持分欄位的值統一為「分數」或「全部」，見 §3.1；2.1.0：謄本新增 6 個清單欄位與 `land_rights_scope`，並寫明各單值欄位的取值範圍）
+> 版本 2.2.0 ／ 2026-10-14（2.2.0：謄本新增 `print_date`；原文印空白的欄位回 `null`；土地／建物專屬的必要欄位只在該部存在時要求，見 §3.1；2.1.2：合約欄位的值改為半形數字與標點、帶框字還原，見 §3.2；2.1.1：持分欄位的值統一為「分數」或「全部」，見 §3.1；2.1.0：謄本新增 6 個清單欄位與 `land_rights_scope`，並寫明各單值欄位的取值範圍）
 > 本文件由 `docs/API_INTEGRATION.md` 與 `docs/api/02-INTEGRATION-API.md` 合併而成。
 > 標示「實測」的數字皆取自線上環境(`54.248.201.66`),日期各自註明。
 > 唯一需要串的端點是 `POST /api/v1/analyze`；其餘為輔助。
@@ -179,7 +179,7 @@ curl -X POST "http://54.248.201.66:8085/api/v1/analyze/batch" \
 `field_confidences`（逐欄位 0.0–1.0）、`needs_confirmation`（信心不足、建議人工確認的欄位名陣列）、
 `extraction_confidence`（必要欄位平均）、`llm_used_for_extraction`（bool）。
 
-### 3.1 `transcript` — 24 個單值欄位 + 6 個清單欄位
+### 3.1 `transcript` — 25 個單值欄位 + 6 個清單欄位
 
 單值欄位每個只有**一個值**；一份謄本有多筆（多位所有權人、多筆地號、多層、多筆公設）時，
 單值欄位只放第一筆，**完整資料請讀 §3.1.1 的清單欄位**。
@@ -187,19 +187,19 @@ curl -X POST "http://54.248.201.66:8085/api/v1/analyze/batch" \
 | key | 中文 | 必要欄位* |
 |---|---|:--:|
 | `land_number` | 地號 | ✅ |
-| `building_number` | 建號 | ✅ |
+| `building_number` | 建號 | ✅ 建物 |
 | `area` | 面積 | ✅ |
 | `rights_scope` | 權利範圍 | ✅ |
 | `owner` | 所有權人 | ✅ |
 | `section` | 段 | ✅ |
 | `subsection` | 小段 | |
-| `building_address` | 建物門牌 | ✅ |
-| `main_usage` | 主要用途 | ✅ |
-| `main_material` | 主要建材 | ✅ |
+| `building_address` | 建物門牌 | ✅ 建物 |
+| `main_usage` | 主要用途 | ✅ 建物 |
+| `main_material` | 主要建材 | ✅ 建物 |
 | `total_floors` | 層數 | |
-| `floor_level` | 層次 | ✅ |
-| `floor_area` | 層次面積 | ✅ |
-| `total_area` | 總面積 | ✅ |
+| `floor_level` | 層次 | ✅ 建物 |
+| `floor_area` | 層次面積 | ✅ 建物 |
+| `total_area` | 總面積 | ✅ 建物 |
 | `completion_date` | 建築完成日期 | |
 | `sub_building_usage` | 附屬建物用途 | |
 | `sub_building_area` | 附屬建物面積 | |
@@ -207,13 +207,24 @@ curl -X POST "http://54.248.201.66:8085/api/v1/analyze/batch" \
 | `shared_area` | 共有部分面積 | |
 | `other_right_type` | 他項權利種類 | |
 | `seizure_mark` | 查封或限制登記 | |
-| `land_use_zone` | 使用分區 | ✅ |
+| `land_use_zone` | 使用分區 | ✅ 土地 |
 | `land_use_type` | 使用地類別 | |
 | `land_rights_scope` | 土地持分（土地所有權部的權利範圍） | |
+| `print_date` | 列印時間（申請謄本日期），如 `民國108年04月02日`，不含時分；2.2.0 起 | |
 
 \* 只有「必要欄位」列入信心度計分。非必要欄位是**本來就可能不存在**
 （透天沒有共有部分、無貸款沒有他項權利、`seizure_mark` 沒有才是好事），
 抽不到不代表辨識失敗，下游不要當成錯誤。
+
+**「✅ 建物」「✅ 土地」只在該頁有那一部時才要求**（2.2.0 起）：建物謄本不要求使用分區，純土地謄本不要求建物欄位。
+判斷依據是謄本抬頭（「建物登記第二類謄本」）、各部標題（建物標示部、土地所有權部…），或該部任一欄位有讀到。
+**一頁完全認不出是哪一部時（例如只拍到他項權利部的裁切圖），照舊全部要求**——那一頁可能是讀壞的另一部，
+所以多頁上傳中只要夾一張這樣的頁，整份仍會要求所有必要欄位、進複核。
+
+**原文印空白的欄位回 `null`**（2.2.0 起）：謄本把沒有內容的欄位印成「使用分區:(空白)」「建築完成日期:民國---年--月--日」，
+這類值不再原樣回傳。判斷規則：整個值是一段括號註記、日期的數字位置全是補位符號，或整個值只有符號。
+「原文空白」與「讀不到」在值上都是 `null`（`document_fields` 裡該鍵不出現），**用 `field_confidences` 分辨**：
+原文空白是 0.9、不列入 `needs_confirmation`；讀不到是 0.0。2.2.0 以前這些欄位回的是字串 `"(空白)"`、`"民國---年--月--日"`。
 
 **單值欄位的取值範圍**（同名標籤在謄本上會出現好幾次，以下是系統取的那一個）：
 
@@ -277,6 +288,12 @@ curl -X POST "http://54.248.201.66:8085/api/v1/analyze/batch" \
 （關鍵欄位）與 `tenant_id_number`、`tenant_phone`、`landlord_name`、`landlord_id_number`、
 `landlord_phone`、`management_fee`、`parking_fee`、`payment_day`（次要欄位）。
 系統以原文關鍵詞（租賃／承租人／押金…）判定是否為租約，不是靠有沒有抽到租賃欄位。
+
+**值的形式（2026-10-14 起，commit `3d07e2e`）：** 合約欄位的值取自正規化後的文字，與謄本、帳單一致——
+全形數字與標點變半形，帶框字（如 ㈲）還原成原字、不加括號。例如原文 `月租金：２５，０００元` 回 `25,000`，
+`租期：２０２６年３月２７日至…` 的 `date_start` 回 `2026年3月27日`。下游若曾以全形比對合約值，請改為半形。
+原本因全形逗號等讀不到的欄位現在讀得到，`extraction_confidence`、`needs_confirmation` 與是否進複核可能隨之改變。
+`pages[].rule_postprocessed.text` 等原文欄位不受影響。
 
 ### 3.3 `bill`
 

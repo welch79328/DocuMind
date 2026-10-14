@@ -15,7 +15,7 @@ from typing import Any, Dict, List, Optional, Pattern
 
 from app.config import settings
 
-from .text_normalize import normalize_for_matching
+from .text_normalize import is_blank_marker, normalize_for_matching
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +79,7 @@ class RegexFieldExtractor:
         few_shot: Optional[List[Dict[str, Any]]] = None,
     ) -> Dict[str, Any]:
         fields, confidences = self._extract_with_regex(text)
-        required = self._required_fields()
+        required = self._required_fields(text, confidences)
         needs = [k for k in required if confidences[k] < self.threshold]
 
         llm_used = False
@@ -118,8 +118,12 @@ class RegexFieldExtractor:
         """
         return text
 
-    def _required_fields(self) -> tuple:
-        """必要欄位;未宣告 REQUIRED_FIELDS 時退回 KEY_FIELDS(既有行為)。"""
+    def _required_fields(self, text: str = "", confidences: Optional[Dict[str, float]] = None) -> tuple:
+        """必要欄位;未宣告 REQUIRED_FIELDS 時退回 KEY_FIELDS(既有行為)。
+
+        text、confidences 是這一頁的原文與規則讀值信心度,供子類別依頁面內容決定
+        (謄本:有那一部才要求那一部的欄位,見 TranscriptFieldExtractor._required_fields)。
+        """
         return self.REQUIRED_FIELDS or self.KEY_FIELDS
 
     # ------------------------------------------------------------------ #
@@ -161,7 +165,10 @@ class RegexFieldExtractor:
             match = pattern.search(scoped) if pattern else None
             captured = _first_captured_group(match)
             if captured is not None:
-                fields[key] = captured
+                # 原文印的「空白」(使用分區:(空白)、民國---年--月--日)是讀到了「空」:
+                # 值回 null,信心度照常——否則必填欄位印空白的謄本會被當成讀不到而進複核
+                # (長春路、懷寧街的主要用途就是這樣,2026-10-14)。判斷規則見 is_blank_marker。
+                fields[key] = None if is_blank_marker(captured) else captured
                 confidences[key] = self._MATCH_CONFIDENCE
             else:
                 fields[key] = None

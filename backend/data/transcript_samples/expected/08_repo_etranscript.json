@@ -2,7 +2,6 @@
   "area": "153.00",
   "building_address": "杭州南路一段111巷3之1號二樓",
   "building_number": "00465-000",
-  "completion_date": "民國---年--月--日",
   "extraction_confidence": 0.9,
   "field_confidences": {
     "area": 0.9,
@@ -19,6 +18,7 @@
     "main_usage": 0.9,
     "other_right_type": 0.0,
     "owner": 0.9,
+    "print_date": 0.9,
     "rights_scope": 0.9,
     "section": 0.9,
     "seizure_mark": 0.0,
@@ -59,8 +59,6 @@
     }
   ],
   "land_rights_scope": "4分之1",
-  "land_use_type": "(空白)",
-  "land_use_zone": "(空白)",
   "llm_used_for_extraction": false,
   "main_material": "加強磚造",
   "main_usage": "住家用",
@@ -89,6 +87,7 @@
       "transcript_id": "00465-000"
     }
   ],
+  "print_date": "民國108年04月09日",
   "rights_scope": "全部",
   "section": "中正段",
   "shared_parts": [],
