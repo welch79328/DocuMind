@@ -1,6 +1,6 @@
 # DocuMind - AI Document Intelligence
 
-> 🧠 讓文件會思考 - 基於 AI 的智能文件處理系統，自動辨識、分類、抽取租賃文件資訊
+> 台灣不動產文件（謄本、合約、帳單、修繕／點交照片）的辨識與欄位抽取服務，以 API 供 JGB 等系統串接
 
 [![GitHub](https://img.shields.io/badge/GitHub-DocuMind-blue?logo=github)](https://github.com/welch79328/DocuMind)
 [![Python](https://img.shields.io/badge/Python-3.11+-green?logo=python)](https://www.python.org/)
@@ -9,35 +9,20 @@
 
 ## 📖 專案簡介
 
-本專案是一個 **MVP Demo**，旨在展示 AI 如何協助處理租賃/包租代管場景中的非結構化文件（PDF、圖片），將其轉換為可用的結構化資料。
+上傳 PDF 或圖片，回傳結構化欄位。電子 PDF（如網路申領的電子謄本）直接讀文字層、不經 OCR；
+掃描件與照片走本地 OCR（PaddleOCR + Tesseract），必要時由 LLM 校正；信心不足的欄位進人工複核佇列。
 
-### 核心功能
+### 支援的文件類型
 
-- 📤 **文件上傳** - 支援 PDF/JPG/PNG 格式
-- 🔍 **OCR 辨識** - 自動提取文件文字
-- 🤖 **AI 分類** - 自動識別文件類型（租約/報價單/身分證）
-- 📋 **欄位抽取** - AI 自動抽取關鍵資訊
-- 📝 **AI 摘要** - 生成文件摘要
-- 💬 **AI 問答** - 針對文件內容進行對話
-- ⚠️ **風險檢測** - 識別缺失欄位與異常值（P2）
-- 📁 **一鍵建檔** - 建立系統記錄（P2）
+| `document_type` | 文件 |
+|---|---|
+| `transcript` | 建物／土地謄本（謄本上印的每一項都解析，另有固定輸出格式 `transcript_records`） |
+| `contract` | 合約（含租約） |
+| `bill` | 帳單（水電、管理費等） |
+| `repair_photo` | 修繕現場照片（影像理解） |
+| `handover_photo` | 點交現場照片（影像理解） |
 
----
-
-## 🎯 專案目標
-
-### 展示價值
-
-- 驗證 AI 在租賃文件場景的應用潛力
-- 展示「文件上傳 → AI 理解 → 自動建檔」的完整流程
-- 提供可操作的 Demo 產品
-
-### 非目標（MVP 階段）
-
-- ❌ 批量文件處理
-- ❌ 複雜權限管理
-- ❌ 完整商業版功能
-- ❌ 高可用性生產環境
+端點、欄位、錯誤碼與實測數據見 [`docs/api/INTEGRATION.md`](./docs/api/INTEGRATION.md)。
 
 ---
 
@@ -50,14 +35,11 @@
 | 文件 | 說明 |
 |------|------|
 | [文件總覽](./docs/README.md) | 技術文件導航 |
-| [MVP 範圍](./docs/planning/01-MVP-SCOPE.md) | 功能範圍、成功標準 |
-| [系統架構](./docs/architecture/01-SYSTEM-ARCHITECTURE.md) | 架構設計、核心流程 |
-| [資料庫設計](./docs/database/01-DATABASE-DESIGN.md) | 資料表結構、Schema |
 | [API 對接規格](./docs/api/INTEGRATION.md) | 給外部系統的串接文件（端點、欄位、錯誤碼、實測數據） |
+| [謄本現況](./docs/planning/transcript-status.md) | 謄本解析現況、決策、待辦 |
+| [技術棧](./docs/planning/03-TECH-STACK.md) | 技術棧現況 |
+| [部署](./docs/DEPLOYMENT.md) | 部署指南；§0.5 為線上機實況 |
 | [前端設計](./docs/frontend/01-FRONTEND-DESIGN.md) | 頁面設計、元件規格 |
-| [AI Prompt 設計](./docs/ai/01-AI-PROMPT-DESIGN.md) | AI Prompt 模板 |
-| [開發實施計劃（已退休）](./docs/archive/2026-03-IMPLEMENTATION-PLAN.md) | 4 週開發計劃 |
-| [技術棧選型](./docs/planning/03-TECH-STACK.md) | 技術選擇、成本估算 |
 
 ---
 
@@ -78,13 +60,13 @@
 - **語言**: Python 3.11+
 - **ORM**: SQLAlchemy + Alembic
 - **資料庫**: PostgreSQL
-- **部署**: Railway / Render
+- **部署**: AWS EC2 單機 Docker Compose（frontend、backend、postgres、nginx；見 `docs/DEPLOYMENT.md` §0.5）
 
 ### AI 服務
 
-- **LLM**: OpenAI GPT-4o / GPT-4o-mini
-- **OCR**: AWS Textract / pytesseract
-- **儲存**: Cloudflare R2
+- **OCR**: PaddleOCR（ONNX Runtime）+ Tesseract，本地執行；含文字層的 PDF 不經 OCR
+- **LLM**: OpenAI（模型分工見 `docs/planning/03-TECH-STACK.md`）
+- **儲存**: 預設本機（`STORAGE_TYPE=local`）
 
 ---
 
@@ -262,138 +244,16 @@ DocuMind/
 │   ├── alembic/             # 資料庫遷移
 │   └── requirements.txt
 │
-├── docs/                     # 完整技術文件
-│   ├── README.md            # 文件導航
-│   ├── planning/            # 規劃文件
-│   ├── architecture/        # 架構設計
-│   ├── database/            # 資料庫設計
-│   ├── api/                 # API 規格
-│   ├── frontend/            # 前端設計
-│   └── ai/                  # AI 設計
+├── docs/                     # 技術文件（導航見 docs/README.md）
 │
 └── README.md                # 本文件
 ```
 
 ---
 
-## 🎬 Demo 展示流程
-
-### 場景一：租賃合約處理
-
-1. 上傳租約 PDF
-2. AI 自動辨識為「租賃合約」
-3. 顯示抽取欄位：承租人、租金、租期等
-4. 顯示 AI 摘要
-5. 使用者提問：「這份租約的押金是多少？」
-6. AI 回答：「押金為 50,000 元」
-7. 點擊「建立租約記錄」
-
-### 場景二：報價單處理
-
-1. 上傳報價單圖片
-2. AI 識別為「修繕報價單」
-3. 顯示抽取欄位：廠商、金額、項目
-4. 顯示 AI 摘要
-5. 風險提醒：「缺少報價有效期限」
-
-### 場景三：身分證處理
-
-1. 上傳身分證照片（已脫敏）
-2. AI 識別為「身分證」
-3. 顯示抽取欄位：姓名、證號、生日
-4. 使用者提問：「這個人幾歲？」
-5. AI 回答：「根據出生日期推算，目前約 35 歲」
-
----
-
-## ⏱️ 開發時程
-
-### Week 1：基礎建設
-- 專案初始化
-- 檔案上傳功能
-- OCR 整合
-
-### Week 2：AI 核心
-- AI 文件分類
-- 欄位抽取
-- 結果頁面
-
-### Week 3：AI 增強
-- AI 摘要生成
-- AI 問答功能
-- UI/UX 優化
-
-### Week 4：優化整合
-- 風險檢測（P2）
-- 一鍵建檔（P2）
-- 部署與 Demo 準備
-
----
-
-## 📊 成功指標
-
-### 功能指標
-
-- ✅ 支援 3 類文件上傳與處理
-- ✅ AI 分類準確率 > 85%
-- ✅ 欄位抽取可用率 > 75%
-- ✅ AI 問答可回答基本問題
-
-### 技術指標
-
-- ✅ 文件上傳成功率 > 95%
-- ✅ OCR 成功率 > 90%
-- ✅ AI 響應時間 < 10 秒
-- ✅ 處理時間 < 30 秒/文件
-
----
-
-## 💰 成本估算
-
-### MVP 階段（每月）
-
-| 項目 | 成本 |
-|------|------|
-| Vercel (前端) | $0（免費額度） |
-| Railway (後端 + DB) | $0（免費額度） |
-| Cloudflare R2 (儲存) | $0（免費額度） |
-| AWS Textract (OCR) | ~$0.75（500 頁） |
-| OpenAI API | ~$10（2M tokens） |
-| **總計** | **~$10.75/月** |
-
----
-
-## 🔒 安全性考量
-
-### MVP 階段
-
-- ✅ 檔案格式驗證
-- ✅ 檔案大小限制
-- ✅ API Rate Limiting
-- ⚠️ 暫不實作用戶認證（Demo 用途）
-
-### 未來版本
-
-- 🔐 JWT 認證
-- 🔐 檔案存取權限控管
-- 🔐 資料加密
-- 🔐 GDPR 合規
-
----
-
-## 🐛 已知限制
-
-- 僅支援繁體中文文件
-- 單次上傳限制 10MB
-- 不支援批量處理
-- 不支援複雜表格深度解析
-- OCR 準確率受文件品質影響
-
----
-
 ## 🤝 貢獻指南
 
-本專案為 Demo 性質，暫不接受外部貢獻。
+本專案暫不接受外部貢獻。
 
 如有問題或建議，請聯絡專案負責人。
 
@@ -401,23 +261,4 @@ DocuMind/
 
 ## 📄 授權
 
-本專案為內部 Demo 使用，未開放授權。
-
----
-
-## 📞 聯絡資訊
-
-**專案負責人**: Development Team
-**版本**: v1.0
-**最後更新**: 2026-03-17
-
----
-
-## 🎉 開始開發
-
-1. ✅ 閱讀 [`docs/`](./docs/) 中的完整技術文件
-2. ✅ 準備開發環境與 API Keys
-3. ✅ 按照[開發實施計劃（已退休）](./docs/archive/2026-03-IMPLEMENTATION-PLAN.md)開始 Week 1
-4. ✅ 享受打造 AI 產品的樂趣！
-
-**祝開發順利！🚀**
+本專案為內部使用，未開放授權。

@@ -305,20 +305,19 @@ created_records      # 建立的系統記錄
 ```
 docs/
 ├── README.md                # 文件導航
-├── planning/                # 規劃文件
-│   ├── 01-MVP-SCOPE.md
-│   ├── 02-IMPLEMENTATION-PLAN.md
-│   └── 03-TECH-STACK.md
-├── architecture/            # 架構設計
-│   └── 01-SYSTEM-ARCHITECTURE.md
-├── database/                # 資料庫設計
-│   └── 01-DATABASE-DESIGN.md
-├── api/                     # API 規格
-│   └── INTEGRATION.md                     # 對外串接規格
-├── frontend/                # 前端設計
+├── platform/                # 租管問答平台規格（平台層，非 DocuMind）
+├── api/
+│   ├── INTEGRATION.md                     # 對外串接規格
+│   └── transcript_records.schema.json     # 謄本固定輸出格式 Schema
+├── planning/
+│   ├── 03-TECH-STACK.md                   # 技術棧現況
+│   └── transcript-status.md               # 謄本解析現況、決策、待辦
+├── testing/
+│   └── transcript-online-acceptance.md    # 謄本驗收
+├── frontend/
 │   └── 01-FRONTEND-DESIGN.md
-└── ai/                      # AI 設計
-    └── 01-AI-PROMPT-DESIGN.md
+├── DEPLOYMENT.md / DEV_WORKFLOW.md / ANNOTATION_GUIDE.md
+└── OCR_FLOW_FOR_MARKETING.md              # 行銷版流程說明（PDF 由 tools/ 產生）
 ```
 
 ## Kiro 規格結構 (.kiro/)
@@ -486,5 +485,5 @@ services:
 | LLM Prompt | `backend/app/prompts/` | `extraction.py` |
 | 前端頁面 | `frontend/src/views/` | `OcrTestView.vue` |
 | 測試資料 | `backend/data/`, `data/` | `建物謄本.jpg`, `contracts/` |
-| 技術文件 | `docs/` | `01-MVP-SCOPE.md` |
+| 技術文件 | `docs/` | `api/INTEGRATION.md` |
 | 功能規格 | `.kiro/specs/<feature>/` | `requirements.md`, `design.md` |
