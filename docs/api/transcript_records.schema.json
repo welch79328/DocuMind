@@ -1,0 +1,1558 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "$id": "https://documind/transcript_records.schema.json",
+ "title": "document_fields.transcript_records",
+ "description": "謄本固定輸出格式:每張謄本一筆,鍵一律存在;謄本沒印 → null 或 []。見 docs/api/INTEGRATION.md §3.1.3。",
+ "type": "array",
+ "items": {
+  "oneOf": [
+   {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+     "謄本",
+     "類型",
+     "標示部",
+     "所有權部",
+     "他項權利部",
+     "判定",
+     "部是否印出",
+     "部附註",
+     "注意事項",
+     "其他欄位"
+    ],
+    "properties": {
+     "謄本": {
+      "$ref": "#/$defs/header"
+     },
+     "類型": {
+      "const": "土地"
+     },
+     "標示部": {
+      "anyOf": [
+       {
+        "type": "null"
+       },
+       {
+        "$ref": "#/$defs/land_mark"
+       }
+      ]
+     },
+     "所有權部": {
+      "type": "array",
+      "items": {
+       "$ref": "#/$defs/land_owner"
+      }
+     },
+     "他項權利部": {
+      "type": "array",
+      "items": {
+       "$ref": "#/$defs/right"
+      }
+     },
+     "判定": {
+      "$ref": "#/$defs/verdict"
+     },
+     "部是否印出": {
+      "$ref": "#/$defs/printed"
+     },
+     "部附註": {
+      "$ref": "#/$defs/notes"
+     },
+     "注意事項": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "謄本末「注意事項」原樣"
+     },
+     "其他欄位": {
+      "$ref": "#/$defs/other"
+     }
+    }
+   },
+   {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+     "謄本",
+     "類型",
+     "標示部",
+     "所有權部",
+     "他項權利部",
+     "判定",
+     "部是否印出",
+     "部附註",
+     "注意事項",
+     "其他欄位"
+    ],
+    "properties": {
+     "謄本": {
+      "$ref": "#/$defs/header"
+     },
+     "類型": {
+      "const": "建物"
+     },
+     "標示部": {
+      "anyOf": [
+       {
+        "type": "null"
+       },
+       {
+        "$ref": "#/$defs/building_mark"
+       }
+      ]
+     },
+     "所有權部": {
+      "type": "array",
+      "items": {
+       "$ref": "#/$defs/building_owner"
+      }
+     },
+     "他項權利部": {
+      "type": "array",
+      "items": {
+       "$ref": "#/$defs/right"
+      }
+     },
+     "判定": {
+      "$ref": "#/$defs/verdict"
+     },
+     "部是否印出": {
+      "$ref": "#/$defs/printed"
+     },
+     "部附註": {
+      "$ref": "#/$defs/notes"
+     },
+     "注意事項": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "謄本末「注意事項」原樣"
+     },
+     "其他欄位": {
+      "$ref": "#/$defs/other"
+     }
+    }
+   },
+   {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+     "謄本",
+     "類型",
+     "標示部",
+     "所有權部",
+     "他項權利部",
+     "判定",
+     "部是否印出",
+     "部附註",
+     "注意事項",
+     "其他欄位"
+    ],
+    "properties": {
+     "謄本": {
+      "$ref": "#/$defs/header"
+     },
+     "類型": {
+      "type": "null"
+     },
+     "標示部": {
+      "type": "null"
+     },
+     "所有權部": {
+      "type": "array",
+      "maxItems": 0
+     },
+     "他項權利部": {
+      "type": "array",
+      "maxItems": 0
+     },
+     "判定": {
+      "$ref": "#/$defs/verdict"
+     },
+     "部是否印出": {
+      "$ref": "#/$defs/printed"
+     },
+     "部附註": {
+      "$ref": "#/$defs/notes"
+     },
+     "注意事項": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "謄本末「注意事項」原樣"
+     },
+     "其他欄位": {
+      "$ref": "#/$defs/other"
+     }
+    }
+   }
+  ]
+ },
+ "$defs": {
+  "header": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "謄本種類",
+    "類別",
+    "申請範圍",
+    "行政區",
+    "段",
+    "小段",
+    "編號",
+    "編號類型",
+    "列印時間",
+    "頁數",
+    "查驗碼",
+    "查驗碼標籤",
+    "查驗網址",
+    "資料管轄機關",
+    "謄本核發機關",
+    "頁首附註"
+   ],
+   "properties": {
+    "謄本種類": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "description": "頁首標題原文,如「建物登記第二類謄本(建號全部)」"
+    },
+    "類別": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "description": "第一類／第二類／第三類(第二類起姓名、統一編號等依法遮罩,值照原文)"
+    },
+    "申請範圍": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "description": "標題括號內原文,如「建號全部」「所有權個人全部」「地號全部」"
+    },
+    "行政區": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "description": "鄉鎮市區名稱:頁首地段開頭與內政部全國鄉鎮市區名稱(國土測繪中心)最長相符;沒有相符 → null"
+    },
+    "段": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "description": "段名,如「仁愛段」"
+    },
+    "小段": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "description": "小段名,如「六小段」;沒有小段 → null"
+    },
+    "編號": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "description": "地號或建號原文,如「02080-000」"
+    },
+    "編號類型": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "description": "「地號」或「建號」"
+    },
+    "列印時間": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "description": "原文,如「民國101年07月11日09時46分」"
+    },
+    "頁數": {
+     "type": [
+      "integer",
+      "null"
+     ],
+     "description": "這張謄本的頁數"
+    },
+    "查驗碼": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "description": "謄本檢查號／謄本種類碼值開頭的英數字"
+    },
+    "查驗碼標籤": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "description": "原文標籤:「謄本檢查號」(舊版)或「謄本種類碼」(新版)"
+    },
+    "查驗網址": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "description": "查驗網址(值中 http 開頭到空白或中文為止)"
+    },
+    "資料管轄機關": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "description": "原文"
+    },
+    "謄本核發機關": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "description": "原文"
+    },
+    "頁首附註": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     },
+     "description": "頁首沒有標籤的行原樣(列印者、主任、電謄字號)"
+    }
+   },
+   "description": "謄本頁首"
+  },
+  "land_mark": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "登記日期",
+    "登記原因",
+    "地目",
+    "等則",
+    "面積",
+    "使用分區",
+    "使用地類別",
+    "公告土地現值",
+    "公告土地現值年月",
+    "地上建物建號",
+    "其他登記事項"
+   ],
+   "properties": {
+    "登記日期": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "description": "原文民國日期字串(如「民國050年03月14日」),不轉西元;原文空白(「民國---年--月--日」)→ null"
+    },
+    "登記原因": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "description": "原文"
+    },
+    "地目": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "description": "原文;民國106年起謄本不再印 → null"
+    },
+    "等則": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "description": "原文;民國106年起謄本不再印 → null"
+    },
+    "面積": {
+     "type": [
+      "number",
+      "null"
+     ],
+     "description": "平方公尺"
+    },
+    "使用分區": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "description": "原文;原文「(空白)」→ null"
+    },
+    "使用地類別": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "description": "原文;原文「(空白)」→ null"
+    },
+    "公告土地現值": {
+     "type": [
+      "number",
+      "null"
+     ],
+     "description": "元／平方公尺"
+    },
+    "公告土地現值年月": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "description": "原文,如「民國108年01月」"
+    },
+    "地上建物建號": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "description": "原文(如「共4棟」)"
+    },
+    "其他登記事項": {
+     "type": "array",
+     "items": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+       "類別",
+       "標籤",
+       "內容"
+      ],
+      "properties": {
+       "類別": {
+        "type": [
+         "string",
+         "null"
+        ],
+        "description": "原文開頭括號內、以「事項」結尾的分類(如「限制登記事項」「一般註記事項」),去括號;舊版沒有分類 → null"
+       },
+       "標籤": {
+        "type": [
+         "string",
+         "null"
+        ],
+        "description": "冒號前的連續中文(如「重測前」「使用執照字號」);沒有 → null"
+       },
+       "內容": {
+        "type": [
+         "string",
+         "null"
+        ],
+        "description": "其餘原文"
+       }
+      }
+     },
+     "description": "其他登記事項,每一項一筆;原文「(空白)」→ []"
+    }
+   },
+   "description": "土地標示部"
+  },
+  "building_mark": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "登記日期",
+    "登記原因",
+    "建物門牌",
+    "建物坐落地號",
+    "主要用途",
+    "主要建材",
+    "層數",
+    "總面積",
+    "層次",
+    "附屬建物",
+    "建築完成日期",
+    "共有部分",
+    "其他登記事項"
+   ],
+   "properties": {
+    "登記日期": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "description": "原文民國日期字串(如「民國050年03月14日」),不轉西元;原文空白(「民國---年--月--日」)→ null"
+    },
+    "登記原因": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "description": "原文"
+    },
+    "建物門牌": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "description": "原文"
+    },
+    "建物坐落地號": {
+     "type": "array",
+     "items": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+       "段小段",
+       "編號"
+      ],
+      "properties": {
+       "段小段": {
+        "type": [
+         "string",
+         "null"
+        ],
+        "description": "段小段原文(如「仁愛段六小段」);值裡沒有段小段時為 null"
+       },
+       "編號": {
+        "type": "string",
+        "description": "地號或建號原文(如「0100-0000」)"
+       }
+      }
+     },
+     "description": "依空白切開:非數字開頭的片段是段小段,其後每個數字開頭的片段是一個編號"
+    },
+    "主要用途": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "description": "原文;原文「(空白)」→ null"
+    },
+    "主要建材": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "description": "原文"
+    },
+    "層數": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "description": "原文,如「004層」"
+    },
+    "總面積": {
+     "type": [
+      "number",
+      "null"
+     ],
+     "description": "平方公尺"
+    },
+    "層次": {
+     "type": "array",
+     "items": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+       "層次",
+       "面積"
+      ],
+      "properties": {
+       "層次": {
+        "type": "string"
+       },
+       "面積": {
+        "type": "number",
+        "description": "平方公尺"
+       }
+      }
+     },
+     "description": "層次與層次面積依原文順序一對一;筆數不同 → [],原文進其他欄位"
+    },
+    "附屬建物": {
+     "type": "array",
+     "items": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+       "用途",
+       "面積"
+      ],
+      "properties": {
+       "用途": {
+        "type": "string"
+       },
+       "面積": {
+        "type": "number",
+        "description": "平方公尺"
+       }
+      }
+     },
+     "description": "附屬建物用途與面積依原文順序一對一;筆數不同 → [],原文進其他欄位"
+    },
+    "建築完成日期": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "description": "原文民國日期字串(如「民國050年03月14日」),不轉西元;原文空白(「民國---年--月--日」)→ null"
+    },
+    "共有部分": {
+     "type": "array",
+     "items": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+       "坐落",
+       "建號",
+       "面積",
+       "權利範圍",
+       "其他登記事項"
+      ],
+      "properties": {
+       "坐落": {
+        "type": [
+         "string",
+         "null"
+        ],
+        "description": "段小段原文"
+       },
+       "建號": {
+        "type": [
+         "string",
+         "null"
+        ],
+        "description": "共有部分建號,如「02163-000」"
+       },
+       "面積": {
+        "type": [
+         "number",
+         "null"
+        ],
+        "description": "共有部分建物總面積,平方公尺(不是持分面積;持分面積＝面積×權利範圍)"
+       },
+       "權利範圍": {
+        "type": [
+         "string",
+         "null"
+        ],
+        "description": "「全部」或「a分之b」(原文「全部 1分之1」→「全部」);謄本沒印或原文空白 → null"
+       },
+       "其他登記事項": {
+        "type": "array",
+        "items": {
+         "type": "object",
+         "additionalProperties": false,
+         "required": [
+          "類別",
+          "標籤",
+          "內容"
+         ],
+         "properties": {
+          "類別": {
+           "type": [
+            "string",
+            "null"
+           ],
+           "description": "原文開頭括號內、以「事項」結尾的分類(如「限制登記事項」「一般註記事項」),去括號;舊版沒有分類 → null"
+          },
+          "標籤": {
+           "type": [
+            "string",
+            "null"
+           ],
+           "description": "冒號前的連續中文(如「重測前」「使用執照字號」);沒有 → null"
+          },
+          "內容": {
+           "type": [
+            "string",
+            "null"
+           ],
+           "description": "其餘原文"
+          }
+         }
+        },
+        "description": "其他登記事項,每一項一筆;原文「(空白)」→ []"
+       }
+      }
+     }
+    },
+    "其他登記事項": {
+     "type": "array",
+     "items": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+       "類別",
+       "標籤",
+       "內容"
+      ],
+      "properties": {
+       "類別": {
+        "type": [
+         "string",
+         "null"
+        ],
+        "description": "原文開頭括號內、以「事項」結尾的分類(如「限制登記事項」「一般註記事項」),去括號;舊版沒有分類 → null"
+       },
+       "標籤": {
+        "type": [
+         "string",
+         "null"
+        ],
+        "description": "冒號前的連續中文(如「重測前」「使用執照字號」);沒有 → null"
+       },
+       "內容": {
+        "type": [
+         "string",
+         "null"
+        ],
+        "description": "其餘原文"
+       }
+      }
+     },
+     "description": "其他登記事項,每一項一筆;原文「(空白)」→ []"
+    }
+   },
+   "description": "建物標示部"
+  },
+  "land_owner": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "次序",
+    "登記次序",
+    "登記日期",
+    "登記原因",
+    "原因發生日期",
+    "所有權人",
+    "統一編號",
+    "出生日期",
+    "住址",
+    "管理者",
+    "權利範圍",
+    "權狀字號",
+    "相關他項權利登記次序",
+    "其他登記事項",
+    "當期申報地價",
+    "當期申報地價年月",
+    "前次移轉現值",
+    "地價備註事項"
+   ],
+   "properties": {
+    "次序": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "description": "原文,如「0001」"
+    },
+    "登記次序": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "description": "原文"
+    },
+    "登記日期": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "description": "原文民國日期字串(如「民國050年03月14日」),不轉西元;原文空白(「民國---年--月--日」)→ null"
+    },
+    "登記原因": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "description": "原文"
+    },
+    "原因發生日期": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "description": "原文民國日期字串(如「民國050年03月14日」),不轉西元;原文空白(「民國---年--月--日」)→ null"
+    },
+    "所有權人": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "description": "原文(依類別遮罩,如「黃**」)"
+    },
+    "統一編號": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "description": "原文(依類別遮罩)"
+    },
+    "出生日期": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "description": "原文民國日期字串(如「民國050年03月14日」),不轉西元;原文空白(「民國---年--月--日」)→ null"
+    },
+    "住址": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "description": "原文"
+    },
+    "管理者": {
+     "type": "array",
+     "items": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+       "姓名",
+       "統一編號",
+       "住址"
+      ],
+      "properties": {
+       "姓名": {
+        "type": [
+         "string",
+         "null"
+        ],
+        "description": "原文"
+       },
+       "統一編號": {
+        "type": [
+         "string",
+         "null"
+        ],
+        "description": "原文"
+       },
+       "住址": {
+        "type": [
+         "string",
+         "null"
+        ],
+        "description": "原文"
+       }
+      }
+     }
+    },
+    "權利範圍": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "description": "「全部」或「a分之b」(原文「全部 1分之1」→「全部」);謄本沒印或原文空白 → null"
+    },
+    "權狀字號": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "description": "原文"
+    },
+    "相關他項權利登記次序": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     },
+     "description": "以空白切開"
+    },
+    "其他登記事項": {
+     "type": "array",
+     "items": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+       "類別",
+       "標籤",
+       "內容"
+      ],
+      "properties": {
+       "類別": {
+        "type": [
+         "string",
+         "null"
+        ],
+        "description": "原文開頭括號內、以「事項」結尾的分類(如「限制登記事項」「一般註記事項」),去括號;舊版沒有分類 → null"
+       },
+       "標籤": {
+        "type": [
+         "string",
+         "null"
+        ],
+        "description": "冒號前的連續中文(如「重測前」「使用執照字號」);沒有 → null"
+       },
+       "內容": {
+        "type": [
+         "string",
+         "null"
+        ],
+        "description": "其餘原文"
+       }
+      }
+     },
+     "description": "其他登記事項,每一項一筆;原文「(空白)」→ []"
+    },
+    "當期申報地價": {
+     "type": [
+      "number",
+      "null"
+     ],
+     "description": "元／平方公尺"
+    },
+    "當期申報地價年月": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "description": "原文,如「107年01月」"
+    },
+    "前次移轉現值": {
+     "type": "array",
+     "items": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+       "年月",
+       "金額",
+       "歷次取得權利範圍"
+      ],
+      "properties": {
+       "年月": {
+        "type": [
+         "string",
+         "null"
+        ],
+        "description": "原文"
+       },
+       "金額": {
+        "type": "number",
+        "description": "元／平方公尺"
+       },
+       "歷次取得權利範圍": {
+        "type": "string"
+       }
+      }
+     },
+     "description": "前次移轉現值或原規定地價與歷次取得權利範圍依原文順序一對一"
+    },
+    "地價備註事項": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "description": "原文"
+    }
+   },
+   "description": "所有權部一筆(土地)"
+  },
+  "building_owner": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "次序",
+    "登記次序",
+    "登記日期",
+    "登記原因",
+    "原因發生日期",
+    "所有權人",
+    "統一編號",
+    "出生日期",
+    "住址",
+    "管理者",
+    "權利範圍",
+    "權狀字號",
+    "相關他項權利登記次序",
+    "其他登記事項"
+   ],
+   "properties": {
+    "次序": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "description": "原文,如「0001」"
+    },
+    "登記次序": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "description": "原文"
+    },
+    "登記日期": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "description": "原文民國日期字串(如「民國050年03月14日」),不轉西元;原文空白(「民國---年--月--日」)→ null"
+    },
+    "登記原因": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "description": "原文"
+    },
+    "原因發生日期": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "description": "原文民國日期字串(如「民國050年03月14日」),不轉西元;原文空白(「民國---年--月--日」)→ null"
+    },
+    "所有權人": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "description": "原文(依類別遮罩,如「黃**」)"
+    },
+    "統一編號": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "description": "原文(依類別遮罩)"
+    },
+    "出生日期": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "description": "原文民國日期字串(如「民國050年03月14日」),不轉西元;原文空白(「民國---年--月--日」)→ null"
+    },
+    "住址": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "description": "原文"
+    },
+    "管理者": {
+     "type": "array",
+     "items": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+       "姓名",
+       "統一編號",
+       "住址"
+      ],
+      "properties": {
+       "姓名": {
+        "type": [
+         "string",
+         "null"
+        ],
+        "description": "原文"
+       },
+       "統一編號": {
+        "type": [
+         "string",
+         "null"
+        ],
+        "description": "原文"
+       },
+       "住址": {
+        "type": [
+         "string",
+         "null"
+        ],
+        "description": "原文"
+       }
+      }
+     }
+    },
+    "權利範圍": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "description": "「全部」或「a分之b」(原文「全部 1分之1」→「全部」);謄本沒印或原文空白 → null"
+    },
+    "權狀字號": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "description": "原文"
+    },
+    "相關他項權利登記次序": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     },
+     "description": "以空白切開"
+    },
+    "其他登記事項": {
+     "type": "array",
+     "items": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+       "類別",
+       "標籤",
+       "內容"
+      ],
+      "properties": {
+       "類別": {
+        "type": [
+         "string",
+         "null"
+        ],
+        "description": "原文開頭括號內、以「事項」結尾的分類(如「限制登記事項」「一般註記事項」),去括號;舊版沒有分類 → null"
+       },
+       "標籤": {
+        "type": [
+         "string",
+         "null"
+        ],
+        "description": "冒號前的連續中文(如「重測前」「使用執照字號」);沒有 → null"
+       },
+       "內容": {
+        "type": [
+         "string",
+         "null"
+        ],
+        "description": "其餘原文"
+       }
+      }
+     },
+     "description": "其他登記事項,每一項一筆;原文「(空白)」→ []"
+    }
+   },
+   "description": "所有權部一筆(建物)"
+  },
+  "right": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "次序",
+    "登記次序",
+    "權利種類",
+    "收件年期",
+    "字號",
+    "登記日期",
+    "登記原因",
+    "權利人",
+    "統一編號",
+    "住址",
+    "債權額比例",
+    "擔保債權總金額",
+    "擔保債權種類及範圍",
+    "擔保債權確定期日",
+    "存續期間",
+    "清償日期",
+    "利息(率)",
+    "遲延利息(率)",
+    "違約金",
+    "其他擔保範圍約定",
+    "債務人及債務額比例",
+    "權利標的",
+    "標的登記次序",
+    "設定權利範圍",
+    "證明書字號",
+    "設定義務人",
+    "共同擔保地號",
+    "共同擔保建號",
+    "其他登記事項"
+   ],
+   "properties": {
+    "次序": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "description": "原文"
+    },
+    "登記次序": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "description": "原文"
+    },
+    "權利種類": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "description": "原文,如「最高限額抵押權」"
+    },
+    "收件年期": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "description": "原文"
+    },
+    "字號": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "description": "原文"
+    },
+    "登記日期": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "description": "原文民國日期字串(如「民國050年03月14日」),不轉西元;原文空白(「民國---年--月--日」)→ null"
+    },
+    "登記原因": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "description": "原文"
+    },
+    "權利人": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "description": "原文"
+    },
+    "統一編號": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "description": "原文"
+    },
+    "住址": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "description": "原文"
+    },
+    "債權額比例": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "description": "原文(如「全部 1分之1」)"
+    },
+    "擔保債權總金額": {
+     "type": [
+      "number",
+      "null"
+     ],
+     "description": "元(新台幣)"
+    },
+    "擔保債權種類及範圍": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "description": "原文"
+    },
+    "擔保債權確定期日": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "description": "原文"
+    },
+    "存續期間": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "description": "原文"
+    },
+    "清償日期": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "description": "原文"
+    },
+    "利息(率)": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "description": "原文"
+    },
+    "遲延利息(率)": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "description": "原文"
+    },
+    "違約金": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "description": "原文"
+    },
+    "其他擔保範圍約定": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "description": "原文"
+    },
+    "債務人及債務額比例": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "description": "原文"
+    },
+    "權利標的": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "description": "原文"
+    },
+    "標的登記次序": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     },
+     "description": "以空白切開"
+    },
+    "設定權利範圍": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "description": "「全部」或「a分之b」(原文「全部 1分之1」→「全部」);謄本沒印或原文空白 → null"
+    },
+    "證明書字號": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "description": "原文"
+    },
+    "設定義務人": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "description": "原文"
+    },
+    "共同擔保地號": {
+     "type": "array",
+     "items": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+       "段小段",
+       "編號"
+      ],
+      "properties": {
+       "段小段": {
+        "type": [
+         "string",
+         "null"
+        ],
+        "description": "段小段原文(如「仁愛段六小段」);值裡沒有段小段時為 null"
+       },
+       "編號": {
+        "type": "string",
+        "description": "地號或建號原文(如「0100-0000」)"
+       }
+      }
+     },
+     "description": "依空白切開:非數字開頭的片段是段小段,其後每個數字開頭的片段是一個編號"
+    },
+    "共同擔保建號": {
+     "type": "array",
+     "items": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+       "段小段",
+       "編號"
+      ],
+      "properties": {
+       "段小段": {
+        "type": [
+         "string",
+         "null"
+        ],
+        "description": "段小段原文(如「仁愛段六小段」);值裡沒有段小段時為 null"
+       },
+       "編號": {
+        "type": "string",
+        "description": "地號或建號原文(如「0100-0000」)"
+       }
+      }
+     },
+     "description": "依空白切開:非數字開頭的片段是段小段,其後每個數字開頭的片段是一個編號"
+    },
+    "其他登記事項": {
+     "type": "array",
+     "items": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+       "類別",
+       "標籤",
+       "內容"
+      ],
+      "properties": {
+       "類別": {
+        "type": [
+         "string",
+         "null"
+        ],
+        "description": "原文開頭括號內、以「事項」結尾的分類(如「限制登記事項」「一般註記事項」),去括號;舊版沒有分類 → null"
+       },
+       "標籤": {
+        "type": [
+         "string",
+         "null"
+        ],
+        "description": "冒號前的連續中文(如「重測前」「使用執照字號」);沒有 → null"
+       },
+       "內容": {
+        "type": [
+         "string",
+         "null"
+        ],
+        "description": "其餘原文"
+       }
+      }
+     },
+     "description": "其他登記事項,每一項一筆;原文「(空白)」→ []"
+    }
+   },
+   "description": "他項權利部一筆"
+  },
+  "verdict": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "他項權利",
+    "限制登記",
+    "信託"
+   ],
+   "properties": {
+    "他項權利": {
+     "type": "string",
+     "enum": [
+      "有",
+      "未見",
+      "無法判定"
+     ],
+     "description": "有:他項權利部有筆。未見:申請範圍含他項權利部(全部、地號全部、建號全部、標示部及他項權利部、他項權利個人全部),讀到標示部而他項權利部沒有筆。其他 → 無法判定"
+    },
+    "限制登記": {
+     "type": "string",
+     "enum": [
+      "有",
+      "未見",
+      "無法判定"
+     ],
+     "description": "有:比對到代碼表(25099 類別 99、標籤 GZ;25100 登記原因 33/49/50/51/52/58/AU),整串相等。未見:沒比對到,申請範圍為全部/地號全部/建號全部,讀到標示部與所有權部,且每一項其他登記事項都有類別。其餘 → 無法判定"
+    },
+    "信託": {
+     "type": "string",
+     "enum": [
+      "有",
+      "未見",
+      "無法判定"
+     ],
+     "description": "有:比對到代碼表(25099 標籤 GJ、整項 GH;25100 登記原因 CU/CX/CY),整串相等。未見/無法判定同限制登記"
+    }
+   },
+   "description": "不輸出「無」:「未見」只表示這份謄本上沒印,要說法律上沒有需地政事務所確認"
+  },
+  "printed": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "標示部",
+    "所有權部",
+    "他項權利部"
+   ],
+   "properties": {
+    "標示部": {
+     "type": "boolean"
+    },
+    "所有權部": {
+     "type": "boolean"
+    },
+    "他項權利部": {
+     "type": "boolean"
+    }
+   },
+   "description": "這張謄本有沒有印出該部(標題「*** 標示部 ***」)"
+  },
+  "notes": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "標示部",
+    "所有權部",
+    "他項權利部"
+   ],
+   "properties": {
+    "標示部": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     },
+     "description": "該部沒有標籤的說明句原樣"
+    },
+    "所有權部": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     },
+     "description": "該部沒有標籤的說明句原樣"
+    },
+    "他項權利部": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     },
+     "description": "該部沒有標籤的說明句原樣"
+    }
+   },
+   "description": "各部的附註"
+  },
+  "other": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+     "部",
+     "標籤",
+     "值",
+     "原因"
+    ],
+    "properties": {
+     "部": {
+      "type": "string"
+     },
+     "標籤": {
+      "type": "string"
+     },
+     "值": {
+      "type": "string"
+     },
+     "原因": {
+      "type": "string"
+     }
+    }
+   },
+   "description": "固定清單外的標籤,或衍生鍵拆不開的原文,一個不丟"
+  }
+ }
+}

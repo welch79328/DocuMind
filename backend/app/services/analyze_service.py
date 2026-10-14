@@ -14,6 +14,7 @@ from app.lib.multi_type_ocr.processor_factory import ProcessorFactory
 from app.lib.ai_service import answer_question
 from app.lib.pdf_text_layer import has_text_layer, extract_text_layer_pages
 from app.lib.multi_type_ocr.transcript_full_parser import parse_transcript_pages
+from app.lib.multi_type_ocr.transcript_records import build_transcript_records
 
 logger = logging.getLogger(__name__)
 
@@ -351,6 +352,20 @@ def _attach_full_transcripts(
         document_fields["transcripts"] = parse_transcript_pages(texts)
     except Exception as e:
         logger.warning(f"謄本全文解析失敗,省略 transcripts: {e!r}")
+        return
+    _attach_transcript_records(document_fields)
+
+
+def _attach_transcript_records(document_fields: Dict[str, Any]) -> None:
+    """謄本附加固定輸出格式 document_fields["transcript_records"](2026-10-15,見 transcript_records)。
+
+    由 transcripts 建構,每張謄本一筆、鍵一律存在。與 transcripts 一樣是附加資訊:
+    建構失敗只記 log、省略此鍵,transcripts 與既有欄位照常回傳。
+    """
+    try:
+        document_fields["transcript_records"] = build_transcript_records(document_fields["transcripts"])
+    except Exception as e:
+        logger.warning(f"謄本固定格式建構失敗,省略 transcript_records: {e!r}")
 
 
 def _merge_fill_missing(target: Dict[str, Any], source: Dict[str, Any]) -> None:
