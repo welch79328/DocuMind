@@ -13,6 +13,7 @@ from app.lib.storage_service import storage_service
 from app.lib.multi_type_ocr.processor_factory import ProcessorFactory
 from app.lib.ai_service import answer_question
 from app.lib.pdf_text_layer import has_text_layer, extract_text_layer_pages
+from app.lib.multi_type_ocr.transcript_full_parser import parse_transcript_pages
 
 logger = logging.getLogger(__name__)
 
@@ -329,6 +330,29 @@ def _recompute_merged_status(merged: Dict[str, Any], pages: List[dict]) -> None:
         merged["extraction_confidence"] = round(sum(scored) / len(scored), 4)
 
 
+def _attach_full_transcripts(
+    document_fields: Optional[Dict[str, Any]], pages: List[dict], document_type: str
+) -> None:
+    """謄本附加全文解析結果 document_fields["transcripts"](2026-10-14,見 transcript_full_parser)。
+
+    需要全部頁面才能分張、接續頁,所以在文件層做,不加進各頁 structured_data——
+    needs_review 與複核佇列由各頁重算、前端複核畫面只讀各頁 structured_data,都不受影響。
+    解析失敗只記 log、省略此鍵:這是附加資訊,不能讓既有回應跟著失敗。
+    """
+    if document_type != "transcript" or not isinstance(document_fields, dict):
+        return
+    texts = [
+        (page.get("rule_postprocessed") or {}).get("text")
+        or (page.get("ocr_raw") or {}).get("text")
+        or ""
+        for page in pages
+    ]
+    try:
+        document_fields["transcripts"] = parse_transcript_pages(texts)
+    except Exception as e:
+        logger.warning(f"謄本全文解析失敗,省略 transcripts: {e!r}")
+
+
 def _merge_fill_missing(target: Dict[str, Any], source: Dict[str, Any]) -> None:
     """遞迴地把 source 裡「target 缺少或為空」的欄位填進 target。
 
@@ -605,6 +629,7 @@ class AnalyzeService:
         # 合起來卻是完整的一份。舊欄位 `pages[].structured_data` 不變，
         # 呼叫端要逐頁結果可用舊欄位，要完整文件結果改讀這個新欄位。
         document_fields = _merge_page_structured_data(pages)
+        _attach_full_transcripts(document_fields, pages, document_type)
 
         return {
             "file_name": filename,
