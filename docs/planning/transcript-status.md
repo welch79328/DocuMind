@@ -20,18 +20,18 @@
 | 原文被回傳的比例 | 約 15% → 100% |
 | 速度 | 40–72 ms／份（伺服器端） |
 | 車位 | **未完成**：公設車位行保留為文字未拆；無電子樣本可驗 |
-| 固定輸出格式 `document_fields.transcript_records` | 每張謄本一筆、鍵固定（依官方格式），沒印回 `null`／`[]`，附 JSON Schema（`docs/api/transcript_records.schema.json`）、判定 有／未見／無法判定。5 份電子謄本：11 張全部符合 Schema、640 個原文值每個都有去處、「其他欄位」0 項 |
+| 固定輸出格式 `document_fields.transcript_records` | 每張謄本一筆、鍵固定（依官方格式），沒印回 `null`／`[]`，附 JSON Schema（`docs/api/transcript_records.schema.json`）、判定 有／未見／無法判定。每張土地 86 鍵、建物 84 鍵（1 位所有權人、1 筆他項權利計；逐鍵見 INTEGRATION §3.1.3）。5 份電子謄本（土地 4 張、建物 7 張）：11 張全部符合 Schema、640 個原文值每個都有去處、「其他欄位」0 項；線上實測輸出＝本機 |
 
-## 3. 已上線的改動（2026-10-14）
+## 3. 已上線的改動（2026-10-14～15）
 | 版本 | 內容 | 驗收清單 |
 |---|---|---|
 | `3d07e2e` | 比對用文字正規化通用化：帶框字（㈲㈥）還原，謄本、帳單、合約共用（合約值因此改為半形） | `.kiro/specs/transcript-enclosed-chars/` |
 | `48dc2ab` | 必要欄位依「部」決定（建物謄本不要求使用分區、純土地不要求建物欄位）；原文空白回 `null`（信心度 0.9）；新增 `print_date`；對接文件補記合約值改半形 | `.kiro/specs/transcript-section-required/` |
 | `b48fa74` | 全文解析 `transcripts`（依版面分張／分部／分筆、讀所有「標籤:值」） | `.kiro/specs/transcript-full-parse/` |
-| （TFS-1，2026-10-15） | 固定輸出格式 `transcript_records`＋JSON Schema；對接文件 2.4.0 §3.1.3（含 jgb2 31 欄對照） | `.kiro/specs/transcript-fixed-schema/` |
+| `729629d`（TFS-1，2026-10-15） | 固定輸出格式 `transcript_records`＋JSON Schema；對接文件 2.4.0 §3.1.3（含 jgb2 31 欄對照） | `.kiro/specs/transcript-fixed-schema/` |
 
-每一版都經過：Plan 獨立審查 → 業主核准 → 實作與單元測試 → 獨立驗證（CONFIRMED）→ 上線 → 三份真實謄本線上實測（輸出＝本機重放、速度不變）。
-回滾點：上一版的 commit（`b48fa74` 的回滾點為 `48dc2ab`）。
+每一版都經過：Plan 獨立審查 → 業主核准 → 實作與單元測試 → 獨立驗證（CONFIRMED）→ 上線 → 真實電子謄本線上實測（輸出＝本機重放、速度不變；TFS-1 起為 5 份）。
+回滾點：上一版的 commit（`729629d` 的回滾點為 `b48fa74`）。
 
 ## 4. 決策紀錄（2026-10-14）
 | 決策 | 理由 |
@@ -61,5 +61,5 @@
 | **TFS-3 AIChatbot `transcript_mapper.py` 改讀 `transcript_records`** | 未開始 | 業主核准 |
 | 25 欄 `section`／`subsection` 遇平鎮區、前鎮區、新市區等會切錯（`transcript_field_extractor.py` 以非貪婪比對切到第一個區鄉鎮市）；`transcript_records` 已改用全國鄉鎮市區名稱表 | 未處理（25 欄停止擴充，下游改讀 `transcript_records` 即解） | — |
 | 待查（TFS-1 verifier）：同一張謄本兩段同名標示部時後段值被略過（trace 仍記去處）；新版類別前綴單獨成項會被當空白；「公同共有 1分之1」權利範圍轉不出（原文進其他欄位） | 無樣本 | 有樣本再驗 |
-| 小修：INTEGRATION §3.1.3「標示部、所有權部沒讀到…不給未見」改為「依判定表各列要求的部」（TFS-1 verifier A1，P4）；掃描件只讀到標示部時全部類範圍會給他項權利未見（待查，掃描件線處理） | 未處理 | — |
+| 待查：掃描件只讀到標示部時，全部類範圍會給他項權利「未見」（TFS-1 verifier；INTEGRATION 措辭 A1 已於 2026-10-15 修正） | 掃描件線處理 | 升級機器後 |
 | 線上複核佇列 113 筆待處理（謄本 104 筆，多為開發測試件，業主裁示先不刪） | 不動 | 業主決定何時清 |

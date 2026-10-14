@@ -1,13 +1,13 @@
 # 謄本線上驗收
 
-> 最後更新 2026-10-14 ／ 對應版本 `b48fa74`（線上同版）
+> 最後更新 2026-10-15 ／ 對應版本 `729629d`（線上同版）
 > 現況、決策與待辦另見 [`docs/planning/transcript-status.md`](../planning/transcript-status.md)。
 
 謄本功能的驗收分兩條線，**兩條都要過**：
 
 | 線 | 驗什麼 | 在哪裡跑 |
 |---|---|---|
-| 抽取邏輯 | 給定一段文字，欄位抽得對不對、全文有沒有讀完 | 本機 `backend/tests/unit/test_transcript_*.py`、`test_section_required.py`、`test_transcript_full_parser.py` |
+| 抽取邏輯 | 給定一段文字，欄位抽得對不對、全文有沒有讀完 | 本機 `backend/tests/unit/test_transcript_*.py`、`test_section_required.py`、`test_transcript_full_parser.py`、`test_transcript_records.py` |
 | OCR 品質與速度 | 一張圖實際讀得出什麼、要多久 | **只能線上**——本機測試環境不裝 OCR 引擎，速度也只有線上數字才有意義 |
 
 本機 unit 綠燈只證明前者。圖片、掃描件的結果一定要送線上看。
@@ -34,7 +34,7 @@
 | `backend/data/建物土地謄本-杭州南路一段.pdf` | repo 既有（電子謄本，有文字層） | 2 份土地＋1 份建物在同一個檔；不走 OCR |
 
 - **正確答案**：`backend/data/transcript_samples/truth.json`（依範本圖人工判讀；記的是紙上印的內容，例如「(空白)」照抄）。
-- **線上基準**：`backend/data/transcript_samples/expected/*.json`——最近一次確認過的 `document_fields`（含 `transcripts`）。
+- **線上基準**：`backend/data/transcript_samples/expected/*.json`——最近一次確認過的 `document_fields`（含 `transcripts`、`transcript_records`）。
   01–07 的 `transcripts` 由線上複核項目已存的 OCR 原文重放產生，不重跑 OCR。
 
 ### 1.2 真實電子謄本（業主提供，不入 repo）
@@ -60,17 +60,20 @@ python scripts/transcript_online_acceptance.py --base http://54.248.201.66:8085 
 - **全文解析（`transcripts`）的「都讀出來」檢查**：`test_transcript_full_parser.py` 的 `audit()`——
   逐行帳目（每一行原文都有去處）、字元對帳（含標點、星號，0 少 0 多）、詞邊界（不黏出原文沒有的詞）。
   三組正對照（黏連、刪遮罩、刪一行）必須被抓到。電子謄本新樣本請先用它跑一次。
+- **固定格式（`transcript_records`）檢查**：輸出要通過 `docs/api/transcript_records.schema.json`（`test_transcript_records.py` 內含驗證器，刪一個鍵、多一個鍵都要報錯）；
+  `transcripts` 的每個原文值都要在 `transcript_records` 有去處（固定鍵或 `其他欄位`），`其他欄位` 有項目時逐項看是否該定鍵。
 - 線上一次只送一份；**不要連送多頁掃描件**（2026-10-13 曾因此 OOM）。
 
 ## 3. 目前結果
 
-### 3.1 電子謄本（2026-10-14，`b48fa74`，線上實測）
+### 3.1 電子謄本（2026-10-14 `b48fa74`；2026-10-15 `729629d` 補固定格式，皆線上實測）
 | 項目 | 結果 |
 |---|---|
 | 25 個單值欄位 | 逐欄對照原文：值與欄位皆正確；三份皆不需人工 |
 | 全文解析 `transcripts`（5 份：上表 4 份＋杭州南路） | 逐行帳目無缺行、字元對帳 0 少 0 多、無原文沒有的詞；分張 杭州南路 3、忠孝東路 2、長春路 1、懷寧街 3、竹田鄉 2 |
 | 原文內容被 API 回傳的比例 | 改版前約 15% → 100% |
-| 速度（伺服器端，整份） | 忠孝東路 40 ms、長春路 48 ms、懷寧街 72 ms；部署後第一個請求約 0.2–0.6 秒（暖機） |
+| 固定格式 `transcript_records`（5 份 11 張：土地 4、建物 7） | 11 張全部符合 Schema；640 個原文值每個都有去處、0 不符、`其他欄位` 0 項；判定：長春路、懷寧街第 1 張 他項權利有／限制登記未見／信託未見，懷寧街第 2、3 張與竹田鄉 他項權利有、其餘無法判定，杭州南路、忠孝東路三項皆無法判定；線上輸出＝本機、未新增複核項目 |
+| 速度（伺服器端，整份） | `729629d`：杭州南路 45 ms、忠孝東路 40 ms、長春路 42 ms、懷寧街 74 ms、竹田鄉 64 ms；部署後第一個請求約 0.2–0.6 秒（暖機） |
 
 ### 3.2 掃描／拍照件（範本 01–07，OCR）
 以 2026-10-14 線上版本重放已存的 OCR 原文、逐欄對照 `truth.json`：讀錯或缺的欄位**都是 OCR 把字讀壞或讀漏**，例如：
