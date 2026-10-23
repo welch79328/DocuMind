@@ -33,6 +33,7 @@
 |------|------|
 | [planning/transcript-status.md](./planning/transcript-status.md) | 謄本解析現況、決策紀錄、待辦與待決 |
 | [testing/transcript-online-acceptance.md](./testing/transcript-online-acceptance.md) | 謄本驗收範本、跑法、線上實測結果、已知限制 |
+| [testing/bedrock-vlm-eval-20261023.md](./testing/bedrock-vlm-eval-20261023.md) | 紀錄：Bedrock 東京視覺模型 vs 線上（謄本、模擬掃描、單據、修繕照片、縮圖、flex、價格） |
 
 各版的計畫與驗收清單在 `.kiro/specs/transcript-*/acceptance.md`。
 

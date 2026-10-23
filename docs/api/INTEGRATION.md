@@ -595,9 +595,12 @@ VLM 不可用或影像無法辨識時降級為 `{"defect_labels": [], "descripti
 25 個單值欄位逐欄對照原文的 3 份，值與欄位皆正確、皆不需人工；
 `transcript_records` 11 張全部符合 Schema，640 個原文值 0 不符。
 ⚠️ 樣本為 5 份，不是統計結果；沒見過的版面仍可能讀錯，請保留人工抽查。
-掃描件、手機拍照走 OCR，讀錯或缺的欄位都來自 OCR 把字讀壞或讀漏
-（例如遮罩星號被吃掉、日期少數字、「土」讀成「上」、整行沒讀到），
-**而且讀錯的值會帶著高信心度送出、不一定觸發 `needs_review`**（見 §8）。
+掃描件、手機拍照走 OCR，讀錯或缺的欄位大多來自 OCR 把字讀壞或讀漏
+（例如遮罩星號被吃掉、日期少數字、「土」讀成「上」、「加強」讀成簡體「加强」、整行沒讀到）；
+少數是 AI 補值（`enable_llm=true`）取到別處的值。
+**OCR 讀錯的值會帶著高信心度送出、不一定觸發 `needs_review`**（見 §8）。
+2026-10-20 曾把 5 份真實電子謄本（17 頁）轉成模擬掃描和模擬拍照的圖片送線上：25 欄正確率約 97%，
+錯的 23 欄中有 16 欄沒進 `needs_confirmation`（[`docs/testing/bedrock-vlm-eval-20261023.md`](../testing/bedrock-vlm-eval-20261023.md) §3.3）。
 掃描件的 `transcripts`／`transcript_records` 讀不出結構，請以 25 個單值欄位為準。
 實測明細見 [`docs/testing/transcript-online-acceptance.md`](../testing/transcript-online-acceptance.md) §3。
 
