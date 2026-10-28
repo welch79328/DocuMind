@@ -2,8 +2,43 @@
 Application configuration
 """
 
+from pydantic import SecretStr, field_validator
 from pydantic_settings import BaseSettings
-from typing import List, Optional
+from typing import Dict, List, Optional
+
+
+# 「文件類型 → 供應商」分流表(LLM_PROVIDER_BY_DOCUMENT_TYPE)可以出現的鍵與值。
+#
+# 鍵只有這四類:謄本刻意不在其中——謄本的抽取與校正一律維持既有路徑
+# (業主裁定「不含謄本」,bedrock-qwen-documind R3),寫進表裡會在啟動時報錯,
+# 不會被默默忽略。
+# 值是 create_provider 認得的供應商名稱;test_llm_bedrock_routing 釘住兩邊一致。
+LLM_ROUTABLE_DOCUMENT_TYPES = frozenset({"bill", "repair_photo", "handover_photo", "contract"})
+LLM_ROUTABLE_PROVIDERS = frozenset({"openai", "anthropic", "local_qwen", "bedrock"})
+
+
+def validate_llm_routing_table(value: Optional[Dict[str, str]]) -> Dict[str, str]:
+    """檢查並正規化分流表;未知的文件類型或供應商名稱一律報錯(打錯字不能默默失效)。"""
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        raise ValueError("LLM_PROVIDER_BY_DOCUMENT_TYPE 必須是 JSON 物件,例如 {\"bill\": \"bedrock\"}")
+    table: Dict[str, str] = {}
+    for raw_type, raw_provider in value.items():
+        doc_type = str(raw_type).strip().lower()
+        provider = str(raw_provider).strip().lower()
+        if doc_type not in LLM_ROUTABLE_DOCUMENT_TYPES:
+            raise ValueError(
+                f"LLM_PROVIDER_BY_DOCUMENT_TYPE 含不可分流的文件類型「{raw_type}」;"
+                f"只接受 {sorted(LLM_ROUTABLE_DOCUMENT_TYPES)}(謄本不在分流範圍)"
+            )
+        if provider not in LLM_ROUTABLE_PROVIDERS:
+            raise ValueError(
+                f"LLM_PROVIDER_BY_DOCUMENT_TYPE 的「{raw_type}」指定了未知的供應商「{raw_provider}」;"
+                f"只接受 {sorted(LLM_ROUTABLE_PROVIDERS)}"
+            )
+        table[doc_type] = provider
+    return table
 
 
 class Settings(BaseSettings):
@@ -77,6 +112,27 @@ class Settings(BaseSettings):
     LLM_PROVIDER: str = "openai"          # openai / anthropic / local_qwen
     LLM_CLOUD_ENABLED: bool = True        # 隱私硬需求時設 false,禁止載入雲端 Provider
     LOCAL_QWEN_ENDPOINT: str = ""         # 本地 / EC2 vLLM 端點(LLM_PROVIDER=local_qwen 時必填)
+
+    # 「文件類型 → 供應商」分流表(bedrock-qwen-documind D-2)。
+    #
+    # 帳單 bill、修繕照片 repair_photo、點交照片 handover_photo、合約 contract
+    # 的欄位抽取、照片理解與 OCR 文字校正,依這張表決定送哪個供應商。
+    # `.env` 以 JSON 設定,例如:LLM_PROVIDER_BY_DOCUMENT_TYPE={"bill":"bedrock","contract":"bedrock"}
+    #
+    # 預設是空表 = 四類都走既有路徑,也就是 openai(LLM_PROVIDER 預設 openai;
+    # 帳單與合約的校正、合約抽取本來就固定 openai)。表裡沒列的類別同樣走既有路徑,
+    # 所以單一類別切回 openai 時,刪掉那一鍵或改成 "openai" 效果相同。
+    #
+    # 這張表**不改 LLM_PROVIDER 的意思**:LLM_PROVIDER 仍是沒有指定類別時的全域預設。
+    # 謄本不在表裡,寫進表會在啟動時報錯(見 validate_llm_routing_table)。
+    LLM_PROVIDER_BY_DOCUMENT_TYPE: Dict[str, str] = {}
+
+    # Bedrock(東京 ap-northeast-1)OpenAI 相容端點的 bearer 金鑰。
+    # 沒有預設值;只從設定讀取,不寫進程式、不印進 log(SecretStr 的 repr 會遮成 ****)。
+    # 區域固定東京,不開放設定(資料不出區,SR-7)。
+    BEDROCK_API_KEY: Optional[SecretStr] = None
+    # model ID 帶 `jp.`／`global.` 前綴(跨區推論設定檔)會在建立 Provider 時報錯。
+    BEDROCK_MODEL: str = "qwen.qwen3-vl-235b-a22b"
 
     # 雙模態 LLM 校正(ocr-vlm-consensus 需求 2);預設關閉,校正行為與現行一致
     LLM_DUAL_MODAL_ENABLED: bool = False  # 啟用後校正才同時送出頁面影像
@@ -230,6 +286,11 @@ class Settings(BaseSettings):
     # Storage Configuration
     STORAGE_TYPE: str = "local"  # "local" or "s3"
     LOCAL_STORAGE_PATH: str = "/app/uploads"  # Path for local storage
+
+    @field_validator("LLM_PROVIDER_BY_DOCUMENT_TYPE", mode="after")
+    @classmethod
+    def _check_llm_routing_table(cls, value: Dict[str, str]) -> Dict[str, str]:
+        return validate_llm_routing_table(value)
 
     class Config:
         env_file = ".env"

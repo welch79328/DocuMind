@@ -18,7 +18,48 @@ logger = logging.getLogger(__name__)
 # 僅雲端可用的提供商;與 providers.CLOUD_PROVIDERS 同一份清單。
 # 這裡不 import providers 是為了避免把 Provider 抽象層拉進這個舊路徑,
 # 但兩邊必須一致——test_local_only_privacy 有測試釘住這件事。
-_CLOUD_ONLY_PROVIDERS = frozenset({"openai", "anthropic"})
+_CLOUD_ONLY_PROVIDERS = frozenset({"openai", "anthropic", "bedrock"})
+
+
+def build_structured_extraction_prompt(
+    text: str, schema: Dict[str, str], context: str = "文件"
+) -> str:
+    """結構化欄位抽取的提示詞(LLMService.structured_extraction 與合約抽取共用)。
+
+    合約抽取改走 create_provider(bedrock-qwen-documind S1)後仍用這一份,
+    openai 路由送出的提示詞因此與改動前逐字相同。
+    """
+    # 構建欄位列表
+    field_list = "\n".join([
+        f"{i+1}. {name}: {desc}"
+        for i, (name, desc) in enumerate(schema.items())
+    ])
+
+    # 構建 JSON 模板
+    json_template = "{\n" + ",\n".join([
+        f'  "{name}": "值或null"'
+        for name in schema.keys()
+    ]) + "\n}"
+
+    prompt = f"""請從這份{context}圖像中提取以下關鍵欄位，並以 JSON 格式返回。
+
+如果某個欄位在文件中不存在，請返回 null。
+
+OCR 辨識文字（可作為參考）：
+```
+{text[:500]}
+```
+
+請提取的欄位：
+{field_list}
+
+請嚴格按照以下 JSON 格式返回：
+```json
+{json_template}
+```
+
+請只返回 JSON，不要包含其他說明文字。"""
+    return prompt
 
 
 class LLMService:
@@ -376,36 +417,7 @@ class LLMService:
         if not image_data:
             raise ValueError("structured_extraction 需要提供 image_data")
 
-        # 構建欄位列表
-        field_list = "\n".join([
-            f"{i+1}. {name}: {desc}"
-            for i, (name, desc) in enumerate(schema.items())
-        ])
-
-        # 構建 JSON 模板
-        json_template = "{\n" + ",\n".join([
-            f'  "{name}": "值或null"'
-            for name in schema.keys()
-        ]) + "\n}"
-
-        prompt = f"""請從這份{context}圖像中提取以下關鍵欄位，並以 JSON 格式返回。
-
-如果某個欄位在文件中不存在，請返回 null。
-
-OCR 辨識文字（可作為參考）：
-```
-{text[:500]}
-```
-
-請提取的欄位：
-{field_list}
-
-請嚴格按照以下 JSON 格式返回：
-```json
-{json_template}
-```
-
-請只返回 JSON，不要包含其他說明文字。"""
+        prompt = build_structured_extraction_prompt(text, schema, context)
 
         response = await self.call(
             prompt=prompt,
@@ -418,8 +430,12 @@ OCR 辨識文字（可作為參考）：
         return self._parse_json_response(response)
 
     def _parse_json_response(self, response: str) -> Dict[str, Optional[str]]:
+        return self.parse_structured_json(response)
+
+    @staticmethod
+    def parse_structured_json(response: str) -> Dict[str, Optional[str]]:
         """
-        解析 LLM 回應中的 JSON
+        解析 LLM 回應中的 JSON(合約抽取改走 create_provider 後也用這一支)
 
         Args:
             response: LLM 回應文字

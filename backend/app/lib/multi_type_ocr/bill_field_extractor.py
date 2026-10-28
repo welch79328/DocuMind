@@ -29,3 +29,5 @@ class BillFieldExtractor(RegexFieldExtractor):
     KEY_FIELDS = ("amount", "date", "account_no")
     FIELD_LABELS = {"amount": "金額", "date": "日期", "account_no": "戶號"}
     DOC_LABEL = "帳單"
+    # LLM 補欄位依分流表 LLM_PROVIDER_BY_DOCUMENT_TYPE["bill"] 取供應商
+    ROUTING_DOCUMENT_TYPE = "bill"

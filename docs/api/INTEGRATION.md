@@ -1,6 +1,6 @@
 # DocuMind OCR 對接規格（給外部系統開發者）
 
-> 版本 2.4.0 ／ 2026-10-15（2.4.0：謄本新增固定輸出格式 `transcript_records`，每張謄本的鍵固定、沒印回 `null`／`[]`，附 JSON Schema，見 §3.1.3；2.3.0：謄本新增 `transcripts`，謄本上印的每一項都依原文標籤回傳，見 §3.1.2；2.2.0：謄本新增 `print_date`；原文印空白的欄位回 `null`；土地／建物專屬的必要欄位只在該部存在時要求，見 §3.1；2.1.2：合約欄位的值改為半形數字與標點、帶框字還原，見 §3.2；2.1.1：持分欄位的值統一為「分數」或「全部」，見 §3.1；2.1.0：謄本新增 6 個清單欄位與 `land_rights_scope`，並寫明各單值欄位的取值範圍）
+> 版本 2.5.0 ／ 2026-10-28（2.5.0：每頁新增 `llm_calls`，列出這一頁每次 LLM 呼叫送到哪個供應商、模型、服務等級、成功或錯誤類別，見 §2.4；LLM 補欄位呼叫失敗時 `llm_used_for_extraction` 為 `false`；2.4.0：謄本新增固定輸出格式 `transcript_records`，每張謄本的鍵固定、沒印回 `null`／`[]`，附 JSON Schema，見 §3.1.3；2.3.0：謄本新增 `transcripts`，謄本上印的每一項都依原文標籤回傳，見 §3.1.2；2.2.0：謄本新增 `print_date`；原文印空白的欄位回 `null`；土地／建物專屬的必要欄位只在該部存在時要求，見 §3.1；2.1.2：合約欄位的值改為半形數字與標點、帶框字還原，見 §3.2；2.1.1：持分欄位的值統一為「分數」或「全部」，見 §3.1；2.1.0：謄本新增 6 個清單欄位與 `land_rights_scope`，並寫明各單值欄位的取值範圍）
 > 本文件由 `docs/API_INTEGRATION.md` 與 `docs/api/02-INTEGRATION-API.md` 合併而成。
 > 標示「實測」的數字皆取自線上環境(`54.248.201.66`),日期各自註明。
 > 唯一需要串的端點是 `POST /api/v1/analyze`；其餘為輔助。
@@ -88,7 +88,11 @@ curl -X POST "http://54.248.201.66:8085/api/v1/analyze" \
       "structured_data":    { /* 依 document_type 而異，見 §3 */ },
       "field_confidences":  { "land_number": 0.9, "owner": 0.0 },
       "consensus":          null,
-      "text_layer":         true   // 見下方說明;走 OCR 時此鍵不存在
+      "text_layer":         true,  // 見下方說明;走 OCR 時此鍵不存在
+      "llm_calls": [               // 這一頁的每次 LLM 呼叫;沒有呼叫時是 []
+        { "stage": "correction", "provider": "openai", "model": "gpt-5.6-luna",
+          "requested_service_tier": null, "service_tier": "default", "ok": true, "error": null }
+      ]
     }
   ],
 
@@ -116,6 +120,26 @@ curl -X POST "http://54.248.201.66:8085/api/v1/analyze" \
 **多頁文件務必讀 `document_fields`。** 謄本的地號在第 1 頁、建號在第 3 頁是常態，
 單頁的 `structured_data` 必然殘缺；`document_fields` 是「只填補缺值」合併後的完整結果，
 且 `needs_confirmation` 與 `extraction_confidence` 已依全文重算。
+
+#### `pages[].llm_calls` — 這一頁的 LLM 呼叫紀錄（2.5.0 起）
+
+每次 LLM 呼叫記一筆，依發生順序排列。用來分辨「沒用到 LLM」（陣列為 `[]`）與「LLM 失敗了」（有 `ok: false` 的項目），
+以及確認每次呼叫實際送到哪裡。批次端點的每一筆 `result.pages[]` 同樣有這個欄位。
+
+| 欄位 | 說明 |
+|---|---|
+| `stage` | `correction`（OCR 文字校正）／`extraction`（欄位抽取）／`photo_understanding`（修繕、點交照片理解） |
+| `provider` | `openai`／`bedrock`（另有 `anthropic`、`local_qwen`，目前未啟用）。帳單、照片、合約依伺服器的分流設定，謄本一律 `openai` |
+| `model` | 實際送出的模型 ID，例如 `gpt-5.6-terra`、`qwen.qwen3-vl-235b-a22b` |
+| `requested_service_tier` | 送出時要求的服務等級；只有 `bedrock` 會帶（`flex` 或 `default`），其他為 `null` |
+| `service_tier` | 供應商回應實際標示的服務等級；呼叫失敗時為 `null` |
+| `ok` | 這次呼叫是否成功 |
+| `error` | 失敗時的**錯誤類別**，不含供應商原始訊息：`timeout`、`rate_limited`（429）、`unavailable`（503）、`connection_error`、`invalid_response`、`missing_credentials`、`image_too_large`、`http_<狀態碼>`（如 `http_403`）、`error`（其他）；成功時為 `null` |
+
+- 走 `bedrock` 時每次先送 `flex`；被限流（429）、暫時無法服務（503）或逾時，會以 `default` 重送一次，
+  所以同一個階段可能出現兩筆：第一筆 `ok: false`，第二筆是重送的結果。重送仍失敗時，該階段退回規則結果，不會改送其他供應商。
+- 欄位抽取失敗時，`structured_data.llm_used_for_extraction` 為 `false`，欄位值是規則抽取的結果。
+- 呼叫成功不代表內容讀對：成功的呼叫照樣可能讀錯，判斷欄位可信度仍看 `field_confidences`。
 
 ---
 
@@ -177,7 +201,8 @@ curl -X POST "http://54.248.201.66:8085/api/v1/analyze/batch" \
 
 四種型別共通會附帶：
 `field_confidences`（逐欄位 0.0–1.0）、`needs_confirmation`（信心不足、建議人工確認的欄位名陣列）、
-`extraction_confidence`（必要欄位平均）、`llm_used_for_extraction`（bool）。
+`extraction_confidence`（必要欄位平均）、`llm_used_for_extraction`（bool；LLM 補欄位的呼叫成功才是 `true`，
+沒有呼叫或呼叫失敗都是 `false`，失敗的細節見 `pages[].llm_calls`）。
 
 **信心度是「這欄怎麼讀到的」標籤，不是準確率，請勿顯示成百分比。**
 `transcript`、`bill` 的 `field_confidences` 只會是下列幾個值，沒有中間值：

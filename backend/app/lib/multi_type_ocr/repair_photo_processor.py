@@ -62,8 +62,11 @@ class RepairPhotoProcessor(ImageUnderstandingProcessor):
 
     @staticmethod
     def _default_provider():
+        """未注入 provider 時依分流表建立;表裡沒指定 repair_photo 就維持全域 LLM_PROVIDER。"""
         from app.lib.llm_service.providers import create_provider
-        return create_provider()
+        from app.lib.llm_service.routing import provider_name_for
+
+        return create_provider(provider_name_for("repair_photo", None))
 
     @staticmethod
     def _parse_json(response: str) -> Dict[str, Any]:

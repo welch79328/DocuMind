@@ -19,7 +19,13 @@ from typing import Dict, Any, Optional
 from app.lib.multi_type_ocr.contract_patterns import PATTERNS
 from app.lib.multi_type_ocr.text_normalize import normalize_for_matching, normalize_pattern
 from app.lib.llm_service import LLMService
+from app.lib.llm_service.llm_service import build_structured_extraction_prompt
 from app.config import settings
+
+# 合約抽取走 openai 時固定用的模型。改走 create_provider 之前,這裡寫死
+# LLMService(provider="openai", model="gpt-4o");openai 路由(預設,以及 R6 切回)
+# 必須與切換前送出一模一樣的請求,所以模型維持 gpt-4o,不跟著 OPENAI_MODEL 變。
+CONTRACT_OPENAI_EXTRACTION_MODEL = "gpt-4o"
 
 logger = logging.getLogger(__name__)
 
@@ -112,7 +118,13 @@ class ContractFieldExtractor:
 
     def __init__(self):
         """初始化提取器"""
-        self.llm_service: Optional[LLMService] = None  # LLM 服務（延遲初始化）
+
+    @staticmethod
+    def _llm_provider_name() -> str:
+        """合約抽取的供應商:分流表有指定 contract 就用表的,否則維持既有的 openai。"""
+        from app.lib.llm_service.routing import provider_name_for
+
+        return provider_name_for("contract", "openai")
 
     async def extract(
         self,
@@ -157,8 +169,14 @@ class ContractFieldExtractor:
         logger.info(f"  - image_data is not None: {image_data is not None}")
 
         # 地端組態下不得把合約內容送往雲端。這裡先擋是為了讓紀錄講清楚
-        # 「這是政策決定」而非「LLM 提取失敗」——真正的守衛在 LLMService.__init__
-        cloud_blocked = not settings.LLM_CLOUD_ENABLED
+        # 「這是政策決定」而非「LLM 提取失敗」——真正的守衛在 create_provider
+        # 與各雲端 Provider 的建構子。分流表把合約指到地端供應商時不受此限。
+        from app.lib.llm_service.providers import CLOUD_PROVIDERS
+
+        cloud_blocked = (
+            self._llm_provider_name() in CLOUD_PROVIDERS
+            and not settings.LLM_CLOUD_ENABLED
+        )
 
         if confidence < self.CONFIDENCE_THRESHOLD and use_llm_fallback and image_data and cloud_blocked:
             logger.info(
@@ -373,7 +391,7 @@ class ContractFieldExtractor:
         """
         使用 LLM 視覺提取欄位
 
-        使用 LLMService 從合約圖像中提取結構化欄位。
+        依分流表取得 Provider,從合約圖像中提取結構化欄位。
         當正則表達式提取失敗或信心度低時，作為備選方案。
 
         Args:
@@ -386,14 +404,15 @@ class ContractFieldExtractor:
         Raises:
             Exception: LLM API 調用失敗時拋出異常
         """
-        # 延遲初始化 LLM 服務
-        if self.llm_service is None:
-            try:
-                self.llm_service = LLMService(provider="openai", model="gpt-4o")
-                logger.info("LLM 服務初始化成功")
-            except Exception as e:
-                logger.error(f"LLM 服務初始化失敗: {str(e)}")
-                raise
+        # 供應商依分流表;openai 路由維持切換前的 gpt-4o(見 CONTRACT_OPENAI_EXTRACTION_MODEL)。
+        # 每次呼叫重建,不快取:設定改了(R6 切回)不會沿用舊的 Provider。
+        from app.lib.llm_service.providers import create_provider
+
+        provider_name = self._llm_provider_name()
+        provider = create_provider(
+            provider_name,
+            model=CONTRACT_OPENAI_EXTRACTION_MODEL if provider_name == "openai" else None,
+        )
 
         # 定義欄位 schema（包含通用與租賃合約欄位）
         schema = {
@@ -427,16 +446,17 @@ class ContractFieldExtractor:
             "payment_day": "租金繳納日（例如：每月5日、月初、月底）",
         }
 
-        logger.debug("調用 LLMService 提取合約欄位")
+        logger.debug("調用 %s 提取合約欄位", provider_name)
 
         try:
-            # 使用 LLMService 進行結構化提取
-            fields = await self.llm_service.structured_extraction(
-                text=text,
+            # 提示詞、輸出上限、溫度與解析方式與原本的 LLMService.structured_extraction 相同
+            response = await provider.call(
+                build_structured_extraction_prompt(text, schema, context="合約"),
                 image_data=image_data,
-                schema=schema,
-                context="合約"
+                max_tokens=1000,
+                temperature=0.1,
             )
+            fields = LLMService.parse_structured_json(response)
 
             logger.info(f"LLM 成功提取 {len([v for v in fields.values() if v])} 個欄位")
 

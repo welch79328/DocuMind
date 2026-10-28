@@ -10,7 +10,7 @@
 | 前端 | Vue 3 + Vite、TypeScript、Tailwind CSS、Vue Router、Pinia（見 [`frontend/01-FRONTEND-DESIGN.md`](../frontend/01-FRONTEND-DESIGN.md)） |
 | 後端 | Python + FastAPI、SQLAlchemy + Alembic、PostgreSQL |
 | OCR | PaddleOCR（ONNX Runtime 執行器）+ Tesseract，本地執行；含文字層的 PDF 不經 OCR（§3） |
-| LLM | OpenAI（§2） |
+| LLM | OpenAI（§2）；帳單、照片、合約可依文件類型分流，預設 OpenAI |
 | 檔案儲存 | 預設本機（`STORAGE_TYPE=local`）；S3 相容儲存已實作，線上設定有誤、上傳目前全數失敗（見 [`transcript-status.md`](./transcript-status.md) §5 `file_url`） |
 | 部署 | AWS EC2 單機，Docker Compose 四個容器：`frontend`、`backend`、`postgres`、`nginx` |
 
@@ -18,7 +18,7 @@
 
 | 用途 | 實際模型 | 定價 / 1M |
 |---|---|---|
-| 欄位抽取（讀圖）、修繕/點交照片理解 | `gpt-5.6-terra` | $2.00 / $12.00 |
+| 欄位抽取（讀圖）、修繕/點交照片理解 | `gpt-5.6-terra`（合約欄位抽取固定 `gpt-4o`） | $2.00 / $12.00（`gpt-4o` $2.50 / $10.00） |
 | 全文校正 | `gpt-5.6-luna` | $0.20 / $1.20 |
 | 分類、摘要、問答 | `gpt-5.6-luna` | $0.20 / $1.20 |
 
@@ -27,7 +27,14 @@ Terra 對 Luna 只贏 0.4 分；抽取要讀圖並認出地號建號，Terra 領
 設定鍵為 `OPENAI_MODEL` 與 `OPENAI_MODEL_CORRECTION`（見 `app/config.py`）。
 
 實測全域平均約 **$0.0050/頁**（只有約 28% 的頁面觸發 LLM）。
-Anthropic 與自架 `local_qwen` 兩個 Provider 已實作但未啟用。
+
+**依文件類型分流**：帳單、修繕照片、點交照片、合約的欄位抽取、照片理解與校正，
+依分流表 `LLM_PROVIDER_BY_DOCUMENT_TYPE` 決定供應商，由 `.env` 設定；
+**預設空表 = 四類都走 OpenAI**（上表）。謄本不在分流範圍，固定照上表走 OpenAI。
+設定方式與各供應商行為見 [`docs/DEPLOYMENT.md`](../DEPLOYMENT.md) §3「依文件類型分流」。
+
+Bedrock（東京 Qwen3 VL 235B，flex $0.32 / $1.61、標準 $0.64 / $3.22）、Anthropic 與自架 `local_qwen`
+三個 Provider 已實作，預設未啟用。
 
 ## 3. OCR（2026-09-10 查證）
 

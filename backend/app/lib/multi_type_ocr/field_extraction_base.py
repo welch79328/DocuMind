@@ -62,6 +62,10 @@ class RegexFieldExtractor:
     FIELD_LABELS: Dict[str, str] = {}   # 欄位英文名 → 中文標籤(供 LLM 提示)
     DOC_LABEL: str = "文件"
 
+    # 分流表(LLM_PROVIDER_BY_DOCUMENT_TYPE)裡的文件類型。None = 不分流,
+    # 一律走全域 LLM_PROVIDER(謄本就是這樣:R3 謄本不換供應商)。
+    ROUTING_DOCUMENT_TYPE: Optional[str] = None
+
     _MATCH_CONFIDENCE = 0.9
     _LLM_CONFIDENCE = 0.8
 
@@ -85,12 +89,15 @@ class RegexFieldExtractor:
         llm_used = False
         if use_llm_fallback and needs and image_data:
             llm_fields = await self._extract_with_llm(text, image_data, needs, few_shot)
-            for key, value in llm_fields.items():
-                if key in self.KEY_FIELDS and value:
-                    fields[key] = value
-                    confidences[key] = self._LLM_CONFIDENCE
-            needs = [k for k in required if confidences[k] < self.threshold]
-            llm_used = True
+            # None = LLM 呼叫失敗、已降級為規則結果。此時不得標 llm_used_for_extraction=True,
+            # 否則「LLM 掛了」與「LLM 補過了」在回應裡分不出來(安全審查 F6、plan D-6)。
+            if llm_fields is not None:
+                for key, value in llm_fields.items():
+                    if key in self.KEY_FIELDS and value:
+                        fields[key] = value
+                        confidences[key] = self._LLM_CONFIDENCE
+                needs = [k for k in required if confidences[k] < self.threshold]
+                llm_used = True
 
         # 信心度只計必要欄位:選配欄位抽到是加分,抽不到不該扣分。
         # 例:一棟沒有附屬建物的透天,不該因為抽不到「附屬建物面積」而被判低信心。
@@ -181,7 +188,8 @@ class RegexFieldExtractor:
         image_data: str,
         needs: List[str],
         few_shot: Optional[List[Dict[str, Any]]],
-    ) -> Dict[str, Any]:
+    ) -> Optional[Dict[str, Any]]:
+        """回傳 LLM 抽到的欄位;呼叫失敗(降級為規則結果)時回 None。"""
         provider = self._provider or self._default_provider()
         labels = "、".join(f"{k}={self.FIELD_LABELS.get(k, k)}" for k in needs)
         prompt = (
@@ -194,14 +202,20 @@ class RegexFieldExtractor:
                 prompt, image_data=image_data, few_shot=few_shot
             )
             return self._parse_json(response)
-        except Exception as e:  # pragma: no cover - LLM 失敗降級
+        except Exception as e:  # LLM 失敗降級
             logger.warning(f"{self.DOC_LABEL} LLM 欄位抽取失敗,降級為規則結果: {e}")
-            return {}
+            return None
 
-    @staticmethod
-    def _default_provider():
+    def _default_provider(self):
+        """未注入 provider 時依分流表建立;不分流的類型(謄本)維持全域 LLM_PROVIDER。"""
         from app.lib.llm_service.providers import create_provider
-        return create_provider()
+
+        if self.ROUTING_DOCUMENT_TYPE is None:
+            return create_provider()
+
+        from app.lib.llm_service.routing import provider_name_for
+
+        return create_provider(provider_name_for(self.ROUTING_DOCUMENT_TYPE, None))
 
     @staticmethod
     def _parse_json(response: str) -> Dict[str, Any]:

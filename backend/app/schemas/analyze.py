@@ -27,6 +27,22 @@ class LlmPostprocessedOutput(BaseModel):
     used: bool
 
 
+class LlmCallRecord(BaseModel):
+    """單次 LLM 呼叫紀錄(bedrock-qwen-documind D-6)。
+
+    一頁可能有多筆:校正一筆、抽取一筆;Bedrock 的 flex 失敗改送 default 時,
+    失敗的那次與重送的那次各記一筆。
+    """
+    stage: str                                     # correction | extraction | photo_understanding
+    provider: str                                  # openai | bedrock | anthropic | local_qwen
+    model: Optional[str] = None
+    requested_service_tier: Optional[str] = None   # 送出時要求的等級(只有 Bedrock 會帶:flex / default)
+    service_tier: Optional[str] = None             # API 回應實際標示的等級;失敗時為 None
+    ok: bool
+    # 只放類別(timeout、rate_limited、unavailable、http_403…),不放供應商的原始訊息
+    error: Optional[str] = None
+
+
 class OcrPageResult(BaseModel):
     """單頁 OCR 處理結果"""
     model_config = {"extra": "ignore"}
@@ -46,6 +62,9 @@ class OcrPageResult(BaseModel):
     # 欄位層共識(需求 4;新增欄位皆為選填,既有欄位語意不變)
     field_confidences: Dict[str, float] = {}               # 逐欄位信心度
     consensus: Optional[Dict[str, Any]] = None             # 共識明細(未啟用時為 None)
+    # 這一頁的每次 LLM 呼叫(選填;analyze 端點每頁都會帶,沒有呼叫時是空陣列)。
+    # 不宣告在這裡就會被 extra: "ignore" 丟掉,呼叫端永遠看不到。
+    llm_calls: Optional[List[LlmCallRecord]] = None
 
 
 class ProcessingStats(BaseModel):

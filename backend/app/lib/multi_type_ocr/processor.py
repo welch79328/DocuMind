@@ -16,6 +16,12 @@ from PIL import Image
 import io
 import base64
 
+from ..llm_service.call_log import (
+    STAGE_CORRECTION,
+    STAGE_EXTRACTION,
+    STAGE_PHOTO_UNDERSTANDING,
+    llm_stage,
+)
 from ..ocr_enhanced.types import EngineResult
 from .field_consensus import FieldConsensusResolver, field_candidate_from_extraction
 from .types import PageResult
@@ -459,9 +465,11 @@ class OcrDocumentProcessor(DocumentProcessor):
 
         # 步驟 4:後處理(image_data 供 LLM,依 enable_llm 決定)
         image_data_for_llm = image_data if enable_llm else None
-        postprocessed_text, postprocess_stats = await self.postprocess(
-            raw_text, ocr_confidence, image_data_for_llm
-        )
+        # llm_stage 只標出 llm_calls 的階段名稱,不影響處理
+        with llm_stage(STAGE_CORRECTION):
+            postprocessed_text, postprocess_stats = await self.postprocess(
+                raw_text, ocr_confidence, image_data_for_llm
+            )
         rule_postprocessed_result = {"text": postprocessed_text, "stats": postprocess_stats}
 
         llm_used = postprocess_stats.get("llm_used", False)
@@ -477,12 +485,13 @@ class OcrDocumentProcessor(DocumentProcessor):
             }
 
         # 步驟 5:結構化欄位提取
-        structured_data = await self.extract_fields(
-            postprocessed_text,
-            image_data=(image_data if enable_llm else None),
-            enable_llm=enable_llm,
-            few_shot=few_shot,
-        )
+        with llm_stage(STAGE_EXTRACTION):
+            structured_data = await self.extract_fields(
+                postprocessed_text,
+                image_data=(image_data if enable_llm else None),
+                enable_llm=enable_llm,
+                few_shot=few_shot,
+            )
 
         # 步驟 5b:共識信心度覆蓋(只取較低者,絕不放寬攔截)
         if consensus is not None:
@@ -568,7 +577,8 @@ class ImageUnderstandingProcessor(DocumentProcessor):
         enable_llm: bool = True,
         few_shot: Optional[List[Dict[str, Any]]] = None,
     ) -> PageResult:
-        result = await self.understand(image_data or "", few_shot=few_shot)
+        with llm_stage(STAGE_PHOTO_UNDERSTANDING):
+            result = await self.understand(image_data or "", few_shot=few_shot)
 
         field_confidences: Dict[str, float] = {}
         if isinstance(result, dict):

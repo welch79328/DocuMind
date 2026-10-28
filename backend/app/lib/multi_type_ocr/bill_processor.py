@@ -39,8 +39,17 @@ class BillProcessor(OcrDocumentProcessor):
             fusion_method=settings.OCR_FUSION_METHOD,
             paddleocr_lang=settings.OCR_PADDLEOCR_LANG,
         )
-        self.llm_provider = "openai"
         self.llm_strategy = "auto"
+
+    @property
+    def llm_provider(self) -> str:
+        """OCR 文字校正的供應商:分流表有指定 bill 就用表的,否則維持既有的 openai。
+
+        每次讀取都看當下設定(不在建構時凍結),R6 切回只要改 `.env` 重建容器。
+        """
+        from app.lib.llm_service.routing import provider_name_for
+
+        return provider_name_for("bill", "openai")
 
     async def preprocess(self, image: Image.Image) -> Image.Image:
         processed_array, _metadata = await self.preprocessor.preprocess(image)

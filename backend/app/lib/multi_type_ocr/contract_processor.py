@@ -82,13 +82,20 @@ class ContractProcessor(OcrDocumentProcessor):
         )
 
         # 後處理器設定（LLM 由 process() 的 enable_llm 參數動態控制）
-        self.llm_provider = "openai"
+        # 校正供應商見 llm_provider 屬性(依分流表)
         self.llm_strategy = "auto"
 
         # 初始化欄位提取器（Phase 2）
         self.field_extractor = ContractFieldExtractor()
 
         logger.info("ContractProcessor 初始化完成")
+
+    @property
+    def llm_provider(self) -> str:
+        """OCR 文字校正的供應商:分流表有指定 contract 就用表的,否則維持既有的 openai。"""
+        from app.lib.llm_service.routing import provider_name_for
+
+        return provider_name_for("contract", "openai")
 
     async def preprocess(self, image: Image.Image) -> Image.Image:
         """
@@ -250,8 +257,8 @@ class ContractProcessor(OcrDocumentProcessor):
         使用 ContractFieldExtractor 從合約文字中提取結構化欄位。
         包含合約編號、簽訂日期、雙方資訊、金額等關鍵欄位。
 
-        當啟用 LLM 且正則提取信心度低於 0.7 時，會自動調用 GPT-4o Vision
-        進行視覺輔助提取，提升準確率。
+        當啟用 LLM 且正則提取信心度低於 0.7 時，會自動調用視覺模型
+        進行視覺輔助提取（供應商依分流表，預設 openai gpt-4o），提升準確率。
 
         Args:
             text: OCR 辨識的合約文字

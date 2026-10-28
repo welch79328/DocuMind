@@ -15,6 +15,7 @@ from app.lib.ai_service import answer_question
 from app.lib.pdf_text_layer import has_text_layer, extract_text_layer_pages
 from app.lib.multi_type_ocr.transcript_full_parser import parse_transcript_pages
 from app.lib.multi_type_ocr.transcript_records import build_transcript_records
+from app.lib.llm_service.call_log import STAGE_EXTRACTION, collect_llm_calls, llm_stage
 
 logger = logging.getLogger(__name__)
 
@@ -424,23 +425,29 @@ class AnalyzeService:
 
         async def one(page: dict) -> dict:
             async with page_gate:
-                try:
+                with collect_llm_calls() as llm_calls:
+                    page["llm_calls"] = llm_calls
+                    await _extract(page)
+                return page
+
+        async def _extract(page: dict) -> None:
+            try:
+                with llm_stage(STAGE_EXTRACTION):
                     structured = await processor.extract_fields(
                         page["ocr_raw"]["text"],
                         image_data=None,          # 文字層無需影像:文字已是精確值
                         enable_llm=enable_llm,
                         few_shot=few_shot,
                     )
-                    page["structured_data"] = structured
-                    if isinstance(structured, dict):
-                        fc = structured.get("field_confidences")
-                        if isinstance(fc, dict):
-                            page["field_confidences"] = fc
-                except Exception as e:
-                    logger.error("文字層欄位抽取失敗(第 %s 頁): %s",
-                                 page.get("page_number"), e)
-                    # 不中斷:文字仍然可用,欄位留 None 由複核處理
-                return page
+                page["structured_data"] = structured
+                if isinstance(structured, dict):
+                    fc = structured.get("field_confidences")
+                    if isinstance(fc, dict):
+                        page["field_confidences"] = fc
+            except Exception as e:
+                logger.error("文字層欄位抽取失敗(第 %s 頁): %s",
+                             page.get("page_number"), e)
+                # 不中斷:文字仍然可用,欄位留 None 由複核處理
 
         return list(await asyncio.gather(*(one(p) for p in pages)))
 
@@ -535,7 +542,12 @@ class AnalyzeService:
 
         async def _process_page(page_num: int) -> dict:
             async with page_gate:
-                return await _run_one_page(page_num)
+                # 每頁一個收集範圍:這一頁的每次 LLM 呼叫(含重送、含失敗)都記進
+                # llm_calls(plan D-6)。頁面處理失敗時同樣附上,看得出失敗前呼叫過什麼。
+                with collect_llm_calls() as llm_calls:
+                    page_result = await _run_one_page(page_num)
+                page_result["llm_calls"] = llm_calls
+                return page_result
 
         async def _run_one_page(page_num: int) -> dict:
             try:

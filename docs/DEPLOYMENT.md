@@ -1,7 +1,7 @@
 # DocuMind 部署指南與建議規格
 
 > 對象:DocuMind AI 文件智能處理系統(FastAPI + Vue3 + PostgreSQL + OCR/LLM)
-> 最後更新:2026-08-24(補入 §0.5 現行部署實況)
+> 最後更新:2026-10-28(§3 補入依文件類型分流)
 
 ---
 
@@ -25,7 +25,8 @@
 | 部署位置 | AWS 東京區(`54.248.x.x`) | — |
 | 機型 | **t3.medium 級:2 vCPU / 3.7 GB 可用** | 機上 `nproc` / `free`;**機型名為推定,未經 Console 確認** |
 | 月費 | **約 $33–35**(推算) | §3.1 表 t3.medium `$30`(us-east-1)× 東京 +10–15% |
-| 走哪個選項 | **選項 B — 雲端 OpenAI** | `backend/app/config.py:40` `LLM_PROVIDER="openai"`,`.env` 未覆寫 |
+| 走哪個選項 | **選項 B — 雲端 OpenAI** | `backend/app/config.py` `LLM_PROVIDER="openai"`,`.env` 未覆寫 |
+| 文件類型分流 | 帳單、修繕照片、點交照片、合約依分流表決定供應商;**預設空表 = 四類都走 OpenAI** | `backend/app/config.py` `LLM_PROVIDER_BY_DOCUMENT_TYPE`,由 `.env` 決定(§3) |
 | LLM 模型 | **`gpt-5.6-terra`**(主)/ `gpt-5.6-luna`(分類、摘要、問答) | `.env`,2026-09-03 更新 |
 | OCR 引擎(`ocr_enhanced` 路徑) | **`["paddleocr"]`** 單引擎 | `.env` 的 `OCR_ENGINES`,2026-09-03 定案 |
 | OCR 引擎(`document_service` 路徑) | **`pytesseract` 單獨** | 兩台 `.env` 的 `OCR_SERVICE` |
@@ -236,6 +237,31 @@ c 系列非 burstable)等**系統穩定後**再討論。
 
 > **選型建議**:demo/低量 → B;隱私硬需求 → C(或 D 用完即關);量穩定大 → C 地端 GPU 機;**只是要評估 VLM 效益 → E**。LLM 層可插拔,先 B 起步,硬體到位再無痛切 C。
 
+### 依文件類型分流(帳單、修繕照片、點交照片、合約)
+
+上面的 `LLM_PROVIDER` 是全域預設。帳單 `bill`、修繕照片 `repair_photo`、點交照片 `handover_photo`、
+合約 `contract` 另有一張「文件類型 → 供應商」分流表,這四類的欄位抽取、照片理解與 OCR 文字校正
+依表決定送哪個供應商:
+
+- 設定:`.env` 的 `LLM_PROVIDER_BY_DOCUMENT_TYPE`,JSON 物件,例如 `{"bill":"bedrock","contract":"bedrock"}`。
+  可用的供應商名稱:`openai`、`bedrock`、`anthropic`、`local_qwen`。
+- **預設空表 `{}` = 四類都走 OpenAI**(維持原本的路徑:帳單抽取與照片理解照 `LLM_PROVIDER`,
+  帳單與合約的校正、合約抽取固定 OpenAI;合約抽取的模型固定 `gpt-4o`)。表裡沒列的類別同樣照舊。
+- 只改單一類別:改那一鍵(或刪掉)後重建 backend 容器(`docker compose up -d --force-recreate backend`),
+  其他類別不受影響。
+- 未知的文件類型或供應商名稱會讓 backend 啟動失敗(打錯字不會被默默忽略);空字串也不行,不用時寫 `{}`。
+- **謄本 `transcript` 不在分流範圍**:抽取與校正一律照舊,寫進表會在啟動時報錯。
+  `question` 問答、`/chat`、`/documents` 也不讀這張表。
+
+`bedrock` 是 AWS Bedrock 東京區的 OpenAI 相容端點(`bedrock-runtime.ap-northeast-1`),預設模型 Qwen3 VL 235B:
+- 金鑰 `BEDROCK_API_KEY`(只從設定讀取),模型 `BEDROCK_MODEL`(預設 `qwen.qwen3-vl-235b-a22b`)。
+  區域寫死東京;model ID 帶 `jp.`／`global.`(跨區推論設定檔)會直接報錯。
+- 每次呼叫先送 `service_tier: "flex"`;遇 429、503 或逾時(單次 90 秒),同模型同區改 `"default"` 重送一次;
+  仍失敗就走既有降級(規則結果或低信心進複核),**不會改送 OpenAI**。
+- 送 Bedrock 的影像與送 OpenAI 的相同;只有超過單張 3.75MB 上限時,才為 Bedrock 請求以同尺寸 JPEG 重新編碼。
+- 每次呼叫實際送到哪、服務等級、成功或錯誤類別,寫在回應每頁的 `llm_calls`(見 `docs/api/INTEGRATION.md` §2.4)。
+- `LLM_CLOUD_ENABLED=false` 時 Bedrock 與 OpenAI 一樣被擋。
+
 ---
 
 ## 3.1 GPU vs CPU 實際差異對照 ⭐
@@ -385,6 +411,8 @@ LLM_PROVIDER=openai           # openai / local_qwen
 LLM_CLOUD_ENABLED=true        # 隱私硬需求設 false(禁雲端)
 LOCAL_QWEN_ENDPOINT=          # LLM_PROVIDER=local_qwen 時填 vLLM 端點
 OPENAI_API_KEY=
+LLM_PROVIDER_BY_DOCUMENT_TYPE={}   # 依文件類型分流(§3);{} = 四類都走 OpenAI
+BEDROCK_API_KEY=              # 分流到 bedrock 時才需要
 
 # fine-tune 決策門檻(僅決策,不訓練)
 FINETUNE_MIN_SAMPLES=200
