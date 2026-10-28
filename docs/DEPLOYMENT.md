@@ -1,7 +1,7 @@
 # DocuMind 部署指南與建議規格
 
 > 對象:DocuMind AI 文件智能處理系統(FastAPI + Vue3 + PostgreSQL + OCR/LLM)
-> 最後更新:2026-10-28(§3 補入依文件類型分流)
+> 最後更新:2026-10-28(§0.5 線上四類改走 Bedrock;§3 依文件類型分流)
 
 ---
 
@@ -26,7 +26,7 @@
 | 機型 | **t3.medium 級:2 vCPU / 3.7 GB 可用** | 機上 `nproc` / `free`;**機型名為推定,未經 Console 確認** |
 | 月費 | **約 $33–35**(推算) | §3.1 表 t3.medium `$30`(us-east-1)× 東京 +10–15% |
 | 走哪個選項 | **選項 B — 雲端 OpenAI** | `backend/app/config.py` `LLM_PROVIDER="openai"`,`.env` 未覆寫 |
-| 文件類型分流 | 帳單、修繕照片、點交照片、合約依分流表決定供應商;**預設空表 = 四類都走 OpenAI** | `backend/app/config.py` `LLM_PROVIDER_BY_DOCUMENT_TYPE`,由 `.env` 決定(§3) |
+| 文件類型分流 | **線上四類(帳單、修繕照片、點交照片、合約)都設為 `bedrock`**(Qwen3 VL 235B、flex,2026-10-28 起);謄本仍走 OpenAI。程式預設空表 = 四類都走 OpenAI | 線上 `.env` 的 `LLM_PROVIDER_BY_DOCUMENT_TYPE`;`backend/app/config.py`(§3) |
 | LLM 模型 | **`gpt-5.6-terra`**(主)/ `gpt-5.6-luna`(分類、摘要、問答) | `.env`,2026-09-03 更新 |
 | OCR 引擎(`ocr_enhanced` 路徑) | **`["paddleocr"]`** 單引擎 | `.env` 的 `OCR_ENGINES`,2026-09-03 定案 |
 | OCR 引擎(`document_service` 路徑) | **`pytesseract` 單獨** | 兩台 `.env` 的 `OCR_SERVICE` |
