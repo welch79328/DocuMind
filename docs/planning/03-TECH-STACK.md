@@ -9,8 +9,8 @@
 |---|---|
 | 前端 | Vue 3 + Vite、TypeScript、Tailwind CSS、Vue Router、Pinia（見 [`frontend/01-FRONTEND-DESIGN.md`](../frontend/01-FRONTEND-DESIGN.md)） |
 | 後端 | Python + FastAPI、SQLAlchemy + Alembic、PostgreSQL |
-| OCR | PaddleOCR（ONNX Runtime 執行器）+ Tesseract，本地執行；含文字層的 PDF 不經 OCR；收據、帳單、合約的影像與掃描 PDF 在設定 `DIRECT_READ_DOCUMENT_TYPES` 列入時改由視覺模型直讀、也不經 OCR（§3，預設不列） |
-| LLM | 謄本：OpenAI（§2）；帳單、修繕照片、點交照片、合約：線上走 Bedrock 東京 Qwen3 VL 235B（flex），由分流表設定，程式預設 OpenAI |
+| OCR | PaddleOCR（ONNX Runtime 執行器）+ Tesseract，本地執行；含文字層的 PDF 不經 OCR；收據、帳單、合約的影像與掃描 PDF 由視覺模型直讀、不經 OCR（線上已開啟；設定 `DIRECT_READ_DOCUMENT_TYPES`，程式預設不列，§3） |
+| LLM | 謄本：OpenAI（§2）；帳單、修繕照片、點交照片、合約、收據：線上走 Bedrock 東京 Qwen3 VL 235B（flex），由分流表設定，程式預設 OpenAI |
 | 檔案儲存 | 預設本機（`STORAGE_TYPE=local`）；S3 相容儲存已實作，線上設定有誤、上傳目前全數失敗（見 [`transcript-status.md`](./transcript-status.md) §5 `file_url`） |
 | 部署 | AWS EC2 單機，Docker Compose 四個容器：`frontend`、`backend`、`postgres`、`nginx` |
 
@@ -27,7 +27,7 @@
 抽取要讀圖並認出地號建號，Terra 領先 4 分。設定鍵為 `OPENAI_MODEL` 與 `OPENAI_MODEL_CORRECTION`（見 `app/config.py`）。
 
 **依文件類型分流**：帳單、修繕照片、點交照片、合約的欄位抽取、照片理解與校正，
-依分流表 `LLM_PROVIDER_BY_DOCUMENT_TYPE` 決定供應商，由 `.env` 設定；線上四類都設為 `bedrock`
+依分流表 `LLM_PROVIDER_BY_DOCUMENT_TYPE` 決定供應商，由 `.env` 設定；線上這四類與收據都設為 `bedrock`
 （切換紀錄 [`docs/testing/bedrock-qwen-switch-20261028.md`](../testing/bedrock-qwen-switch-20261028.md)）。
 程式預設空表 = 四類走 OpenAI（帳單抽取與照片照 `OPENAI_MODEL`，合約抽取固定 `gpt-4o`）。
 謄本不在分流範圍。設定方式見 [`docs/DEPLOYMENT.md`](../DEPLOYMENT.md) §3「依文件類型分流」。
