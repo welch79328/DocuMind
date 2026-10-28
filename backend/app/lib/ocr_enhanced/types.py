@@ -189,7 +189,7 @@ class OCREngine(Protocol):
 # ============================================================================
 
 # 文件類型字面量
-DocumentType = Literal["transcript", "lease", "id_card", "unknown", "auto"]
+DocumentType = Literal["transcript", "lease", "id_card", "receipt", "unknown", "auto"]
 
 # 融合方法字面量
 # cross_check:欄位層交叉比對(共識信心度);於欄位層執行,不經 _fuse_results

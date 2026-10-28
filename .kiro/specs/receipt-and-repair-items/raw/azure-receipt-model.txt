@@ -1,0 +1,200 @@
+URL: https://learn.microsoft.com/en-us/azure/ai-services/document-intelligence/prebuilt/receipt?view=doc-intel-4.0.0
+FINAL: https://learn.microsoft.com/en-us/azure/ai-services/document-intelligence/prebuilt/receipt?view=doc-intel-4.0.0
+TITLE: Receipt data extraction - Document Intelligence - Foundry Tools | Microsoft Learn
+LEN: 6631
+
+Skip to main content
+Skip to Ask Learn chat experience
+Microsoft Ignite
+
+November 17–20, 2026
+
+Register now
+Dismiss alert
+Learn
+Documentation
+Training & Labs
+Q&A
+Topics
+Sign in
+Azure
+Products
+Architecture
+Migration
+Develop
+Learn Azure
+Troubleshooting
+Resources
+Open Microsoft Foundry Portal
+Get started with Azure
+Version
+v4.0: 2024-11-30 (GA)
+Search
+Azure Document Intelligence in Foundry Tools Documentation
+Overview
+What is Azure Document Intelligence in Foundry Tools?
+What's new
+Which model should I choose?
+Create a Document Intelligence resource
+Document Intelligence Studio
+Language support
+Region support
+Pricing
+Service limits and billing
+Document Intelligence client libraries
+Changelog
+Frequently asked questions (FAQ)
+Prebuilt models
+Model overview
+Bank check (US)
+Bank statement (US)
+Business card
+Contract
+Credit card
+General document
+Health insurance card (US)
+ID document
+Invoice
+Layout
+Marriage certificate (US)
+Mortgage documents (US)
+Pay stub
+Read
+Receipt
+Tax documents (US)
+Custom models
+Add-on features
+Concepts
+Quickstarts
+How-to guides
+Migration guides
+Custom models
+Back up and recover models
+Configure secure communications
+Containers
+Code samples
+Responsible AI
+Tutorials
+Reference
+Resources
+Download PDF
+LearnAzureMicrosoft FoundryDocument Intelligence
+Ask Learn
+Document Intelligence receipt model
+Summarize this article for me
+
+This content applies to: 🟩 v4.0 (GA) | Previous versions: 🟦 v3.1 (GA) 🟥 v3.0 (retiring) 🟥 v2.1 (retiring)
+
+The Document Intelligence receipt model combines powerful Optical Character Recognition (OCR) capabilities with deep learning models to analyze and extract key information from sales receipts. Receipts can be of various formats and quality including printed and handwritten receipts. The API extracts key information such as merchant name, merchant phone number, transaction date, tax, and transaction total and returns structured JSON data. Receipt model v4.0 (GA) supports other fields including ReceiptType, TaxDetails.NetAmount, TaxDetails.Description, TaxDetails.Rate and CountryRegion along with VAT table extraction on general hotel receipts.
+
+Receipt data extraction
+
+Receipt digitization encompasses the transformation of various types of receipts, including scanned, photographed, and printed copies, into a digital format for streamlined downstream processing. Examples include expense management, consumer behavior analysis, tax automation, etc. Using Document Intelligence with OCR (Optical Character Recognition) technology can extract and interpret data from these diverse receipt formats. Document Intelligence processing simplifies the conversion process but also significantly reduces the time and effort required, thus facilitating efficient data management, and retrieval.
+
+Sample receipt processed with Document Intelligence Studio:
+
+Development options
+
+Document Intelligence v4.0: 2024-11-30 (GA) supports the following tools, applications, and libraries:
+
+Expand table
+Feature	Resources	Model ID
+Receipt model	• Document Intelligence Studio
+• REST API
+• C# SDK
+• Python SDK
+• Java SDK
+• JavaScript SDK	prebuilt-receipt
+Input requirements
+
+The following file formats are supported.
+
+Expand table
+Model	PDF	Image:
+JPEG/JPG, PNG, BMP, TIFF, HEIF	Office:
+Word (DOCX), Excel (XLSX), PowerPoint (PPTX), HTML
+Read	✔	✔	✔
+Layout	✔	✔	✔
+General document	✔	✔	
+Prebuilt	✔	✔	
+Custom extraction	✔	✔	
+Custom classification	✔	✔	✔
+Photos and scans: For best results, provide one clear photo or high-quality scan per document.
+PDFs and TIFFs: For PDFs and TIFFs, up to 2,000 pages can be processed. (With a free-tier subscription, only the first two pages are processed.)
+File size: The file size for analyzing documents is 500 MB for the paid (S0) tier and 4 MB for the free (F0) tier.
+Image dimensions: The dimensions must be between 50 pixels x 50 pixels and 10,000 pixels x 10,000 pixels.
+Password locks: If your PDFs are password-locked, you must remove the lock before submission.
+Text height: The minimum height of the text to be extracted is 12 pixels for a 1024 x 768-pixel image. This dimension corresponds to about 8-point text at 150 dots per inch.
+Custom model training: The maximum number of pages for training data is 500 for the custom template model and 50,000 for the custom neural model.
+Custom extraction model training: The total size of training data is 50 MB for template model and 1 GB for the neural model.
+Custom classification model training: The total size of training data is 1 GB with a maximum of 10,000 pages. For 2024-11-30 (GA), the total size of training data is 2 GB with a maximum of 10,000 pages.
+Office file types (DOCX, XLSX, PPTX): The maximum string length limit is 8 million characters.
+Receipt model data extraction
+
+See how Document Intelligence extracts data, including time and date of transactions, merchant information, and amount totals from receipts. You need the following resources:
+
+An Azure subscription—you can create one for free.
+
+A Document Intelligence instance in the Azure portal. You can use the free pricing tier (F0) to try the service. After your resource deploys, select Go to resource to get your key and endpoint.
+
+ Note
+
+Document Intelligence Studio is available with v3.1 and v3.0 APIs and later versions.
+
+On the Document Intelligence Studio home page, select Receipts.
+
+You can analyze the sample receipt or upload your own files.
+
+Select the Run analysis button and, if necessary, configure the Analyze options:
+
+Try Document Intelligence Studio.
+
+Supported languages and locales
+
+For a complete list of supported languages, see our prebuilt models language support page.
+
+Field extraction
+
+For supported document extraction fields, refer to the receipt model schema page in our GitHub sample repository
+
+Next steps
+
+Try processing your own forms and documents with the Document Intelligence Studio.
+
+Complete a Document Intelligence quickstart and get started creating a document processing app in the development language of your choice.
+
+Find more samples on GitHub.
+Note: The author created this article with assistance from AI. Learn more
+Additional resources
+
+Training
+
+Module
+
+Process receipts with AI Builder - Training
+
+Learn the basics of receipt processing in AI Builder and how it can benefit your organization.
+
+Last updated on 07/11/2026
+In this article
+Receipt data extraction
+Development options
+Input requirements
+Supported languages and locales
+Field extraction
+Next steps
+
+Was this page helpful?
+
+English (United States)
+Your Privacy Choices
+Theme
+AI Disclaimer
+Previous Versions
+Blog
+Contribute
+Privacy
+Consumer Health Privacy
+Terms of Use
+Trademarks
+© Microsoft 2026

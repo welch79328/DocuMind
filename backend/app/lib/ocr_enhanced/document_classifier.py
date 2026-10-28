@@ -22,7 +22,7 @@ class DocumentClassifier:
     """
     文件類型分類器
 
-    使用關鍵字檢測判斷文件類型（transcript/lease/id_card/unknown）。
+    使用關鍵字檢測判斷文件類型（transcript/lease/receipt/id_card/unknown）。
     """
 
     def __init__(self):
@@ -37,6 +37,11 @@ class DocumentClassifier:
         # 租約關鍵字
         self.lease_keywords = [
             "租賃契約", "租約", "承租人", "出租人", "租金"
+        ]
+
+        # 收據/發票關鍵字(規則式:依收據本身的性質,不看金額、商家)
+        self.receipt_keywords = [
+            "統一發票", "電子發票", "發票號碼", "收據", "證明聯",
         ]
 
         # 身分證關鍵字
@@ -161,7 +166,7 @@ class DocumentClassifier:
             image: PIL Image 物件
 
         Returns:
-            文件類型 (transcript/lease/id_card/unknown)
+            文件類型 (transcript/lease/receipt/id_card/unknown)
 
         Raises:
             TypeError: image 不是 PIL Image 物件
@@ -185,6 +190,7 @@ class DocumentClassifier:
         # 匹配各類型關鍵字
         transcript_matches = self._match_keywords(text, self.transcript_keywords)
         lease_matches = self._match_keywords(text, self.lease_keywords)
+        receipt_matches = self._match_keywords(text, self.receipt_keywords)
         id_card_matches = self._match_keywords(text, self.id_card_keywords)
 
         self.logger.debug(
@@ -193,7 +199,9 @@ class DocumentClassifier:
         )
 
         # 選擇匹配數最多的類型
-        max_matches = max(transcript_matches, lease_matches, id_card_matches)
+        max_matches = max(
+            transcript_matches, lease_matches, receipt_matches, id_card_matches
+        )
 
         if max_matches == 0:
             return "unknown"
@@ -202,6 +210,10 @@ class DocumentClassifier:
         if transcript_matches == max_matches:
             self.logger.info("分類結果: transcript")
             return "transcript"
+        elif receipt_matches == max_matches:
+            # 租金收據同時命中「收據」與「租金」:平手時偏收據(收據字樣是這份文件的性質)
+            self.logger.info("分類結果: receipt")
+            return "receipt"
         elif lease_matches == max_matches:
             self.logger.info("分類結果: lease")
             return "lease"

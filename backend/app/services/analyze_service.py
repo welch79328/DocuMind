@@ -16,6 +16,11 @@ from app.lib.pdf_text_layer import has_text_layer, extract_text_layer_pages
 from app.lib.multi_type_ocr.transcript_full_parser import parse_transcript_pages
 from app.lib.multi_type_ocr.transcript_records import build_transcript_records
 from app.lib.llm_service.call_log import STAGE_EXTRACTION, collect_llm_calls, llm_stage
+from app.lib.multi_type_ocr.direct_read_processor import (
+    DIRECT_READ_LONG_EDGE,
+    create_direct_read_processor,
+    is_direct_read_enabled,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +29,7 @@ S3_PATH_MAP = {
     "transcript": "uploads/ocr_transcripts",
     "contract": "uploads/ocr_contracts",
     "handover_photo": "uploads/ocr_handover_photos",
+    "receipt": "uploads/ocr_receipts",
 }
 
 
@@ -58,6 +64,14 @@ def _render_scale(rect) -> float:
 
     # 面積與倍率平方成正比,故以平方根等比例縮
     return base * (cap / pixels_at_base) ** 0.5
+
+def _direct_read_scale(rect) -> float:
+    """直讀的 PDF 單頁渲染倍率:讓長邊剛好 2000 像素(業主 2026-10-28「長邊 2000」)。"""
+    long_edge_pt = max(float(rect.width), float(rect.height))
+    if long_edge_pt <= 0:
+        return 1.0
+    return DIRECT_READ_LONG_EDGE / long_edge_pt
+
 
 def _merge_page_structured_data(pages: List[dict]) -> Optional[Dict[str, Any]]:
     """跨頁彙整結構化欄位，只填補缺值，不用後面頁面覆蓋已抽到的值。
@@ -494,27 +508,36 @@ class AnalyzeService:
         """
         is_pdf = filename.lower().endswith(".pdf")
 
-        # PDF 含文字層 → 直接抽取文字,略過 OCR。
-        #
-        # 2026-09-03 實測(4 頁電子謄本,線上):
-        #   走 OCR      85s,字元錯誤率 14.5%
-        #   走文字層    <1s,**逐字精確**(文字層就是產生該 PDF 的原始字串)
-        # 快 85 倍且零錯誤。台灣的網路申領電子謄本一律含文字層。
-        #
-        # 原本這條路只給 contract。謄本同樣受益,而且受益更大——
-        # 謄本的 OCR 錯誤率(14.5%)高於它在合約上的表現。
-        # 純掃描件不含文字層,has_text_layer 會回 False 自動走 OCR,
-        # 判定門檻 20 字避免掃描件夾帶的少量浮水印文字造成誤判。
-        if is_pdf and has_text_layer(file_contents):
-            logger.info("PDF 含文字層,直接抽取文字(略過 OCR):%s", document_type)
-            pages = extract_text_layer_pages(file_contents)
-            # ⚠️ extract_text_layer_pages 只給文字,structured_data 是 None。
-            # 少了這一步,走文字層的文件會拿到完美的文字但**一個欄位都沒有**
-            # ——比走 OCR 還糟,因為使用者看得到字卻拿不到結構化結果。
-            pages = await self._extract_fields_for_text_layer(
-                pages, document_type, enable_llm, few_shot
-            )
-            return pages, len(pages)
+        # Qwen 直讀:列在 DIRECT_READ_DOCUMENT_TYPES 的類型,影像與沒有文字層的 PDF
+        # 不跑本機 OCR,整頁交視覺模型讀(見 direct_read_processor)。
+        # 有文字層的帳單、合約 PDF 維持下面的文字層路徑(R3);收據沒有舊流程,
+        # PDF 不論有沒有文字層都直讀。不看 enable_llm(D-9)。
+        direct_read = is_direct_read_enabled(document_type) and (
+            document_type == "receipt" or not (is_pdf and has_text_layer(file_contents))
+        )
+
+        if not direct_read:
+            # PDF 含文字層 → 直接抽取文字,略過 OCR。
+            #
+            # 2026-09-03 實測(4 頁電子謄本,線上):
+            #   走 OCR      85s,字元錯誤率 14.5%
+            #   走文字層    <1s,**逐字精確**(文字層就是產生該 PDF 的原始字串)
+            # 快 85 倍且零錯誤。台灣的網路申領電子謄本一律含文字層。
+            #
+            # 原本這條路只給 contract。謄本同樣受益,而且受益更大——
+            # 謄本的 OCR 錯誤率(14.5%)高於它在合約上的表現。
+            # 純掃描件不含文字層,has_text_layer 會回 False 自動走 OCR,
+            # 判定門檻 20 字避免掃描件夾帶的少量浮水印文字造成誤判。
+            if is_pdf and has_text_layer(file_contents):
+                logger.info("PDF 含文字層,直接抽取文字(略過 OCR):%s", document_type)
+                pages = extract_text_layer_pages(file_contents)
+                # ⚠️ extract_text_layer_pages 只給文字,structured_data 是 None。
+                # 少了這一步,走文字層的文件會拿到完美的文字但**一個欄位都沒有**
+                # ——比走 OCR 還糟,因為使用者看得到字卻拿不到結構化結果。
+                pages = await self._extract_fields_for_text_layer(
+                    pages, document_type, enable_llm, few_shot
+                )
+                return pages, len(pages)
 
         # 惰性匯入 PyMuPDF(僅 PDF 處理需要),避免未安裝環境匯入 app 失敗
         if is_pdf:
@@ -527,7 +550,11 @@ class AnalyzeService:
             total_pages = 1
             pages_to_process = [1]
 
-        processor = ProcessorFactory.get_processor(document_type)
+        processor = (
+            create_direct_read_processor(document_type)
+            if direct_read
+            else ProcessorFactory.get_processor(document_type)
+        )
 
         # 頁面併發,但 OCR 仍由 EngineManager 的閘門序列化。
         #
@@ -555,7 +582,9 @@ class AnalyzeService:
                 if is_pdf:
                     doc = fitz.open(stream=file_contents, filetype="pdf")
                     page = doc[page_num - 1]
-                    scale = _render_scale(page.rect)
+                    scale = (
+                        _direct_read_scale(page.rect) if direct_read else _render_scale(page.rect)
+                    )
                     mat = fitz.Matrix(scale, scale)
                     pix = page.get_pixmap(matrix=mat)
                     page_bytes = pix.tobytes("png")

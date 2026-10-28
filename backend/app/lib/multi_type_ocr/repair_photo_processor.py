@@ -1,7 +1,7 @@
 """
 修繕照片處理器(影像理解型)
 
-以 VLM(多模態)理解修繕現場照片,產出瑕疵分類標籤、繁中描述與信心度;
+以 VLM(多模態)理解修繕現場照片,產出瑕疵分類標籤、壞掉的物件、繁中描述與信心度;
 非傳統 OCR。模糊/無法辨識時回低信心(由 gating 導入人工複核)。
 支援 few-shot 注入;VLM 失敗時降級為空結果。
 """
@@ -33,6 +33,8 @@ class RepairPhotoProcessor(ImageUnderstandingProcessor):
         prompt = (
             "請辨識這張修繕/維修現場照片的瑕疵或問題,並以 JSON 回傳:\n"
             "- defect_labels: 瑕疵標籤陣列(如 漏水、壁癌、龜裂、設備損壞)\n"
+            "- damaged_items: 照片裡壞掉、損壞或有問題的物件名稱(字串陣列,"
+            "如 馬桶、紗窗、水龍頭;照照片實際內容寫,不必符合固定分類;沒有就回空陣列)\n"
             "- description: 繁體中文描述\n"
             "- confidence: 0 到 1 的信心度\n"
             "若影像模糊或無法辨識,confidence 請給低值。只回傳 JSON。"
@@ -44,13 +46,25 @@ class RepairPhotoProcessor(ImageUnderstandingProcessor):
             result = self._parse_json(response)
         except Exception as e:  # VLM 不可用/失敗 → 降級
             logger.warning(f"修繕照片 VLM 理解失敗,降級為空結果: {e}")
-            return {"defect_labels": [], "description": "", "confidence": 0.0}
+            return {
+                "defect_labels": [], "damaged_items": [], "description": "", "confidence": 0.0,
+            }
 
         return {
             "defect_labels": result.get("defect_labels") or [],
+            "damaged_items": self._string_list(result.get("damaged_items")),
             "description": result.get("description") or "",
             "confidence": self._safe_float(result.get("confidence")),
         }
+
+    @staticmethod
+    def _string_list(value: Any) -> List[str]:
+        """damaged_items 一律回字串陣列;模型回單一字串就包成一項,其他型別丟掉。"""
+        if isinstance(value, str):
+            value = [value]
+        if not isinstance(value, list):
+            return []
+        return [str(v).strip() for v in value if isinstance(v, (str, int, float)) and str(v).strip()]
 
     @staticmethod
     def _safe_float(value: Any) -> float:

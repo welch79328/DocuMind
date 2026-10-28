@@ -13,7 +13,13 @@ from typing import Dict, List, Optional
 # (業主裁定「不含謄本」,bedrock-qwen-documind R3),寫進表裡會在啟動時報錯,
 # 不會被默默忽略。
 # 值是 create_provider 認得的供應商名稱;test_llm_bedrock_routing 釘住兩邊一致。
-LLM_ROUTABLE_DOCUMENT_TYPES = frozenset({"bill", "repair_photo", "handover_photo", "contract"})
+LLM_ROUTABLE_DOCUMENT_TYPES = frozenset(
+    {"bill", "repair_photo", "handover_photo", "contract", "receipt"}
+)
+
+# 可以改走「Qwen 直讀」(不跑本機 OCR)的文件類型;設定 DIRECT_READ_DOCUMENT_TYPES 只能列這幾類。
+# 謄本不在其中(模擬掃描評估:本機 OCR+規則 97%,Qwen 只看圖 91%)。
+DIRECT_READ_ELIGIBLE_DOCUMENT_TYPES = frozenset({"receipt", "bill", "contract"})
 LLM_ROUTABLE_PROVIDERS = frozenset({"openai", "anthropic", "local_qwen", "bedrock"})
 
 
@@ -126,6 +132,13 @@ class Settings(BaseSettings):
     # 這張表**不改 LLM_PROVIDER 的意思**:LLM_PROVIDER 仍是沒有指定類別時的全域預設。
     # 謄本不在表裡,寫進表會在啟動時報錯(見 validate_llm_routing_table)。
     LLM_PROVIDER_BY_DOCUMENT_TYPE: Dict[str, str] = {}
+
+    # Qwen 直讀:列在這裡的類型(receipt、bill、contract)的影像與沒有文字層的 PDF,
+    # 不跑本機 OCR,整頁以長邊 2000 的 JPEG 直接交視覺模型讀欄位(供應商依上面的分流表)。
+    # 有文字層的帳單、合約 PDF 仍走文字層路徑;收據的 PDF 一律直讀。
+    # 預設空 = 帳單、合約照舊走 OCR 流程,收據不開放(回「不支援的文件類型」)。
+    # `.env` 以 JSON 設定,例如:DIRECT_READ_DOCUMENT_TYPES=["receipt","bill","contract"]
+    DIRECT_READ_DOCUMENT_TYPES: List[str] = []
 
     # Bedrock(東京 ap-northeast-1)OpenAI 相容端點的 bearer 金鑰。
     # 沒有預設值;只從設定讀取,不寫進程式、不印進 log(SecretStr 的 repr 會遮成 ****)。
@@ -291,6 +304,18 @@ class Settings(BaseSettings):
     @classmethod
     def _check_llm_routing_table(cls, value: Dict[str, str]) -> Dict[str, str]:
         return validate_llm_routing_table(value)
+
+    @field_validator("DIRECT_READ_DOCUMENT_TYPES", mode="after")
+    @classmethod
+    def _check_direct_read_types(cls, value: List[str]) -> List[str]:
+        normalized = [str(item).strip().lower() for item in value]
+        unknown = [t for t in normalized if t not in DIRECT_READ_ELIGIBLE_DOCUMENT_TYPES]
+        if unknown:
+            raise ValueError(
+                f"DIRECT_READ_DOCUMENT_TYPES 含不可直讀的文件類型 {unknown};"
+                f"只接受 {sorted(DIRECT_READ_ELIGIBLE_DOCUMENT_TYPES)}"
+            )
+        return normalized
 
     class Config:
         env_file = ".env"

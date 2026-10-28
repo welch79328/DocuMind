@@ -25,6 +25,7 @@ from typing import Any, Dict, Iterator, List, Optional
 STAGE_CORRECTION = "correction"                # OCR 文字校正
 STAGE_EXTRACTION = "extraction"                # 欄位抽取
 STAGE_PHOTO_UNDERSTANDING = "photo_understanding"  # 照片理解(修繕、點交)
+STAGE_DIRECT_READ = "direct_read"              # Qwen 直讀(收據、帳單、合約,不跑本機 OCR)
 
 # 允許出現在回應裡的錯誤類別
 ERROR_CATEGORIES = frozenset({

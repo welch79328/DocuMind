@@ -55,7 +55,8 @@ FROZEN_DOCUMENT_TYPES = {"transcript", "bill", "contract", "repair_photo"}
 # 這組守門測試防的是「路由被悄悄改掉」(型別被移除、改名、或偷偷多出來),
 # 不是禁止擴充。所以清單用 FROZEN | ADDED 比對:少一個或多一個沒登記的都會失敗。
 # 2026-09-09 handover_photo(點交照片,Monday #13005982690)
-ADDED_DOCUMENT_TYPES = {"handover_photo"}
+# 2026-10-28 receipt(收據,Qwen 直讀;計畫 receipt-and-repair-items D-2)
+ADDED_DOCUMENT_TYPES = {"handover_photo", "receipt"}
 
 ALL_DOCUMENT_TYPES = FROZEN_DOCUMENT_TYPES | ADDED_DOCUMENT_TYPES
 

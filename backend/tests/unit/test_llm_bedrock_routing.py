@@ -191,7 +191,7 @@ class TestA7_2_RoutingTable:
         {"bill": "bedrok"},
         {"bill": "gpt"},
         {"bil": "bedrock"},
-        {"receipt": "openai"},
+        {"transcript": "openai"},   # 謄本不在分流範圍(receipt 自直讀計畫起可分流)
     ])
     def test_unknown_names_raise_at_settings_load(self, table):
         with pytest.raises(ValueError):

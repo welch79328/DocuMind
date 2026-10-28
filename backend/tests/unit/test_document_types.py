@@ -22,10 +22,10 @@ from app.lib.document_types import (
 class TestDocumentTypeEnum:
     """權威列舉定義"""
 
-    def test_has_five_canonical_types(self):
+    def test_has_six_canonical_types(self):
         values = {t.value for t in DocumentType}
         assert values == {
-            "transcript", "bill", "contract", "repair_photo", "handover_photo",
+            "transcript", "bill", "contract", "repair_photo", "handover_photo", "receipt",
         }
 
     def test_enum_member_equals_string_value(self):

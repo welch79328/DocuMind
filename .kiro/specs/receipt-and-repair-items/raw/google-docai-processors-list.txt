@@ -1,0 +1,1054 @@
+URL: https://docs.cloud.google.com/document-ai/docs/processors-list
+FINAL: https://docs.cloud.google.com/document-ai/docs/processors-list
+TITLE: Processor list  |  Document AI  |  Google Cloud Documentation
+LEN: 36446
+
+Skip to main content
+Documentation
+/
+Console
+Sign in
+Document AI
+Start free
+Overview
+Guides
+Samples
+Reference
+Resources
+Discover
+Document AI overview
+Try Document AI
+Related Google Cloud products
+Get started
+Setup
+Advanced features
+API
+Create
+Guides
+Parsing
+Extraction
+Classification
+Develop
+Processor list
+Supported files
+Regional and multi-regional support
+Toolbox
+Client libraries
+Sample processor output
+Manage
+Security and CMEK
+Create dataset
+Label process
+Train and evaluate
+Up-train a pretrained processor
+Evaluate performance
+Base64 encoding
+On this page
+Digitize text
+Enterprise Document OCR (Optical Character Recognition)
+Extract entities from documents
+Custom Extractor
+Form Parser
+Layout Parser
+Explore pretrained processors
+Bank Statement Parser
+W2 Parser
+Identity Document Proofing Parser
+Pay Slip Parser
+US Driver License Parser
+Expense Parser
+Invoice Parser
+Classify documents
+Custom Classifier
+Custom Splitter
+Footnotes
+Home
+Documentation
+AI and ML
+Document AI
+Guides
+Was this helpful?
+Send feedback
+Processor list
+
+This page contains detailed information on all processors offered by Document AI. You can see a list of all processors by solution type.
+
+All Document AI processors adhere to the Data Processing and Security Terms.
+
+Refer to the Managing processor versions documentation for more details. Also, specific processor limits apply in addition to overall product quotas and limits.
+
+Digitize text
+Enterprise Document OCR (Optical Character Recognition)
+Description	
+
+Identify and extract text in different types of documents.
+
+This processor allows you to identify and extract text, including handwritten text, from documents in more than 200 languages. The processor also uses machine learning to perform a quality assessment of a document based on the readability of its content.
+
+
+Category	Digitize
+Functions	OCR, Quality Analysis
+Release stage	General availability
+Access status	Public lock_open
+Type in API	OCR_PROCESSOR
+Supported languages	
+Full list of languages
+
+Processor versions	
+Version ID	Release Channel	Release Maturity	Description
+pretrained-ocr-v1.2-2022-11-10	Stable	GA	Frozen model version of v1.0: Model files, configurations, and binaries of a version snapshot frozen in a container image for up to 18 months.
+pretrained-ocr-v2.0-2023-06-02	Stable	GA	Production-ready model specialized for document use cases. Includes access to all OCR add-ons.
+pretrained-ocr-v2.1-2024-08-07	Stable	GA	The main areas of improvement for v2.1 are: better printed text recognition, more precise checkbox detection and more accurate reading order.
+pretrained-ocr-v2.1.1-2025-01-31	Release candidate	Public Preview	v2.1.1 is similar to V2.1, and is available in all regions except: US, EU, and asia-southeast1.
+
+For more information, see Managing processor versions.
+
+
+Quotas and limits	
+Maximum pages (online/synchronous requests):	15
+Maximum pages (batch/offline/asynchronous requests):	500
+Maximum pages (imageless mode online/synchronous requests):	30
+Note: Specific processor limits are in addition to overall product quotas and limits.
+Note: To extend the maximum page limit for online and synchronous requests up to 30, be sure to enable imageless_mode in the ProcessRequest.
+
+Uptraining	
+Sample Input File	Open in new window.
+Sample Output	Open in new window.
+Supported regions	
+asia-south1
+asia-southeast1
+australia-southeast1
+eu
+europe-west2
+europe-west3
+northamerica-northeast1
+us
+Note: Consult Supported regions for a full list of processor version availability by region.
+
+More information	Enterprise Document OCR
+
+
+Extract entities from documents
+
+Refer to Sample datasets for sample labeled and unlabeled datasets to use for training.
+
+Custom Extractor
+Description	
+
+Extract fields from documents using generative AI or custom models; fine-tune models to accurately extract data from your documents.
+
+
+Category	Extract
+Functions	OCR, Entity Extraction
+Release stage	General availability
+Access status	Public lock_open
+Type in API	CUSTOM_EXTRACTION_PROCESSOR
+Notes	
+
+If using generative AI for extraction, then:
+
+Only the English language is officially supported.
+Region availability is in the US, EU, northamerica-northeast1 and asia-southeast1.
+
+
+Supported languages	
+Full list of languages
+
+Processor versions	
+Version ID	Release Channel	Release Maturity	Description
+pretrained-foundation-model-v1.5-2025-05-05	Stable	GA	Production-ready candidate powered by Gemini 2.5 Flash LLM. Recommended for those who want to experiment with newer models.
+pretrained-foundation-model-v1.5-pro-2025-06-20	Stable	GA	Production-ready model powered by the Gemini 2.5 Pro LLM. Supports a quota of up to 30 pages per minute for online process requests. This model has improved quality compared to v1.5, and may have a higher latency.
+pretrained-foundation-model-v1.5.1-2025-08-07	Release candidate	Public Preview	Public preview model powered by the Gemini 2.5 Flash LLM. This model has the same features as v1.5, and has improved adaptive few-shot learning.
+pretrained-foundation-model-v1.6-pro-2025-12-01	Release candidate	Public Preview	Preview model powered by the Gemini 3 Pro LLM.
+Note: This processor version uses the Vertex AI Gemini global endpoint and is not compliant with Data Residency (DMZ) standards. For example, requests in US and EU endpoints might route to anywhere globally.
+
+pretrained-foundation-model-v1.6-2026-01-13	Release candidate	Public Preview	Preview model powered by the Gemini 3 Flash LLM.
+Note: This processor version uses the Vertex AI Gemini global endpoint and is not compliant with Data Residency (DMZ) standards. For example, requests in US and EU endpoints might route to anywhere globally.
+
+pretrained-foundation-model-v3.1-lite-2026-07-15	Release candidate	Public Preview	Preview model powered by the Gemini 3.1 Lite LLM. Supports Multi-Region Endpoints (mREPs) in the US and EU.
+Note: CMEK is not fully supported in all regions and certain details are not encrypted. Support requires being allowlisted, contact your Google Cloud account team for more information.
+
+pretrained-foundation-model-v3.5-2026-05-26	Release candidate	Public Preview	Preview model powered by the Gemini 3.5 Flash LLM.
+
+For more information, see Managing processor versions.
+
+
+Quotas and limits	
+Maximum pages (online/synchronous requests):	15
+Maximum pages (batch/offline/asynchronous requests):	200
+Maximum pages (imageless mode online/synchronous requests):	30
+Note: Specific processor limits are in addition to overall product quotas and limits.
+Note: To extend the maximum page limit for online and synchronous requests up to 30, be sure to enable imageless_mode in the ProcessRequest.
+
+Normalized data types	
+
+You can find more information in the Enrichment & normalization, and Create dataset pages.
+
+Full list of normalized data types
+
+Uptraining	
+Sample Input File	Open in new window.
+Sample Output	Open in new window.
+Supported regions	
+asia-south1
+asia-southeast1
+australia-southeast1
+eu
+europe-west2
+europe-west3
+northamerica-northeast1
+us
+Note: Consult Supported regions for a full list of processor version availability by region.
+
+More information	Custom Extractor
+
+
+Form Parser
+Description	
+
+Extract general key-value pairs (entity and checkbox), tables, and generic entities from documents in addition to OCR text.
+
+This processor applies advanced machine learning technologies to extract key-value pairs, checkboxes, and tables from documents more than 200 languages. This processor also leverages deep learning models to extract 11 generic entities that are common in various document types.
+
+
+Category	Extract
+Functions	OCR, Form Parsing, Entity Extraction
+Release stage	General availability
+Access status	Public lock_open
+Type in API	FORM_PARSER_PROCESSOR
+Supported languages	
+Full list of languages
+
+Processor versions	
+Version ID	Release Channel	Release Maturity	Additional fields detected	Description
+pretrained-form-parser-v1.0-2020-09-23	Stable	GA	
+
+None
+
+	Legacy version. For best quality and full feature set, use the Form Parser v2.0.
+pretrained-form-parser-v2.0-2022-11-10	Stable	GA	
+Show fields
+	Recommended version. Supports generic entities and includes upgraded table, KVP, and checkbox model, as well as more than 200 languages.
+pretrained-form-parser-v2.1-2023-06-26	Release Candidate	Public Preview	
+
+None
+
+	Public Preview version. Same model as v2.0 with native text extraction from digital PDF files enabled.
+
+For more information, see Managing processor versions.
+
+
+Quotas and limits	
+Maximum pages (online/synchronous requests):	15
+Maximum pages (batch/offline/asynchronous requests):	100
+Maximum pages (imageless mode online/synchronous requests):	30
+Note: Specific processor limits are in addition to overall product quotas and limits.
+Note: To extend the maximum page limit for online and synchronous requests up to 30, be sure to enable imageless_mode in the ProcessRequest.
+
+Uptraining	
+Sample Input File	Open in new window.
+Sample Output	Open in new window.
+Supported regions	
+asia-south1
+asia-southeast1
+australia-southeast1
+eu
+europe-west2
+europe-west3
+northamerica-northeast1
+us
+Note: Consult Supported regions for a full list of processor version availability by region.
+
+More information	Form Parser
+
+
+Layout Parser
+Description	
+
+Extracts document content elements (text, tables, and lists) and creates context-aware chunks.
+
+Layout Parser extracts document content elements like text, tables, and lists, and creates context-aware chunks that facilitate information retrieval in generative AI and discovery applications.
+
+
+Category	Extract
+Functions	Layout Parsing, Document Chunking
+Release stage	General availability
+Access status	Public lock_open
+Type in API	LAYOUT_PARSER_PROCESSOR
+Notes	
+This parser supports PDF, HTML, DOCX, PPTX, and XLSX/XLSM files.
+
+Supported languages	
+Full list of languages
+
+Processor versions	
+Version ID	Release Channel	Release Maturity	Description
+pretrained-layout-parser-v1.0-2024-06-03	Stable	GA	General availability version for document layout analysis. This is the default pre-trained processor version.
+pretrained-layout-parser-v1.5-2025-08-25	Release Candidate	Public Preview	Preview version powered by Gemini 2.5 Flash LLM for better layout analysis on PDF files. Recommended for those who want to experiment with new versions.
+Note: If it's used for non-PDF files, it will have the same behavior as the stable pretrained-layout-parser-v1.0-2024-06-03.
+
+pretrained-layout-parser-v1.5-pro-2025-08-25	Release Candidate	Public Preview	Preview version powered by Gemini 2.5 Pro LLM for better layout analysis on PDF files. v1.5-pro has higher latency than v1.5.
+Note: If it's used for non-PDF files, it will have the same behavior as the stable pretrained-layout-parser-v1.0-2024-06-03.
+
+pretrained-layout-parser-v1.6-pro-2025-12-01	Release Candidate	Public Preview	Preview version powered by Gemini 3.0 Pro LLM.
+Note:This processor version uses the Vertex AI Gemini global endpoint and is not compliant with Data Residency (DMZ) standards. For example, requests in US and EU endpoints might route to anywhere globally.
+
+pretrained-layout-parser-v1.6-2026-01-13	Release Candidate	Public Preview	Preview version powered by Gemini 3.0 Flash LLM.
+Note:This processor version uses the Vertex AI Gemini global endpoint and is not compliant with Data Residency (DMZ) standards. For example, requests in US and EU endpoints might route to anywhere globally.
+
+pretrained-layout-parser-v3.1-lite-2026-08-11	Release Candidate	Public Preview	Preview version powered by Gemini 3.1 Flash Lite LLM.
+
+For more information, see Managing processor versions.
+
+
+Quotas and limits	
+Maximum pages (online/synchronous requests):	15
+Maximum pages (batch/offline/asynchronous requests):	500
+Maximum pages (imageless mode online/synchronous requests):	30
+Note: Specific processor limits are in addition to overall product quotas and limits.
+Note: To extend the maximum page limit for online and synchronous requests up to 30, be sure to enable imageless_mode in the ProcessRequest.
+
+Uptraining	
+Sample Input File	Open in new window.
+Sample Output	Open in new window.
+Supported regions	
+eu
+us
+Note: Consult Supported regions for a full list of processor version availability by region.
+
+More information	Layout Parser
+
+
+Explore pretrained processors
+Bank Statement Parser
+Description	
+
+Extract from bank statements including name, account, transactions, etc.
+
+
+Category	Pretrained
+Functions	OCR, Entity Extraction
+Release stage	General availability
+Access status	Public lock_open
+Type in API	BANK_STATEMENT_PROCESSOR
+Notes	
+If a page of a multi-page input file is the correct document type and one of the supported versions, the processor performs entity extraction on the first supported document. If the processor doesn't find any applicable documents in the input file, the processor returns an error message.
+
+Supported languages	
+Language Name	BCP 47 Tag	Script	Handwriting supported
+English	en	Latn	
+
+Processor versions	
+Version ID	Release Channel	Release Maturity	Description
+pretrained-bankstatement-v1.0-2021-08-08	Stable	GA	
+pretrained-bankstatement-v1.1-2021-08-13	Stable	GA	
+pretrained-bankstatement-v2.0-2021-12-10	Stable	GA	
+pretrained-bankstatement-v3.0-2022-05-16	Stable	GA	This version assumes that the input file contains a single bank statement. Unlike the default version, this version does not check the input file for bank statements and will not return an error if no bank statements are found.
+pretrained-bankstatement-v4.0-2023-07-31	Release Candidate	Public Preview	
+pretrained-bankstatement-v5.0-2023-12-06	Stable	GA	
+
+For more information, see Managing processor versions.
+
+
+Quotas and limits	
+Maximum pages (online/synchronous requests):	15
+Maximum pages (batch/offline/asynchronous requests):	30
+Maximum pages (imageless mode online/synchronous requests):	30
+Note: Specific processor limits are in addition to overall product quotas and limits.
+Note: To extend the maximum page limit for online and synchronous requests up to 30, be sure to enable imageless_mode in the ProcessRequest.
+
+Fields detected in the earliest version	
+
+You can also find this information in the Field detected page.
+
+Full list of fields
+
+Enriched fields	
+
+You can find more information in the Enrichment & normalization page.
+
+Full list of enriched fields
+
+Normalized fields	
+
+You can find more information in the Enrichment & normalization page.
+
+Full list of normalized fields
+
+Uptraining	
+Labeling Instructions	Open in new window.
+Sample Input File	Open in new window.
+Sample Output	Open in new window.
+Supported regions	
+eu
+us
+Note: Consult Supported regions for a full list of processor version availability by region.
+
+
+W2 Parser
+Description	
+
+Extract from Form W2, including employee, employer, wages, etc.
+
+
+Category	Pretrained
+Functions	OCR, Entity Extraction
+Release stage	General availability
+Access status	Public lock_open
+Type in API	FORM_W2_PROCESSOR
+Notes	
+If a page of a multi-page input file is the correct document type and one of the supported versions, the processor performs entity extraction on the first supported document. If the processor doesn't find any applicable documents in the input file, the processor returns an error message.
+
+Supported languages	
+Language Name	BCP 47 Tag	Script	Handwriting supported
+English	en	Latn	
+
+Supported form/versions	
+2020 (standard and customized versions)
+2019 (standard and customized versions)
+2018 (standard and customized versions)
+
+Processor versions	
+Version ID	Release Channel	Release Maturity	Additional fields detected	Description
+pretrained-w2-v1.0-2020-10-01	Stable	GA	
+
+None
+
+	
+pretrained-w2-v1.1-2022-01-27	Stable	GA	
+
+None
+
+	
+pretrained-w2-v1.2-2022-01-28	Stable	GA	
+Show fields
+	
+
+Quality improvements and supporting new fields; does not include splitter.
+
+
+pretrained-w2-v2.0-2022-03-30	Release Candidate	Public Preview	
+Show fields
+	
+
+Quality improvements and support for box 12 fields and fine-grained predictions of EmployeeName, EmployeeAddress, and EmployerNameAndAddress, all of which are no longer part of the output and are replaced with additional fields.
+
+
+pretrained-w2-v2.1-2022-06-08	Stable	GA	
+Show fields
+	
+
+Similar to version pretrained-w2-v2.0-2022-03-30 with further quality enhancements and introducing one more entity EmployeeName_Suffix.
+
+For more information, see Managing processor versions.
+
+
+Quotas and limits	
+Maximum pages (online/synchronous requests):	15
+Maximum pages (batch/offline/asynchronous requests):	15
+Maximum pages (imageless mode online/synchronous requests):	15
+Note: Specific processor limits are in addition to overall product quotas and limits.
+Note: To extend the maximum page limit for online and synchronous requests up to 30, be sure to enable imageless_mode in the ProcessRequest.
+
+Fields detected in the earliest version	
+
+You can also find this information in the Field detected page.
+
+Full list of fields
+
+Enriched fields	
+
+You can find more information in the Enrichment & normalization page.
+
+Full list of enriched fields
+
+Uptraining	
+Sample Input File	Open in new window.
+Sample Output	Open in new window.
+Supported regions	
+eu
+us
+Note: Consult Supported regions for a full list of processor version availability by region.
+
+
+Identity Document Proofing Parser
+Description	
+
+Predict the validity of ID documents using multiple signals.
+
+Identity Document Proofing Processor is designed to help predict the validity of ID documents with four different signals.
+
+The processor currently returns information from the following signals:
+
+fraud_signals_is_identity_document detection: Predicts whether an image contains a recognized identity document.
+fraud_signals_suspicious_words detection: Predicts whether words are present that aren't typical on IDs.
+fraud_signals_image_manipulation detection: Predicts whether the image was altered or tampered with an image editing tool.
+fraud_signals_online_duplicate detection: Predicts whether the image can be found online (US only).
+
+
+Category	Pretrained
+Functions	OCR, Quality Analysis
+Release stage	General availability
+Access status	Public lock_open
+Type in API	ID_PROOFING_PROCESSOR
+Notes	
+The Online Duplicate Detection feature is currently processed in US data centers. Regional and multi-regional support is unavailable for this feature outside of the US.
+This processor is supported by algorithms that are updated more frequently than new processor versions are released. For this reason, the processor might return different outputs over time even when using the same processor version. For example, the Online Duplicate Detection system monitors images present on the web. The system's behavior can then change more quickly than can be tracked in processor versions.
+Refer to notes on Responsible AI[†] and Human review.[‡]
+
+Supported languages	
+Language Name	BCP 47 Tag	Script	Handwriting supported
+English	en	Latn	
+
+Supported form/versions	
+Support for US passports, passcards and driver's licenses.
+
+Processor versions	
+Version ID	Release Channel	Release Maturity	Additional fields detected	Description
+pretrained-id-proofing-v1.0-2022-10-03	Stable	GA	
+
+None
+
+	
+pretrained-id-proofing-v1.1-2023-05-18	Release Candidate	Public Preview	
+Show fields
+	
+
+Additional photocopy detection signal
+
+
+pretrained-id-proofing-v1.2-2023-10-04	Release Candidate	Public Preview	
+Show fields
+	
+
+For more information, see Managing processor versions.
+
+
+Quotas and limits	
+Maximum pages (online/synchronous requests):	2
+Maximum pages (batch/offline/asynchronous requests):	2
+Maximum pages (imageless mode online/synchronous requests):	2
+Note: Specific processor limits are in addition to overall product quotas and limits.
+Note: To extend the maximum page limit for online and synchronous requests up to 30, be sure to enable imageless_mode in the ProcessRequest.
+
+Fields detected in the earliest version	
+
+You can also find this information in the Field detected page.
+
+Full list of fields
+
+Normalized fields	
+
+You can find more information in the Enrichment & normalization page.
+
+Full list of normalized fields
+
+Uptraining	
+Sample Input File	Open in new window.
+Sample Output	Open in new window.
+Supported regions	
+eu
+us
+Note: Consult Supported regions for a full list of processor version availability by region.
+
+
+Pay Slip Parser
+Description	
+
+Extract from pay slips, including name, business, amounts, etc.
+
+
+Category	Pretrained
+Functions	OCR, Entity Extraction
+Release stage	General availability
+Access status	Public lock_open
+Type in API	PAYSTUB_PROCESSOR
+Notes	
+If the multi-page input document contains more than one valid pay slips, the processor extracts entities from only the first valid pay slip. If no pay slips are found in the input file, the processor returns an error message.
+
+Supported languages	
+Language Name	BCP 47 Tag	Script	Handwriting supported
+English	en	Latn	
+
+Processor versions	
+Version ID	Release Channel	Release Maturity	Additional fields detected	Description
+pretrained-paystub-v1.0-2021-03-19	Stable	GA	
+
+None
+
+	
+pretrained-paystub-v1.1-2021-08-13	Stable	GA	
+Show fields
+	Quality improvement and new fields support;
+pretrained-paystub-v1.2-2021-12-10	Stable	GA	
+
+None
+
+	
+pretrained-paystub-v2.0-2022-05-17	Release Candidate	Public Preview	
+Show fields
+	
+
+This version assumes that the input file contains a single pay slip. Unlike the default version, this version does not check the input file for pay slips and will not return an error if no pay slips are found.
+
+Quality improvement, new fields support and new schema. Bonus, Commissions, Holiday, Overtime, Regular Pay and Vacation are now part of earning_item/earning_this_period, and their year-to-date versions are in earning_item/earning_ytd. Direct Deposit and Employee Account Number are now nested under direct_deposit_item.
+
+Async page limit is 10.
+
+
+pretrained-paystub-v2.0-2022-07-22	Stable	GA	
+
+None
+
+	
+
+Quality improvement and uptraining enhancements.
+
+
+pretrained-paystub-v3.0-2023-12-06	Stable	GA	
+
+None
+
+	
+
+For more information, see Managing processor versions.
+
+
+Quotas and limits	
+Maximum pages (online/synchronous requests):	15
+Maximum pages (batch/offline/asynchronous requests):	50
+Maximum pages (imageless mode online/synchronous requests):	30
+Note: Specific processor limits are in addition to overall product quotas and limits.
+Note: To extend the maximum page limit for online and synchronous requests up to 30, be sure to enable imageless_mode in the ProcessRequest.
+
+Fields detected in the earliest version	
+
+You can also find this information in the Field detected page.
+
+Full list of fields
+
+Enriched fields	
+
+You can find more information in the Enrichment & normalization page.
+
+Full list of enriched fields
+
+Normalized fields	
+
+You can find more information in the Enrichment & normalization page.
+
+Full list of normalized fields
+
+Uptraining	
+Labeling Instructions	Open in new window.
+Supported regions	
+eu
+us
+Note: Consult Supported regions for a full list of processor version availability by region.
+
+
+US Driver License Parser
+Description	
+
+Extract fields such as names, document ID, date of birth, etc.
+
+
+Category	Pretrained
+Functions	OCR, Entity Extraction
+Release stage	General availability
+Access status	Public lock_open
+Type in API	US_DRIVER_LICENSE_PROCESSOR
+Supported languages	
+Language Name	BCP 47 Tag	Script	Handwriting supported
+English	en	Latn	
+
+Supported form/versions	
+Supports all 50 States and D.C.
+
+Processor versions	
+Version ID	Release Channel	Release Maturity	Description
+pretrained-us-driver-license-v1.0-2021-06-14	Stable	GA	
+
+For more information, see Managing processor versions.
+
+
+Quotas and limits	
+Maximum pages (online/synchronous requests):	2
+Maximum pages (batch/offline/asynchronous requests):	2
+Maximum pages (imageless mode online/synchronous requests):	2
+Note: Specific processor limits are in addition to overall product quotas and limits.
+Note: To extend the maximum page limit for online and synchronous requests up to 30, be sure to enable imageless_mode in the ProcessRequest.
+
+Fields detected in the earliest version	
+
+You can also find this information in the Field detected page.
+
+Full list of fields
+
+Normalized fields	
+
+You can find more information in the Enrichment & normalization page.
+
+Full list of normalized fields
+
+Uptraining	
+Sample Input File	Open in new window.
+Sample Output	Open in new window.
+Supported regions	
+eu
+us
+Note: Consult Supported regions for a full list of processor version availability by region.
+
+
+Expense Parser
+Description	
+
+Extract text and values from expense documents such as expense date, supplier name, total amount, and currency.
+
+
+Category	Pretrained
+Functions	OCR, Entity Extraction
+Release stage	General availability
+Access status	Public lock_open
+Type in API	EXPENSE_PROCESSOR
+Supported languages	
+Full list of languages
+
+Processor versions	
+Version ID	Release Channel	Release Maturity	Additional fields detected	Additional languages supported	Description
+pretrained-expense-v1.1-2021-04-09	Stable	GA	
+
+None
+
+	
+
+None
+
+	Fine-tuned version of the v1.0 processor. Launched in April 2021.
+pretrained-expense-v1.3.2-2024-09-11	Release Candidate	Public Preview	
+Show fields
+	
+ja: Japanese
+	A fine-tuned upgrade to v1.3 with an enhanced underlying vision model.
+pretrained-expense-v1.4-2022-11-18	Stable	GA	
+Show fields
+	
+ja: Japanese
+it: Italian
+pt: Portuguese (Portugal & Brazil)
+	Performance improvements and support for uptraining. Maximum pages (online/synchronous requests) limit has been increased to 15.
+Note: Discontinued in the United States (US) and European Union (EU) starting April 30, 2025.
+
+pretrained-expense-v1.4.2-2024-09-12	Stable	GA	
+Show fields
+	
+ja: Japanese
+it: Italian
+pt: Portuguese (Portugal & Brazil)
+	An upgrade to v1.4 with an enhanced underlying vision model.
+
+For more information, see Managing processor versions.
+
+
+Quotas and limits	
+Maximum pages (online/synchronous requests):	10
+Maximum pages (batch/offline/asynchronous requests):	10
+Maximum pages (imageless mode online/synchronous requests):	10
+Note: Specific processor limits are in addition to overall product quotas and limits.
+Note: To extend the maximum page limit for online and synchronous requests up to 30, be sure to enable imageless_mode in the ProcessRequest.
+
+Fields detected in the earliest version	
+
+You can also find this information in the Field detected page.
+
+Full list of fields
+
+Enriched fields	
+
+You can find more information in the Enrichment & normalization page.
+
+Full list of enriched fields
+
+Normalized fields	
+
+You can find more information in the Enrichment & normalization page.
+
+Full list of normalized fields
+
+Uptraining	
+Labeling Instructions	Open in new window.
+Sample Input File	Open in new window.
+Sample Output	Open in new window.
+Supported regions	
+asia-southeast1
+australia-southeast1
+eu
+northamerica-northeast1
+us
+Note: Consult Supported regions for a full list of processor version availability by region.
+
+
+Invoice Parser
+Description	
+
+Extract text and values from invoices such as invoice number, supplier name, invoice amount, tax amount, invoice date, due date.
+
+The invoice Parser extracts both header and line item fields, such as invoice number, supplier name, invoice amount, tax amount, invoice date, due date, and line item amounts.
+
+
+Category	Pretrained
+Functions	OCR, Entity Extraction
+Release stage	General availability
+Access status	Public lock_open
+Type in API	INVOICE_PROCESSOR
+Supported languages	
+Full list of languages
+
+Processor versions	
+Version ID	Release Channel	Release Maturity	Additional languages supported	Description
+pretrained-invoice-v1.1-2021-04-09	Stable	GA	
+
+None
+
+	
+pretrained-invoice-v1.2-2022-02-18	Stable	GA	
+
+None
+
+	Deprecation is planned soon.
+pretrained-invoice-v1.3-2022-07-15	Stable	GA	
+it: Italian
+pt: Portuguese (Portugal & Brazil)
+ro: Romanian
+sv: Swedish
+et: Estonian
+lv: Latvian
+lt: Lithuanian
+	Uptrainable processor version. Maximum pages (online/synchronous requests) has been increased to 15.
+pretrained-invoice-v1.4-2022-10-21	Release Candidate	Public Preview	
+
+None
+
+	Uptrainable processor version. Maximum pages (online/synchronous requests) has been increased to 15.
+pretrained-invoice-v1.5-2023-09-15	Release Candidate	Public Preview	
+
+None
+
+	
+pretrained-invoice-v2.0-2023-12-06	Stable	GA	
+
+None
+
+	Not available in the asia-south1 region.
+
+For more information, see Managing processor versions.
+
+
+Quotas and limits	
+Maximum pages (online/synchronous requests):	15
+Maximum pages (batch/offline/asynchronous requests):	200
+Maximum pages (imageless mode online/synchronous requests):	30
+Note: Specific processor limits are in addition to overall product quotas and limits.
+Note: To extend the maximum page limit for online and synchronous requests up to 30, be sure to enable imageless_mode in the ProcessRequest.
+
+Fields detected in the earliest version	
+
+You can also find this information in the Field detected page.
+
+Full list of fields
+
+Enriched fields	
+
+You can find more information in the Enrichment & normalization page.
+
+Full list of enriched fields
+
+Normalized fields	
+
+You can find more information in the Enrichment & normalization page.
+
+Full list of normalized fields
+
+Uptraining	
+Labeling Instructions	Open in new window.
+Sample Input File	Open in new window.
+Sample Output	Open in new window.
+Supported regions	
+asia-south1
+asia-southeast1
+australia-southeast1
+eu
+northamerica-northeast1
+us
+Note: Consult Supported regions for a full list of processor version availability by region.
+
+
+Classify documents
+Custom Classifier
+Description	
+
+Train a model to classify a document type from a set of classes.
+
+
+Category	Classify
+Functions	OCR, Classification
+Release stage	General availability
+Access status	Public lock_open
+Type in API	CUSTOM_CLASSIFICATION_PROCESSOR
+Supported languages	
+Language Name	BCP 47 Tag	Script	Handwriting supported
+English	en	Latn	
+
+Processor versions	
+Version ID	Release Channel	Release Maturity	Description
+pretrained-classifier-v1.5-2025-08-05	Stable	GA	Production-ready model powered by the Gemini 2.5 Flash LLM. Also includes advanced OCR features. This pre-trained model can be used without prior training. It supports zero-shot classification and provides better support for the catch-all class.
+pretrained-classifier-v1.6-2026-03-09	Release Candidate	Public Preview	Release candidate powered by the Gemini 3.1 Flash LLM.
+Note: This version does not support data residency.
+
+pretrained-classifier-v1.6-pro-2026-03-09	Release Candidate	Public Preview	Release candidate powered by the Gemini 3.1 Pro LLM.
+Note: This version does not support data residency.
+
+For more information, see Managing processor versions.
+
+
+Quotas and limits	
+Maximum pages (online/synchronous requests):	15
+Maximum pages (batch/offline/asynchronous requests):	200
+Maximum pages (imageless mode online/synchronous requests):	30
+Note: Specific processor limits are in addition to overall product quotas and limits.
+Note: To extend the maximum page limit for online and synchronous requests up to 30, be sure to enable imageless_mode in the ProcessRequest.
+
+Uptraining	
+Sample Input File	Open in new window.
+Sample Output	Open in new window.
+Supported regions	
+asia-south1
+asia-southeast1
+australia-southeast1
+eu
+europe-west2
+europe-west3
+northamerica-northeast1
+us
+Note: Consult Supported regions for a full list of processor version availability by region.
+
+More information	Create a custom classification processor
+
+
+Custom Splitter
+Description	
+
+Train a model to split a file containing multiple documents into individual, classified documents.
+
+
+Category	Classify
+Functions	OCR, Classification, Splitting
+Release stage	General availability
+Access status	Public lock_open
+Type in API	CUSTOM_SPLITTING_PROCESSOR
+Notes	
+i18n can be supported through custom training options only.
+
+Supported languages	
+Language Name	BCP 47 Tag	Script	Handwriting supported
+English	en	Latn	
+
+Processor versions	
+Version ID	Release Channel	Release Maturity	Description
+pretrained-splitter-v1.5-2025-07-14	Stable	GA	GA model powered by the Gemini 2.5 Flash LLM. This pre-trained model can be used without prior training. It supports zero-shot splitting and classification.
+pretrained-splitter-v1.6-2026-03-09	Release Candidate	Public Preview	Release candidate powered by the Gemini 3.1 Flash LLM.
+Note: This version does not support data residency.
+
+pretrained-splitter-v1.6-pro-2026-03-09	Release Candidate	Public Preview	Release candidate powered by the Gemini 3.1 Pro LLM.
+Note: This version does not support data residency.
+
+For more information, see Managing processor versions.
+
+
+Quotas and limits	
+Maximum pages (online/synchronous requests):	15
+Maximum pages (batch/offline/asynchronous requests):	1000
+Maximum pages (imageless mode online/synchronous requests):	30
+Note: Specific processor limits are in addition to overall product quotas and limits.
+Note: To extend the maximum page limit for online and synchronous requests up to 30, be sure to enable imageless_mode in the ProcessRequest.
+
+Uptraining	
+Sample Input File	Open in new window.
+Sample Output	Open in new window.
+Supported regions	
+asia-south1
+asia-southeast1
+australia-southeast1
+eu
+europe-west2
+europe-west3
+northamerica-northeast1
+us
+Note: Consult Supported regions for a full list of processor version availability by region.
+
+More information	Create a custom splitter processor
+
+
+Footnotes
+
+[†] Identity Document Proofing works to extract and evaluate information from ID documents that contributes to identifying whether the input image represents an authentic ID.
+
+At Google Cloud, we prioritize helping customers safely develop and implement AI solutions, and Identity Proofing has been developed in accordance with Google's AI Principles.
+
+Based on Google's AI Principles and current product design, we strongly recommend using caution and carefully evaluating the potential benefits and risks of using Identity Document Proofing for the following:
+
+Decision-making without a human in the loop for predictions that can impact human rights.
+In sensitive domains including but not limited to employment, access to public services, healthcare, and safety-critical contexts.
+
+[‡] Always use Identity Proofing as part of your broader identity-detection process and workflow. It is important that you have a human reviewer in your workflow to verify whether the predicted signals are accurate. The Identity Proofing processor isn't meant to replace human review of IDs in a workflow, but rather to assist human reviewers in validating ID documents. The Identity Proofing processor shouldn't be used as an automated decision tool to determine whether an ID is valid. With human review, customers can achieve higher document processing accuracy and help businesses evaluate predictions using purpose-built tools to enable those reviews.
+
+Make sure that you review regulations in the region where you are implementing this technology, and research existing industry guidance to learn about policy guidelines and common fairness issues. Read about fairness in machine learning, including ways to mitigate bias in training datasets, evaluate your custom models for disparities in performance, and other considerations as you use your custom model.
+
+We encourage customers to keep fairness, interpretability, and privacy and security best practices in mind when implementing Identity Proofing. To learn more about how to implement responsible AI, read Google's recommendations for Responsible AI practices.
+
+Refer to the blog post Automate identity document processing with Document AI] for more information on use cases and a sample application code repository.
+
+Next
+Supported files
+arrow_forward
+Was this helpful?
+Send feedback
+
+Except as otherwise noted, the content of this page is licensed under the Creative Commons Attribution 4.0 License, and code samples are licensed under the Apache 2.0 License. For details, see the Google Developers Site Policies. Java is a registered trademark of Oracle and/or its affiliates.
+
+Last updated 2026-10-26 UTC.
+
+Products and pricing
+See all products
+Google Cloud pricing
+Google Cloud Marketplace
+Contact sales
+Support
+Community forums
+Support
+Release Notes
+System status
+Resources
+GitHub
+Getting Started with Google Cloud
+Code samples
+Cloud Architecture Center
+Training and Certification
+Builders Hub
+Engage
+Blog
+Events
+X (Twitter)
+Google Cloud on YouTube
+Google Cloud Tech on YouTube
+Android
+Chrome
+Firebase
+Google AI
+About Google
+Privacy
+Site terms
+Google Cloud terms
+Our third decade of climate action: join us
+Sign up for the Google Cloud newsletter
+Subscribe

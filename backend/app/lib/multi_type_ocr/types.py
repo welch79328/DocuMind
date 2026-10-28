@@ -17,7 +17,9 @@ from app.lib.document_types import DocumentType
 
 
 # 文件類型列舉(Literal 形式,對齊權威 DocumentType 的四種型別)
-DocumentTypeEnum = Literal["transcript", "bill", "contract", "repair_photo"]
+DocumentTypeEnum = Literal[
+    "transcript", "bill", "contract", "repair_photo", "handover_photo", "receipt"
+]
 """
 支援的文件類型列舉(與權威 `DocumentType` 一致)
 
@@ -25,6 +27,8 @@ DocumentTypeEnum = Literal["transcript", "bill", "contract", "repair_photo"]
 - bill: 帳單
 - contract: 合約
 - repair_photo: 修繕照片
+- handover_photo: 點交照片
+- receipt: 收據/發票
 """
 
 

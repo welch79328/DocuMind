@@ -32,6 +32,7 @@ from app.lib.document_types import (
     normalize_document_type,
     is_extension_allowed,
 )
+from app.lib.multi_type_ocr.direct_read_processor import is_direct_read_enabled
 from app.lib.multi_type_ocr.processor_factory import ProcessorFactory
 from app.lib.ocr_enhanced.quality_assessor import QualityAssessor
 from app.services.review_queue_service import ReviewQueueService
@@ -95,6 +96,9 @@ def _resolve_document_type(document_type: str) -> str:
         正規化後的權威型別字串(例如 "contract")
     """
     supported = [str(t) for t in ProcessorFactory.supported_types()]
+    # 收據沒有舊流程(OCR 規則),只有列入 DIRECT_READ_DOCUMENT_TYPES 才開放
+    if not is_direct_read_enabled("receipt"):
+        supported = [t for t in supported if t != "receipt"]
     normalized = normalize_document_type(document_type)
 
     if normalized is None or normalized.value not in supported:
@@ -297,7 +301,7 @@ async def analyze_document(
     file: UploadFile = File(..., description="PDF 或圖片檔案（支援 .pdf, .jpg, .jpeg, .png，上限 20MB）"),
     document_type: str = Form(
         default="transcript",
-        description="文件類型（transcript: 謄本, contract: 合約）"
+        description="文件類型（transcript: 謄本, contract: 合約, bill: 帳單, receipt: 收據, repair_photo: 修繕照片, handover_photo: 點交照片）"
     ),
     enable_llm: bool = Form(
         default=True,
@@ -316,7 +320,7 @@ async def analyze_document(
 
     ### 功能特色
     - **多格式支援**: PDF、JPG、JPEG、PNG
-    - **多文件類型**: 謄本（transcript）、合約（contract）
+    - **多文件類型**: 謄本（transcript）、合約（contract）、帳單（bill）、收據（receipt）、修繕照片（repair_photo）、點交照片（handover_photo）
     - **OCR + 規則修正**: 自動辨識文字並修正常見 OCR 錯誤
     - **LLM 文字校正**: 可選啟用 GPT-4o 進一步校正（信心度 < 85% 時觸發）
     - **結構化欄位提取**: 合約文件自動提取合約編號、簽約日期、甲乙方、金額等

@@ -32,10 +32,12 @@ class TestDocumentTypeEnum:
         args = get_args(DocumentTypeEnum)
         assert "contract" in args
 
-    def test_document_type_enum_has_four_canonical_types(self):
-        """驗證收斂後為四種權威類型(任務 1.1:transcript/bill/contract/repair_photo)"""
+    def test_document_type_enum_has_canonical_types(self):
+        """驗證與權威 DocumentType 一致(含 handover_photo、receipt)"""
         args = get_args(DocumentTypeEnum)
-        assert set(args) == {"transcript", "bill", "contract", "repair_photo"}
+        assert set(args) == {
+            "transcript", "bill", "contract", "repair_photo", "handover_photo", "receipt",
+        }
 
 
 class TestOcrRawResult:

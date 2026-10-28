@@ -237,7 +237,7 @@ c 系列非 burstable)等**系統穩定後**再討論。
 
 > **選型建議**:demo/低量 → B;隱私硬需求 → C(或 D 用完即關);量穩定大 → C 地端 GPU 機;**只是要評估 VLM 效益 → E**。LLM 層可插拔,先 B 起步,硬體到位再無痛切 C。
 
-### 依文件類型分流(帳單、修繕照片、點交照片、合約)
+### 依文件類型分流(帳單、修繕照片、點交照片、合約;另可分流收據 `receipt`)
 
 上面的 `LLM_PROVIDER` 是全域預設。帳單 `bill`、修繕照片 `repair_photo`、點交照片 `handover_photo`、
 合約 `contract` 另有一張「文件類型 → 供應商」分流表,這四類的欄位抽取、照片理解與 OCR 文字校正
@@ -261,6 +261,21 @@ c 系列非 burstable)等**系統穩定後**再討論。
 - 送 Bedrock 的影像與送 OpenAI 的相同;只有超過單張 3.75MB 上限時,才為 Bedrock 請求以同尺寸 JPEG 重新編碼。
 - 每次呼叫實際送到哪、服務等級、成功或錯誤類別,寫在回應每頁的 `llm_calls`(見 `docs/api/INTEGRATION.md` §2.4)。
 - `LLM_CLOUD_ENABLED=false` 時 Bedrock 與 OpenAI 一樣被擋。
+
+### Qwen 直讀(收據、帳單、合約)
+
+設定 `DIRECT_READ_DOCUMENT_TYPES`(`.env` 的 JSON 陣列,可列 `receipt`、`bill`、`contract`)列入的類型,
+影像與沒有文字層的 PDF **不呼叫本機 OCR 引擎**,整頁以長邊 2000 像素的 JPEG(品質 92、單張 ≤ 3.75MB)
+交視覺模型直接讀欄位,供應商依上面的分流表(收據要走 Bedrock 時寫 `{"receipt":"bedrock"}`)。
+動機是線上機的 OOM 來自本機 OCR(每頁約 0.7 GiB、用完不還):直讀路徑沒有這個峰值。
+
+- **程式預設空 `[]`**:帳單、合約照舊走本機 OCR 再補欄位;`receipt` 沒列入時 API 回「不支援的文件類型」。
+- 有文字層的帳單、合約 PDF 維持文字層路徑(不直讀);收據的 PDF 不論有沒有文字層都直讀。
+- 直讀一律呼叫模型,不看 `enable_llm`;每頁約 $0.001。
+- 設定方式:`.env` 加 `DIRECT_READ_DOCUMENT_TYPES=["receipt","bill","contract"]`,重建 backend 容器
+  (`docker compose up -d --force-recreate backend`);只改單一類別就只列那一類;切回舊流程就把該類別拿掉再重建。
+- 未知的類型或謄本會讓 backend 啟動失敗(打錯字不會被默默忽略)。
+- 回應每頁 `ocr_raw` 為 `null`、`llm_calls` 的 `stage` 為 `direct_read`(見 `docs/api/INTEGRATION.md` §2.4、§6)。
 
 ---
 
@@ -412,6 +427,7 @@ LLM_CLOUD_ENABLED=true        # 隱私硬需求設 false(禁雲端)
 LOCAL_QWEN_ENDPOINT=          # LLM_PROVIDER=local_qwen 時填 vLLM 端點
 OPENAI_API_KEY=
 LLM_PROVIDER_BY_DOCUMENT_TYPE={}   # 依文件類型分流(§3);{} = 四類都走 OpenAI
+DIRECT_READ_DOCUMENT_TYPES=[]      # Qwen 直讀(§3);可列 receipt、bill、contract;[] = 帳單、合約走 OCR,收據不開放
 BEDROCK_API_KEY=              # 分流到 bedrock 時才需要
 
 # fine-tune 決策門檻(僅決策,不訓練)

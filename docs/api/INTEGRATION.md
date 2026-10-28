@@ -1,6 +1,6 @@
 # DocuMind OCR 對接規格（給外部系統開發者）
 
-> 版本 2.5.0 ／ 2026-10-28（2.5.0：每頁新增 `llm_calls`，列出這一頁每次 LLM 呼叫送到哪個供應商、模型、服務等級、成功或錯誤類別，見 §2.4；LLM 補欄位呼叫失敗時 `llm_used_for_extraction` 為 `false`；2.4.0：謄本新增固定輸出格式 `transcript_records`，每張謄本的鍵固定、沒印回 `null`／`[]`，附 JSON Schema，見 §3.1.3；2.3.0：謄本新增 `transcripts`，謄本上印的每一項都依原文標籤回傳，見 §3.1.2；2.2.0：謄本新增 `print_date`；原文印空白的欄位回 `null`；土地／建物專屬的必要欄位只在該部存在時要求，見 §3.1；2.1.2：合約欄位的值改為半形數字與標點、帶框字還原，見 §3.2；2.1.1：持分欄位的值統一為「分數」或「全部」，見 §3.1；2.1.0：謄本新增 6 個清單欄位與 `land_rights_scope`，並寫明各單值欄位的取值範圍）
+> 版本 2.6.0 ／ 2026-10-28（2.6.0：新增文件類型 `receipt`（收據、發票，回 `amount`、`date`），見 §3.3.1；修繕照片新增 `damaged_items`，見 §3.4；`/classify` 能回 `receipt`；帳單、合約的影像與掃描 PDF 可改由視覺模型直讀、不跑本機 OCR（伺服器設定 `DIRECT_READ_DOCUMENT_TYPES`，預設不列），直讀類與照片類一律呼叫模型、不看 `enable_llm`，見 §2.1、§6；2.5.0：每頁新增 `llm_calls`，列出這一頁每次 LLM 呼叫送到哪個供應商、模型、服務等級、成功或錯誤類別，見 §2.4；LLM 補欄位呼叫失敗時 `llm_used_for_extraction` 為 `false`；2.4.0：謄本新增固定輸出格式 `transcript_records`，每張謄本的鍵固定、沒印回 `null`／`[]`，附 JSON Schema，見 §3.1.3；2.3.0：謄本新增 `transcripts`，謄本上印的每一項都依原文標籤回傳，見 §3.1.2；2.2.0：謄本新增 `print_date`；原文印空白的欄位回 `null`；土地／建物專屬的必要欄位只在該部存在時要求，見 §3.1；2.1.2：合約欄位的值改為半形數字與標點、帶框字還原，見 §3.2；2.1.1：持分欄位的值統一為「分數」或「全部」，見 §3.1；2.1.0：謄本新增 6 個清單欄位與 `land_rights_scope`，並寫明各單值欄位的取值範圍）
 > 本文件由 `docs/API_INTEGRATION.md` 與 `docs/api/02-INTEGRATION-API.md` 合併而成。
 > 標示「實測」的數字皆取自線上環境(`54.248.201.66`),日期各自註明。
 > 唯一需要串的端點是 `POST /api/v1/analyze`；其餘為輔助。
@@ -24,7 +24,7 @@
 
 ## 2. 主端點：`POST /api/v1/analyze`
 
-上傳 PDF 或圖片，一次完成 OCR → 文字校正 → 結構化欄位抽取（可選 AI 問答）。
+上傳 PDF 或圖片，一次完成文字辨識 → 結構化欄位抽取（可選 AI 問答）。謄本與文字層 PDF 走 OCR／文字層加規則抽取；收據、帳單、合約的影像與掃描 PDF 在伺服器開啟「直讀」時，整頁交視覺模型讀，不跑本機 OCR（見 §6）。
 
 ### 2.1 請求（multipart/form-data）
 
@@ -32,7 +32,7 @@
 |---|---|---|---|---|
 | `file` | file | ✅ | — | `.pdf` / `.jpg` / `.jpeg` / `.png`，上限 **20 MB** |
 | `document_type` | string | ✗ | `transcript` | 見 2.2 |
-| `enable_llm` | bool | ✗ | `true` | 啟用 LLM 文字校正（OCR 信心度 < 85% 才實際觸發，約 $0.02/頁） |
+| `enable_llm` | bool | ✗ | `true` | 只影響**謄本**、**有文字層的 PDF**，以及**沒開直讀的帳單、合約**：啟用 LLM 文字校正與補欄位（OCR 信心度 < 85% 才實際觸發，約 $0.02/頁）。**直讀類**（收據、帳單、合約的影像與掃描 PDF，伺服器開啟直讀時）與**照片類**（`repair_photo`、`handover_photo`）一律呼叫視覺模型，不論 `enable_llm` 為何（約 $0.001/頁） |
 | `question` | string | ✗ | `null` | 帶入時額外回傳 `answer`，基於本次 OCR 結果作答 |
 
 ### 2.2 `document_type` 可用值
@@ -42,8 +42,11 @@
 | `transcript` | 建物／土地謄本 | pdf, jpg, jpeg, png |
 | `contract` | 合約（含租約） | pdf, jpg, jpeg, png |
 | `bill` | 帳單（水電／管理費等） | pdf, jpg, jpeg, png |
+| `receipt` | 收據、發票（統一發票、電子發票證明聯、手寫收據）。**只在伺服器設定 `DIRECT_READ_DOCUMENT_TYPES` 列入 `receipt` 時開放**，沒開放時回 `400 UNSUPPORTED_DOCUMENT_TYPE`；`400` 訊息裡的「支援的類型」清單可看目前開放哪些 | pdf, jpg, jpeg, png |
 | `repair_photo` | 修繕現場照片（VLM 影像理解，非 OCR） | **僅** jpg, jpeg, png |
 | `handover_photo` | 點交現場照片（VLM 影像理解 + 詞彙白名單） | **僅** jpg, jpeg, png |
+
+收據的 PDF 不論有沒有文字層都整頁交視覺模型讀；帳單、合約的 PDF 有文字層時仍讀文字層。
 
 舊型別別名會自動轉換：`lease` / `lease_contract` → `contract`；`repair_quote` → `bill`。
 傳入 `id_card`、`unknown` 等無對應型別 → `400 UNSUPPORTED_DOCUMENT_TYPE`。
@@ -57,11 +60,16 @@ curl -X POST "http://54.248.201.66:8085/api/v1/analyze" \
   -F "document_type=transcript" \
   -F "enable_llm=true"
 
-# 純 OCR，不花 LLM 成本
+# 謄本，不用 LLM 校正（enable_llm 只影響謄本、文字層 PDF 與沒開直讀的帳單、合約）
 curl -X POST "http://54.248.201.66:8085/api/v1/analyze" \
-  -F "file=@帳單.png" \
-  -F "document_type=bill" \
+  -F "file=@謄本.jpg" \
+  -F "document_type=transcript" \
   -F "enable_llm=false"
+
+# 收據（需伺服器開放 receipt）；一律呼叫視覺模型，enable_llm 不影響
+curl -X POST "http://54.248.201.66:8085/api/v1/analyze" \
+  -F "file=@收據.jpg" \
+  -F "document_type=receipt"
 
 # 合約 + 問答
 curl -X POST "http://54.248.201.66:8085/api/v1/analyze" \
@@ -116,6 +124,7 @@ curl -X POST "http://54.248.201.66:8085/api/v1/analyze" \
 > ⚠️ **影像理解型（`repair_photo`、`handover_photo`）的 `ocr_raw` 與
 > `rule_postprocessed` 一律是 `null`** —— 它們走 VLM，不跑 OCR。
 > 請勿假設這兩欄必有值（2026-09-09 前這兩欄宣告為必填，會讓那條路徑炸 500）。
+> 直讀類（見 §6）的 `ocr_raw`、`rule_postprocessed` 同樣是 `null`。
 
 **多頁文件務必讀 `document_fields`。** 謄本的地號在第 1 頁、建號在第 3 頁是常態，
 單頁的 `structured_data` 必然殘缺；`document_fields` 是「只填補缺值」合併後的完整結果，
@@ -128,8 +137,8 @@ curl -X POST "http://54.248.201.66:8085/api/v1/analyze" \
 
 | 欄位 | 說明 |
 |---|---|
-| `stage` | `correction`（OCR 文字校正）／`extraction`（欄位抽取）／`photo_understanding`（修繕、點交照片理解） |
-| `provider` | `openai`／`bedrock`（另有 `anthropic`、`local_qwen`，目前未啟用）。帳單、照片、合約依伺服器的分流設定，謄本一律 `openai` |
+| `stage` | `correction`（OCR 文字校正）／`extraction`（欄位抽取）／`photo_understanding`（修繕、點交照片理解）／`direct_read`（收據、帳單、合約的整頁直讀，見 §6） |
+| `provider` | `openai`／`bedrock`（另有 `anthropic`、`local_qwen`，目前未啟用）。收據、帳單、照片、合約依伺服器的分流設定，謄本一律 `openai` |
 | `model` | 實際送出的模型 ID，例如 `gpt-5.6-terra`、`qwen.qwen3-vl-235b-a22b` |
 | `requested_service_tier` | 送出時要求的服務等級；只有 `bedrock` 會帶（`flex` 或 `default`），其他為 `null` |
 | `service_tier` | 供應商回應實際標示的服務等級；呼叫失敗時為 `null` |
@@ -137,8 +146,8 @@ curl -X POST "http://54.248.201.66:8085/api/v1/analyze" \
 | `error` | 失敗時的**錯誤類別**，不含供應商原始訊息：`timeout`、`rate_limited`（429）、`unavailable`（503）、`connection_error`、`invalid_response`、`missing_credentials`、`image_too_large`、`http_<狀態碼>`（如 `http_403`）、`error`（其他）；成功時為 `null` |
 
 - 走 `bedrock` 時每次先送 `flex`；被限流（429）、暫時無法服務（503）或逾時，會以 `default` 重送一次，
-  所以同一個階段可能出現兩筆：第一筆 `ok: false`，第二筆是重送的結果。重送仍失敗時，該階段退回規則結果，不會改送其他供應商。
-- 欄位抽取失敗時，`structured_data.llm_used_for_extraction` 為 `false`，欄位值是規則抽取的結果。
+  所以同一個階段可能出現兩筆：第一筆 `ok: false`，第二筆是重送的結果。重送仍失敗時，該階段退回規則結果（直讀類沒有規則結果：欄位全空、必要欄位全進 `needs_confirmation`），不會改送其他供應商。
+- 欄位抽取失敗時，`structured_data.llm_used_for_extraction` 為 `false`：舊流程的欄位值是規則抽取的結果，直讀的帳單、合約欄位全空。
 - 呼叫成功不代表內容讀對：成功的呼叫照樣可能讀錯，判斷欄位可信度仍看 `field_confidences`。
 
 ---
@@ -199,10 +208,10 @@ curl -X POST "http://54.248.201.66:8085/api/v1/analyze/batch" \
 
 ## 3. `structured_data` / `document_fields` 欄位
 
-四種型別共通會附帶：
+`transcript`、`bill`、`contract` 與 `receipt` 共通會附帶：
 `field_confidences`（逐欄位 0.0–1.0）、`needs_confirmation`（信心不足、建議人工確認的欄位名陣列）、
-`extraction_confidence`（必要欄位平均）、`llm_used_for_extraction`（bool；LLM 補欄位的呼叫成功才是 `true`，
-沒有呼叫或呼叫失敗都是 `false`，失敗的細節見 `pages[].llm_calls`）。
+`extraction_confidence`（必要欄位平均）。`transcript`、`bill`、`contract` 另附 `llm_used_for_extraction`（bool；LLM 補欄位的呼叫成功才是 `true`，
+沒有呼叫或呼叫失敗都是 `false`，失敗的細節見 `pages[].llm_calls`）；`receipt` 沒有這個鍵，每頁都由模型直讀。
 
 **信心度是「這欄怎麼讀到的」標籤，不是準確率，請勿顯示成百分比。**
 `transcript`、`bill` 的 `field_confidences` 只會是下列幾個值，沒有中間值：
@@ -214,6 +223,7 @@ curl -X POST "http://54.248.201.66:8085/api/v1/analyze/batch" \
 | `0.3` | 型別檢查不過（見 §8），或多引擎讀出的值不一致 |
 | `0.0` | 讀不到 |
 
+- **直讀類**（收據、帳單、合約的影像與掃描 PDF，見 §6）的 `field_confidences` 值是 `0.9`（模型確定且格式驗證通過）、`0.5`（模型回「不確定」，或格式驗證不過：金額不是數字、日期解析不了）、`0.0`（讀不到）；低於 0.8 的必要欄位進 `needs_confirmation`。模型自評只用來「降」信心度，不會把格式不過的值抬高。
 - 規則比對只有「中／沒中」，沒有機率；目前也沒有用人工核對過的標準答案逐欄校準過，所以沒有可給的準確率。
   不採用 LLM 自評的信心度：生成式模型讀錯時產出的是語法合法的錯值，自評分數跟著失準。
 - `extraction_confidence` 是必要欄位上述值的平均，例如 4 欄讀到 3 欄得 0.675——意思是「3／4 欄有值」，不是 67.5% 正確。
@@ -486,18 +496,58 @@ curl -X POST "http://54.248.201.66:8085/api/v1/analyze/batch" \
 原本因全形逗號等讀不到的欄位現在讀得到，`extraction_confidence`、`needs_confirmation` 與是否進複核可能隨之改變。
 `pages[].rule_postprocessed.text` 等原文欄位不受影響。
 
+**直讀（影像與掃描 PDF，伺服器開啟 `contract` 直讀時）：** 回應鍵與上面相同（`contract_metadata`、`parties`、
+`financial_terms`、有租賃欄位時的 `rental_terms`、`extraction_confidence`、`llm_used_for_extraction`），
+另新增 `field_confidences`（鍵是上面的扁平欄位名，如 `party_a`、`monthly_rent`）與 `needs_confirmation`。
+`llm_used_for_extraction` 在模型直讀成功時為 `true`、呼叫失敗時為 `false`（欄位全空、必要欄位全進 `needs_confirmation`）；`pages[].ocr_raw` 為 `null`。
+是否為租約由模型判斷，通用合約不要求租賃欄位。多頁合約逐頁直讀、跨頁「只填補缺值」彙整，與 `document_fields` 一致。
+
 ### 3.3 `bill`
 
 `amount`（金額）、`date`（日期）、`account_no`（戶號）。
 
+**直讀（影像與掃描 PDF，伺服器開啟 `bill` 直讀時）：** 回應鍵與舊版完全相同
+（`amount`、`date`、`account_no`、`field_confidences`、`needs_confirmation`、`extraction_confidence`、
+`llm_used_for_extraction`：直讀成功 `true`、呼叫失敗 `false`），值是模型讀圖的結果；`pages[].ocr_raw` 為 `null`，
+`pages[].llm_calls` 有 `stage: "direct_read"` 的紀錄。
+
+### 3.3.1 `receipt` — 收據、發票（直讀）
+
+```json
+{
+  "amount": "588",
+  "date": "2026-10-12 14:35:20",
+  "field_confidences": { "amount": 0.9, "date": 0.9 },
+  "needs_confirmation": [],
+  "extraction_confidence": 0.9
+}
+```
+
+- 只回兩個欄位：`amount`（**整張單據的總計**，原始字串，不是單項明細金額）與 `date`（單據上印的日期，原樣回傳；
+  沒有「日期」標籤的電子發票日期時間如 `2026-10-12 14:35:20`、民國年如 `115/10/12` 都讀得到）。不回商家、稅額、單號。
+- **必要欄位是 `amount`、`date`，不含 `account_no`**（收據沒有戶號）。
+- 模型分不出哪個數字是總計、或讀到的金額不是數字（`三千五`、夾帶文字）、日期解析不了時，該欄位信心度 `0.5`，
+  並列入 `needs_confirmation`；`needs_review` 會是 `true`。讀不到的欄位值為 `null`、信心度 `0.0`。
+- 模型呼叫失敗時不回錯誤，兩欄為 `null`、`needs_confirmation` 為 `["amount", "date"]`，失敗原因看 `pages[].llm_calls`。
+- `pages[].ocr_raw` 為 `null`；多頁 PDF 逐頁讀、`document_fields` 跨頁補值。
+- 值為 `null` 的欄位只出現在 `pages[].structured_data`；`document_fields` 裡該鍵不出現（與其他類型相同）。
+
 ### 3.4 `repair_photo` — 影像理解，非 OCR
 
 ```json
-{ "defect_labels": ["漏水", "壁癌"], "description": "牆面出現大面積水漬與剝落…", "confidence": 0.82 }
+{
+  "defect_labels": ["漏水", "壁癌"],
+  "damaged_items": ["水龍頭", "牆面"],
+  "description": "牆面出現大面積水漬與剝落…",
+  "confidence": 0.82
+}
 ```
 
-VLM 不可用或影像無法辨識時降級為 `{"defect_labels": [], "description": "", "confidence": 0.0}`，
-**不會回錯誤**，請以 `confidence` 判斷是否可用。
+`damaged_items` 是照片裡**壞掉、損壞或有問題的物件**（字串陣列，照照片實際內容寫，不綁 JGB 的分類，沒有就是 `[]`）；
+`defect_labels` 是瑕疵標籤。兩者獨立，不保證一一對應。
+
+VLM 不可用或影像無法辨識時降級為 `{"defect_labels": [], "damaged_items": [], "description": "", "confidence": 0.0}`，
+**不會回錯誤**，請以 `confidence` 判斷是否可用；失敗與否看 `pages[].llm_calls`。
 
 ### 3.5 `handover_photo` — 影像理解 + 詞彙白名單
 
@@ -558,6 +608,9 @@ VLM 不可用或影像無法辨識時降級為 `{"defect_labels": [], "descripti
 { "suggested_document_type": "transcript", "confidence": 0.87 }
 ```
 
+可能回 `transcript`、`contract`、`receipt` 或 `null`。`receipt` 依收據本身的字樣判斷（統一發票、電子發票、發票號碼、收據、證明聯）；
+帳單目前不會被建議（回 `null`）。回 `receipt` 不代表伺服器已開放 `receipt` 類型，能不能送 `/analyze` 見 §2.2。
+
 ### `GET /api/v1/usage` — 累計用量
 
 ```json
@@ -579,6 +632,14 @@ VLM 不可用或影像無法辨識時降級為 `{"defect_labels": [], "descripti
 ---
 
 ## 6. 速度與準確率取決於「有沒有文字層」，不是文件類型
+
+**直讀（Qwen 直接讀圖，不跑本機 OCR）。** 伺服器設定 `DIRECT_READ_DOCUMENT_TYPES`（JSON 陣列，可列
+`receipt`、`bill`、`contract`；**預設是空**）列入的類型，影像與沒有文字層的 PDF 不再跑本機 OCR，
+而是整頁（長邊 2000 像素、JPEG）交視覺模型讀欄位，供應商依伺服器的分流設定。
+有文字層的帳單、合約 PDF 維持下面的文字層路徑；收據的 PDF（有或沒有文字層）一律直讀。
+沒列入的帳單、合約照舊走本機 OCR 再補欄位。謄本不能直讀，維持本機 OCR。
+直讀的回應 `pages[].ocr_raw` 為 `null`，`pages[].llm_calls` 的 `stage` 為 `direct_read`；
+不論 `enable_llm` 為何都會呼叫模型。
 
 | 來源 | 文字層 | 4 頁耗時 | 字元錯誤率 |
 |---|---|---|---|
@@ -629,9 +690,9 @@ VLM 不可用或影像無法辨識時降級為 `{"defect_labels": [], "descripti
 掃描件的 `transcripts`／`transcript_records` 讀不出結構，請以 25 個單值欄位為準。
 實測明細見 [`docs/testing/transcript-online-acceptance.md`](../testing/transcript-online-acceptance.md) §3。
 
-**5. `enable_llm=true` 不等於每頁都花錢。** 只有 OCR 信心度 < 85% 的頁面才呼叫 LLM。
-實際用量看 `stats.llm_pages_used` 與 `stats.estimated_cost`。
-2026-09-09 實測全域平均約 **$0.0050/頁**（只有約 28% 的頁面真的觸發 LLM）。
+**5. `enable_llm=true` 不等於每頁都花錢。** 只有謄本、文字層 PDF 與沒開直讀的帳單、合約受 `enable_llm` 影響：OCR 信心度 < 85% 的頁面才呼叫 LLM。
+直讀類（收據、帳單、合約的影像與掃描 PDF，伺服器開啟直讀時）與照片類（修繕、點交）每頁都呼叫視覺模型，不論 `enable_llm`。
+謄本與文字層 PDF 的用量看 `stats.llm_pages_used` 與 `stats.estimated_cost`；直讀類與照片類不計入這兩欄，實際呼叫次數看每頁的 `llm_calls`。
 
 ---
 
@@ -667,7 +728,7 @@ VLM 不可用或影像無法辨識時降級為 `{"defect_labels": [], "descripti
 
 - **回應不含原始圖檔。** `original_image` 已移除以縮小回應；需要原圖請用 `file_url`。
   ⚠️ 2026-10-01 實測線上的 `file_url` 一律為 `null`（線上 S3 設定問題，檔案沒有上傳成功），目前拿不到原圖。
-- **`bill`、`repair_photo`、`handover_photo` 尚無充足真實測資**，
+- **`bill`、`receipt`、`repair_photo`、`handover_photo` 尚無充足真實測資**，
   回傳結構未經端到端驗證，串接前請先實測。
 - **另有一條舊上傳路徑** `POST /api/v1/documents/upload`（上限 10 MB，
   未列入 OpenAPI schema）。它走的是**另一條 OCR 路徑**（`pytesseract` 單引擎），

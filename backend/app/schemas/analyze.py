@@ -33,7 +33,7 @@ class LlmCallRecord(BaseModel):
     一頁可能有多筆:校正一筆、抽取一筆;Bedrock 的 flex 失敗改送 default 時,
     失敗的那次與重送的那次各記一筆。
     """
-    stage: str                                     # correction | extraction | photo_understanding
+    stage: str                                     # correction | extraction | photo_understanding | direct_read
     provider: str                                  # openai | bedrock | anthropic | local_qwen
     model: Optional[str] = None
     requested_service_tier: Optional[str] = None   # 送出時要求的等級(只有 Bedrock 會帶:flex / default)

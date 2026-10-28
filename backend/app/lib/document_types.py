@@ -29,6 +29,7 @@ class DocumentType(str, Enum):
     CONTRACT = "contract"          # 合約 PDF
     REPAIR_PHOTO = "repair_photo"  # 修繕照片(影像理解)
     HANDOVER_PHOTO = "handover_photo"  # 點交照片(影像理解)
+    RECEIPT = "receipt"            # 收據/發票(Qwen 直讀;需列入 DIRECT_READ_DOCUMENT_TYPES)
 
 
 # 舊型別體系 → 權威列舉 的映射
@@ -79,6 +80,7 @@ TYPE_ALLOWED_EXTENSIONS: Dict[DocumentType, Set[str]] = {
     DocumentType.CONTRACT: set(SUPPORTED_EXTENSIONS),
     DocumentType.REPAIR_PHOTO: set(_IMAGE_EXTENSIONS),
     DocumentType.HANDOVER_PHOTO: set(_IMAGE_EXTENSIONS),
+    DocumentType.RECEIPT: {".jpg", ".jpeg", ".png", ".pdf"},
 }
 
 
