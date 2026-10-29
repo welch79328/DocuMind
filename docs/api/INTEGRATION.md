@@ -129,6 +129,8 @@ curl -X POST "http://54.248.201.66:8085/api/v1/analyze" \
 **多頁文件務必讀 `document_fields`。** 謄本的地號在第 1 頁、建號在第 3 頁是常態，
 單頁的 `structured_data` 必然殘缺；`document_fields` 是「只填補缺值」合併後的完整結果，
 且 `needs_confirmation` 與 `extraction_confidence` 已依全文重算。
+**`document_fields` 不帶值為空的鍵**：每一頁都是 `null`、`""` 或 `[]` 的欄位，在 `document_fields` 裡該鍵不出現，
+只出現在 `pages[].structured_data`。所有文件類型都一樣；要固定鍵的單頁類型（修繕、點交照片）請讀 `pages[0].structured_data`。
 
 #### `pages[].llm_calls` — 這一頁的 LLM 呼叫紀錄（2.5.0 起）
 
@@ -543,8 +545,10 @@ curl -X POST "http://54.248.201.66:8085/api/v1/analyze/batch" \
 }
 ```
 
-`damaged_items` 是照片裡**壞掉、損壞或有問題的物件**（字串陣列，照照片實際內容寫，不綁 JGB 的分類，沒有就是 `[]`）；
+`damaged_items` 是照片裡**壞掉、損壞或有問題的物件**（字串陣列，照照片實際內容寫，不綁 JGB 的分類）；
 `defect_labels` 是瑕疵標籤。兩者獨立，不保證一一對應。
+`pages[0].structured_data` 一律帶這四個鍵，看不出損壞時兩個陣列是 `[]`；`document_fields` 不帶值為空的鍵（見 §2），
+看不出損壞時沒有 `damaged_items`、`defect_labels`。判斷有沒有損壞請讀 `pages[0].structured_data`。
 
 VLM 不可用或影像無法辨識時降級為 `{"defect_labels": [], "damaged_items": [], "description": "", "confidence": 0.0}`，
 **不會回錯誤**，請以 `confidence` 判斷是否可用；失敗與否看 `pages[].llm_calls`。
@@ -572,7 +576,7 @@ VLM 不可用或影像無法辨識時降級為 `{"defect_labels": [], "damaged_i
 但**不保證涵蓋照片裡的所有東西**。
 
 `dropped` 不是給終端使用者看的，是給維護者看的：同一個詞反覆出現代表詞彙表該補。
-影像模糊或空房時四個欄位回空值（不是 `null`），`confidence` 為 `0.0`。
+影像模糊或空房時四個欄位在 `pages[0].structured_data` 回空值（不是 `null`），`confidence` 為 `0.0`；`document_fields` 不帶這些空值的鍵（見 §2）。
 
 ---
 
