@@ -1,0 +1,85 @@
+{
+ "header": {
+  "command": "cd backend && PYTHONPATH=. venv/bin/python ../.kiro/specs/document-fields-fixed-keys/raw/replay.py replay_after.json",
+  "run_at": "2026-10-29",
+  "tested_code": "35210a0 + 未提交改動 backend/app/services/analyze_service.py（keep_empty_keys）"
+ },
+ "summary": {
+  "head": "35210a0",
+  "app_dirty": true,
+  "total": 348,
+  "by_type": {
+   "bill": {
+    "n": 63,
+    "ok": 63,
+    "identical": 42,
+    "lacking_page_keys": 0
+   },
+   "contract": {
+    "n": 24,
+    "ok": 20,
+    "identical": 0,
+    "lacking_page_keys": 0
+   },
+   "handover_photo": {
+    "n": 39,
+    "ok": 39,
+    "identical": 0,
+    "lacking_page_keys": 0
+   },
+   "repair_photo": {
+    "n": 137,
+    "ok": 137,
+    "identical": 114,
+    "lacking_page_keys": 0
+   },
+   "transcript": {
+    "n": 18,
+    "ok": 18,
+    "identical": 0,
+    "lacking_page_keys": 0
+   },
+   "receipt": {
+    "n": 67,
+    "ok": 67,
+    "identical": 64,
+    "lacking_page_keys": 0
+   }
+  },
+  "all_ok": false
+ },
+ "not_ok": [
+  {
+   "file": "/Users/chenqinghuang/jgb-archive/bedrock-qwen-switch-20261028/s2/before/contract/698dbbfc798c3ff87abb07598385d748.json",
+   "type": "contract",
+   "b_changed": [
+    "financial_terms"
+   ]
+  },
+  {
+   "file": "/Users/chenqinghuang/jgb-archive/bedrock-qwen-switch-20261028/s2/extra/contract/c2_clark_lease_1831_p1.json",
+   "type": "contract",
+   "b_changed": [
+    "financial_terms"
+   ]
+  },
+  {
+   "file": "/Users/chenqinghuang/jgb-archive/qwen-direct-read-20261029/t2/before/contract/textlayer_lease.json",
+   "type": "contract",
+   "b_changed": [
+    "contract_metadata",
+    "financial_terms",
+    "parties"
+   ]
+  },
+  {
+   "file": "/Users/chenqinghuang/jgb-archive/qwen-direct-read-20261029/t2_textlayer/after1/contract/textlayer_lease.json",
+   "type": "contract",
+   "b_changed": [
+    "contract_metadata",
+    "financial_terms",
+    "parties"
+   ]
+  }
+ ]
+}

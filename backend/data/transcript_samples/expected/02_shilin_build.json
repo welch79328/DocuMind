@@ -1,4 +1,5 @@
 {
+  "area": null,
   "building_address": "測試路439號五樓",
   "building_number": "19998-000",
   "completion_date": "民國091年05月03日",
@@ -30,7 +31,9 @@
     "total_area": 0.0,
     "total_floors": 0.9
   },
+  "floor_area": null,
   "floor_area_checks": [],
+  "floor_level": null,
   "floors": [],
   "land_number": "0361-0000",
   "land_numbers": [
@@ -39,6 +42,9 @@
       "section": "測試段一小段"
     }
   ],
+  "land_rights_scope": null,
+  "land_use_type": null,
+  "land_use_zone": null,
   "llm_used_for_extraction": false,
   "main_material": "鋼筋混凝土造",
   "main_usage": "住家用",
@@ -62,6 +68,7 @@
   "print_date": "民國108年02月19日",
   "rights_scope": "全部",
   "section": "測試段",
+  "seizure_mark": null,
   "shared_area": "509.05",
   "shared_build_number": "11994-000",
   "shared_parts": [
@@ -81,6 +88,7 @@
       "transcript_id": "19998-000"
     }
   ],
+  "sub_building_area": null,
   "sub_building_usage": "陽台",
   "sub_buildings": [
     {
@@ -95,7 +103,58 @@
     }
   ],
   "subsection": "一小段",
+  "total_area": null,
   "total_floors": "007層",
+  "transcript_records": [
+    {
+      "他項權利部": [],
+      "其他欄位": [
+        {
+          "值": "一建物登記第二類謄本(所有權個人全部",
+          "原因": "無法取類別與申請範圍",
+          "標籤": "謄本種類",
+          "部": "頁首"
+        }
+      ],
+      "判定": {
+        "他項權利": "無法判定",
+        "信託": "無法判定",
+        "限制登記": "無法判定"
+      },
+      "所有權部": [],
+      "標示部": null,
+      "注意事項": [],
+      "謄本": {
+        "列印時間": null,
+        "小段": null,
+        "查驗碼": null,
+        "查驗碼標籤": null,
+        "查驗網址": null,
+        "段": null,
+        "申請範圍": null,
+        "編號": null,
+        "編號類型": null,
+        "行政區": null,
+        "謄本核發機關": null,
+        "謄本種類": "一建物登記第二類謄本(所有權個人全部",
+        "資料管轄機關": null,
+        "頁數": null,
+        "頁首附註": [],
+        "類別": null
+      },
+      "部是否印出": {
+        "他項權利部": false,
+        "所有權部": false,
+        "標示部": false
+      },
+      "部附註": {
+        "他項權利部": [],
+        "所有權部": [],
+        "標示部": []
+      },
+      "類型": null
+    }
+  ],
   "transcripts": [
     {
       "header": {
@@ -217,56 +276,6 @@
         "本謄本之處理及利用·申請人應注意依個人資料保護法第5條、第19條·第",
         "20條及第29條規定辦理",
         "前次移轉現值資料,於課徵土地增值稅時,仍應以稅捐稽徵機關核算者為依據"
-      ]
-    }
-  ],
-  "transcript_records": [
-    {
-      "謄本": {
-        "謄本種類": "一建物登記第二類謄本(所有權個人全部",
-        "類別": null,
-        "申請範圍": null,
-        "行政區": null,
-        "段": null,
-        "小段": null,
-        "編號": null,
-        "編號類型": null,
-        "列印時間": null,
-        "頁數": null,
-        "查驗碼": null,
-        "查驗碼標籤": null,
-        "查驗網址": null,
-        "資料管轄機關": null,
-        "謄本核發機關": null,
-        "頁首附註": []
-      },
-      "類型": null,
-      "標示部": null,
-      "所有權部": [],
-      "他項權利部": [],
-      "判定": {
-        "他項權利": "無法判定",
-        "限制登記": "無法判定",
-        "信託": "無法判定"
-      },
-      "部是否印出": {
-        "標示部": false,
-        "所有權部": false,
-        "他項權利部": false
-      },
-      "部附註": {
-        "標示部": [],
-        "所有權部": [],
-        "他項權利部": []
-      },
-      "注意事項": [],
-      "其他欄位": [
-        {
-          "部": "頁首",
-          "標籤": "謄本種類",
-          "值": "一建物登記第二類謄本(所有權個人全部",
-          "原因": "無法取類別與申請範圍"
-        }
       ]
     }
   ]

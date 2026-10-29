@@ -82,12 +82,17 @@
       "section": "文化北段"
     }
   ],
+  "land_rights_scope": null,
+  "land_use_type": null,
+  "land_use_zone": null,
   "llm_used_for_extraction": false,
+  "main_material": null,
   "main_usage": "住",
   "needs_confirmation": [
     "main_material",
     "rights_scope"
   ],
+  "other_right_type": null,
   "owner": "王",
   "owners": [
     {
@@ -113,10 +118,61 @@
     }
   ],
   "print_date": "民國111年09月26日",
+  "rights_scope": null,
   "section": "文化北段",
+  "seizure_mark": null,
+  "shared_area": null,
+  "shared_build_number": null,
   "shared_parts": [],
+  "sub_building_area": null,
+  "sub_building_usage": null,
   "sub_buildings": [],
+  "subsection": null,
   "total_area": "202.95",
+  "total_floors": null,
+  "transcript_records": [
+    {
+      "他項權利部": [],
+      "其他欄位": [],
+      "判定": {
+        "他項權利": "無法判定",
+        "信託": "無法判定",
+        "限制登記": "無法判定"
+      },
+      "所有權部": [],
+      "標示部": null,
+      "注意事項": [],
+      "謄本": {
+        "列印時間": null,
+        "小段": null,
+        "查驗碼": null,
+        "查驗碼標籤": null,
+        "查驗網址": null,
+        "段": "文化北段",
+        "申請範圍": "建號全部",
+        "編號": "01391-000",
+        "編號類型": "建號",
+        "行政區": "三重區",
+        "謄本核發機關": null,
+        "謄本種類": "建物登記第二類謄本(建號全部)",
+        "資料管轄機關": null,
+        "頁數": null,
+        "頁首附註": [],
+        "類別": "第二類"
+      },
+      "部是否印出": {
+        "他項權利部": false,
+        "所有權部": false,
+        "標示部": false
+      },
+      "部附註": {
+        "他項權利部": [],
+        "所有權部": [],
+        "標示部": []
+      },
+      "類型": "建物"
+    }
+  ],
   "transcripts": [
     {
       "header": {
@@ -198,49 +254,6 @@
         "建物他項權利部",
         "(纳次頁)"
       ]
-    }
-  ],
-  "transcript_records": [
-    {
-      "謄本": {
-        "謄本種類": "建物登記第二類謄本(建號全部)",
-        "類別": "第二類",
-        "申請範圍": "建號全部",
-        "行政區": "三重區",
-        "段": "文化北段",
-        "小段": null,
-        "編號": "01391-000",
-        "編號類型": "建號",
-        "列印時間": null,
-        "頁數": null,
-        "查驗碼": null,
-        "查驗碼標籤": null,
-        "查驗網址": null,
-        "資料管轄機關": null,
-        "謄本核發機關": null,
-        "頁首附註": []
-      },
-      "類型": "建物",
-      "標示部": null,
-      "所有權部": [],
-      "他項權利部": [],
-      "判定": {
-        "他項權利": "無法判定",
-        "限制登記": "無法判定",
-        "信託": "無法判定"
-      },
-      "部是否印出": {
-        "標示部": false,
-        "所有權部": false,
-        "他項權利部": false
-      },
-      "部附註": {
-        "標示部": [],
-        "所有權部": [],
-        "他項權利部": []
-      },
-      "注意事項": [],
-      "其他欄位": []
     }
   ]
 }

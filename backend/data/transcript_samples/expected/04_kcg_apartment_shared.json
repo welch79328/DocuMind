@@ -1,5 +1,8 @@
 {
   "area": "69.52",
+  "building_address": null,
+  "building_number": null,
+  "completion_date": null,
   "extraction_confidence": 0.5625,
   "field_confidences": {
     "area": 0.9,
@@ -37,6 +40,7 @@
       "transcript_id": null
     }
   ],
+  "floor_level": null,
   "floors": [
     {
       "area": "69.52",
@@ -44,7 +48,11 @@
       "transcript_id": null
     }
   ],
+  "land_number": null,
   "land_numbers": [],
+  "land_rights_scope": null,
+  "land_use_type": null,
+  "land_use_zone": null,
   "llm_used_for_extraction": false,
   "main_material": "鋼筋混凝上造",
   "main_usage": "住家用",
@@ -56,8 +64,13 @@
     "owner",
     "rights_scope"
   ],
+  "other_right_type": null,
+  "owner": null,
   "owners": [],
+  "print_date": null,
+  "rights_scope": null,
   "section": "吉慶段",
+  "seizure_mark": null,
   "shared_area": "19.62",
   "shared_build_number": "00697-000",
   "shared_parts": [
@@ -71,6 +84,7 @@
       "transcript_id": null
     }
   ],
+  "sub_building_area": null,
   "sub_building_usage": "陽台",
   "sub_buildings": [
     {
@@ -84,7 +98,52 @@
       "usage": "花台"
     }
   ],
+  "subsection": null,
   "total_area": "69.52",
+  "total_floors": null,
+  "transcript_records": [
+    {
+      "他項權利部": [],
+      "其他欄位": [],
+      "判定": {
+        "他項權利": "無法判定",
+        "信託": "無法判定",
+        "限制登記": "無法判定"
+      },
+      "所有權部": [],
+      "標示部": null,
+      "注意事項": [],
+      "謄本": {
+        "列印時間": null,
+        "小段": null,
+        "查驗碼": null,
+        "查驗碼標籤": null,
+        "查驗網址": null,
+        "段": null,
+        "申請範圍": null,
+        "編號": null,
+        "編號類型": null,
+        "行政區": null,
+        "謄本核發機關": null,
+        "謄本種類": null,
+        "資料管轄機關": null,
+        "頁數": null,
+        "頁首附註": [],
+        "類別": null
+      },
+      "部是否印出": {
+        "他項權利部": false,
+        "所有權部": false,
+        "標示部": false
+      },
+      "部附註": {
+        "他項權利部": [],
+        "所有權部": [],
+        "標示部": []
+      },
+      "類型": null
+    }
+  ],
   "transcripts": [
     {
       "header": {
@@ -123,49 +182,6 @@
         "其他登記事項:使用執照字號:81瑞使40號",
         "重测前:大坑埔段大坑埔小段01277-000建號"
       ]
-    }
-  ],
-  "transcript_records": [
-    {
-      "謄本": {
-        "謄本種類": null,
-        "類別": null,
-        "申請範圍": null,
-        "行政區": null,
-        "段": null,
-        "小段": null,
-        "編號": null,
-        "編號類型": null,
-        "列印時間": null,
-        "頁數": null,
-        "查驗碼": null,
-        "查驗碼標籤": null,
-        "查驗網址": null,
-        "資料管轄機關": null,
-        "謄本核發機關": null,
-        "頁首附註": []
-      },
-      "類型": null,
-      "標示部": null,
-      "所有權部": [],
-      "他項權利部": [],
-      "判定": {
-        "他項權利": "無法判定",
-        "限制登記": "無法判定",
-        "信託": "無法判定"
-      },
-      "部是否印出": {
-        "標示部": false,
-        "所有權部": false,
-        "他項權利部": false
-      },
-      "部附註": {
-        "標示部": [],
-        "所有權部": [],
-        "他項權利部": []
-      },
-      "注意事項": [],
-      "其他欄位": []
     }
   ]
 }

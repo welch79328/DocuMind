@@ -73,7 +73,9 @@ def _direct_read_scale(rect) -> float:
     return DIRECT_READ_LONG_EDGE / long_edge_pt
 
 
-def _merge_page_structured_data(pages: List[dict]) -> Optional[Dict[str, Any]]:
+def _merge_page_structured_data(
+    pages: List[dict], keep_empty_keys: bool = True
+) -> Optional[Dict[str, Any]]:
     """跨頁彙整結構化欄位，只填補缺值，不用後面頁面覆蓋已抽到的值。
 
     2026-09-03 發現：謄本的關鍵欄位散在多頁（地號在 p1、建號在 p3，
@@ -92,7 +94,7 @@ def _merge_page_structured_data(pages: List[dict]) -> Optional[Dict[str, Any]]:
         if not isinstance(data, dict):
             continue
         seen_any = True
-        _merge_fill_missing(merged, data)
+        _merge_fill_missing(merged, data, keep_empty_keys)
 
     if not seen_any:
         return None
@@ -383,7 +385,9 @@ def _attach_transcript_records(document_fields: Dict[str, Any]) -> None:
         logger.warning(f"謄本固定格式建構失敗,省略 transcript_records: {e!r}")
 
 
-def _merge_fill_missing(target: Dict[str, Any], source: Dict[str, Any]) -> None:
+def _merge_fill_missing(
+    target: Dict[str, Any], source: Dict[str, Any], keep_empty_keys: bool = True
+) -> None:
     """遞迴地把 source 裡「target 缺少或為空」的欄位填進 target。
 
     field_confidences 等中繼欄位不遞迴合併值本身，改為取各頁最高信心度——
@@ -406,11 +410,17 @@ def _merge_fill_missing(target: Dict[str, Any], source: Dict[str, Any]) -> None:
             if not isinstance(existing, dict):
                 existing = {}
                 target[key] = existing
-            _merge_fill_missing(existing, value)
+            _merge_fill_missing(existing, value, keep_empty_keys)
             continue
 
+        # 鍵固定帶(2.7.0):各頁都空的欄位也要出現在 document_fields,值為頁面上的空值,
+        # 下游只需判斷值、不必另外處理「沒有這個鍵」。已有的空值再由後頁的非空值補上。
+        # keep_empty_keys=False 只給問答 context 用:提示詞維持改前內容(不含空值鍵)。
+        if keep_empty_keys and key not in target:
+            target[key] = value
+            continue
         current = target.get(key)
-        is_missing = current is None or current == "" or current == [] 
+        is_missing = current is None or current == "" or current == []
         if is_missing and value not in (None, "", []):
             target[key] = value
 
@@ -735,7 +745,7 @@ class AnalyzeService:
             # 不用後面頁面的殘值覆蓋前面已抽到的值）。原本這裡是
             # `all_structured.update(structured)`，後頁若把某欄位判成 None
             # 會蓋掉前頁已抽對的值。
-            all_structured = _merge_page_structured_data(pages) or {}
+            all_structured = _merge_page_structured_data(pages, keep_empty_keys=False) or {}
 
             context = {
                 "ocr_text": "\n".join(all_text),

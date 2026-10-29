@@ -1,0 +1,52 @@
+{
+ "header": {
+  "command": "cd backend && PYTHONPATH=. venv/bin/python replay.py replay_before.json (env: LOCAL_STORAGE_PATH tmp, STORAGE_TYPE=local, OCR_PRELOAD_MODEL=false)",
+  "run_at": "2026-10-29",
+  "tested_code": "35210a0 (app/ 無未提交改動=True)",
+  "note": "鍵路徑巢狀展開;field_confidences 整包為一葉"
+ },
+ "summary": {
+  "head": "35210a0",
+  "app_dirty": false,
+  "total": 348,
+  "by_type": {
+   "bill": {
+    "n": 63,
+    "ok": 42,
+    "identical": 63,
+    "lacking_page_keys": 21
+   },
+   "contract": {
+    "n": 24,
+    "ok": 0,
+    "identical": 24,
+    "lacking_page_keys": 24
+   },
+   "handover_photo": {
+    "n": 39,
+    "ok": 0,
+    "identical": 39,
+    "lacking_page_keys": 39
+   },
+   "repair_photo": {
+    "n": 137,
+    "ok": 114,
+    "identical": 137,
+    "lacking_page_keys": 23
+   },
+   "transcript": {
+    "n": 18,
+    "ok": 0,
+    "identical": 18,
+    "lacking_page_keys": 18
+   },
+   "receipt": {
+    "n": 67,
+    "ok": 64,
+    "identical": 67,
+    "lacking_page_keys": 3
+   }
+  },
+  "all_ok": false
+ }
+}

@@ -1,6 +1,6 @@
 # DocuMind OCR 對接規格（給外部系統開發者）
 
-> 版本 2.6.0 ／ 2026-10-28（2.6.0：新增文件類型 `receipt`（收據、發票，回 `amount`、`date`），見 §3.3.1；修繕照片新增 `damaged_items`，見 §3.4；`/classify` 能回 `receipt`；帳單、合約的影像與掃描 PDF 可改由視覺模型直讀、不跑本機 OCR（伺服器設定 `DIRECT_READ_DOCUMENT_TYPES`，預設不列），直讀類與照片類一律呼叫模型、不看 `enable_llm`，見 §2.1、§6；2.5.0：每頁新增 `llm_calls`，列出這一頁每次 LLM 呼叫送到哪個供應商、模型、服務等級、成功或錯誤類別，見 §2.4；LLM 補欄位呼叫失敗時 `llm_used_for_extraction` 為 `false`；2.4.0：謄本新增固定輸出格式 `transcript_records`，每張謄本的鍵固定、沒印回 `null`／`[]`，附 JSON Schema，見 §3.1.3；2.3.0：謄本新增 `transcripts`，謄本上印的每一項都依原文標籤回傳，見 §3.1.2；2.2.0：謄本新增 `print_date`；原文印空白的欄位回 `null`；土地／建物專屬的必要欄位只在該部存在時要求，見 §3.1；2.1.2：合約欄位的值改為半形數字與標點、帶框字還原，見 §3.2；2.1.1：持分欄位的值統一為「分數」或「全部」，見 §3.1；2.1.0：謄本新增 6 個清單欄位與 `land_rights_scope`，並寫明各單值欄位的取值範圍）
+> 版本 2.7.0 ／ 2026-10-29（2.7.0：`document_fields` 固定帶鍵——各頁 `structured_data` 有的鍵一律出現，各頁都是空值時回空值本身（`null`、`[]`、`""`），不再省略，見 §2；2.6.0：新增文件類型 `receipt`（收據、發票，回 `amount`、`date`），見 §3.3.1；修繕照片新增 `damaged_items`，見 §3.4；`/classify` 能回 `receipt`；帳單、合約的影像與掃描 PDF 可改由視覺模型直讀、不跑本機 OCR（伺服器設定 `DIRECT_READ_DOCUMENT_TYPES`，預設不列），直讀類與照片類一律呼叫模型、不看 `enable_llm`，見 §2.1、§6；2.5.0：每頁新增 `llm_calls`，列出這一頁每次 LLM 呼叫送到哪個供應商、模型、服務等級、成功或錯誤類別，見 §2.4；LLM 補欄位呼叫失敗時 `llm_used_for_extraction` 為 `false`；2.4.0：謄本新增固定輸出格式 `transcript_records`，每張謄本的鍵固定、沒印回 `null`／`[]`，附 JSON Schema，見 §3.1.3；2.3.0：謄本新增 `transcripts`，謄本上印的每一項都依原文標籤回傳，見 §3.1.2；2.2.0：謄本新增 `print_date`；原文印空白的欄位回 `null`；土地／建物專屬的必要欄位只在該部存在時要求，見 §3.1；2.1.2：合約欄位的值改為半形數字與標點、帶框字還原，見 §3.2；2.1.1：持分欄位的值統一為「分數」或「全部」，見 §3.1；2.1.0：謄本新增 6 個清單欄位與 `land_rights_scope`，並寫明各單值欄位的取值範圍）
 > 本文件由 `docs/API_INTEGRATION.md` 與 `docs/api/02-INTEGRATION-API.md` 合併而成。
 > 標示「實測」的數字皆取自線上環境(`54.248.201.66`),日期各自註明。
 > 唯一需要串的端點是 `POST /api/v1/analyze`；其餘為輔助。
@@ -129,8 +129,10 @@ curl -X POST "http://54.248.201.66:8085/api/v1/analyze" \
 **多頁文件務必讀 `document_fields`。** 謄本的地號在第 1 頁、建號在第 3 頁是常態，
 單頁的 `structured_data` 必然殘缺；`document_fields` 是「只填補缺值」合併後的完整結果，
 且 `needs_confirmation` 與 `extraction_confidence` 已依全文重算。
-**`document_fields` 不帶值為空的鍵**：每一頁都是 `null`、`""` 或 `[]` 的欄位，在 `document_fields` 裡該鍵不出現，
-只出現在 `pages[].structured_data`。所有文件類型都一樣；要固定鍵的單頁類型（修繕、點交照片）請讀 `pages[0].structured_data`。
+**`document_fields` 固定帶鍵**（2.7.0 起）：各頁 `structured_data` 有的鍵（含巢狀子鍵）在 `document_fields` 一律出現；
+每一頁都是空值的欄位，值就是空值本身（`null`、`[]` 或 `""`），請用值判斷有沒有內容，不要用「鍵在不在」。所有文件類型都一樣。
+例外：合約的 `rental_terms` 只在讀到租賃欄位時出現（§3.2）；謄本 `transcripts`／`transcript_records` 解析失敗時不出現（§3.1.2、§3.1.3）；
+`validation_warnings` 只在型別檢查不過時出現（§8）；所有頁都沒有 `structured_data` 時 `document_fields` 為 `null`。
 
 #### `pages[].llm_calls` — 這一頁的 LLM 呼叫紀錄（2.5.0 起）
 
@@ -279,7 +281,7 @@ curl -X POST "http://54.248.201.66:8085/api/v1/analyze/batch" \
 
 **原文印空白的欄位回 `null`**（2.2.0 起）：謄本把沒有內容的欄位印成「使用分區:(空白)」「建築完成日期:民國---年--月--日」，
 這類值不再原樣回傳。判斷規則：整個值是一段括號註記、日期的數字位置全是補位符號，或整個值只有符號。
-「原文空白」與「讀不到」在值上都是 `null`（`document_fields` 裡該鍵不出現），**用 `field_confidences` 分辨**：
+「原文空白」與「讀不到」在值上都是 `null`，**用 `field_confidences` 分辨**：
 原文空白是 0.9、不列入 `needs_confirmation`；讀不到是 0.0。2.2.0 以前這些欄位回的是字串 `"(空白)"`、`"民國---年--月--日"`。
 
 **單值欄位的取值範圍**（同名標籤在謄本上會出現好幾次，以下是系統取的那一個）：
@@ -532,7 +534,7 @@ curl -X POST "http://54.248.201.66:8085/api/v1/analyze/batch" \
   並列入 `needs_confirmation`；`needs_review` 會是 `true`。讀不到的欄位值為 `null`、信心度 `0.0`。
 - 模型呼叫失敗時不回錯誤，兩欄為 `null`、`needs_confirmation` 為 `["amount", "date"]`，失敗原因看 `pages[].llm_calls`。
 - `pages[].ocr_raw` 為 `null`；多頁 PDF 逐頁讀、`document_fields` 跨頁補值。
-- 值為 `null` 的欄位只出現在 `pages[].structured_data`；`document_fields` 裡該鍵不出現（與其他類型相同）。
+- 讀不到的欄位在 `document_fields` 裡同樣是 `null`（鍵固定帶，見 §2）。
 
 ### 3.4 `repair_photo` — 影像理解，非 OCR
 
@@ -547,8 +549,7 @@ curl -X POST "http://54.248.201.66:8085/api/v1/analyze/batch" \
 
 `damaged_items` 是照片裡**壞掉、損壞或有問題的物件**（字串陣列，照照片實際內容寫，不綁 JGB 的分類）；
 `defect_labels` 是瑕疵標籤。兩者獨立，不保證一一對應。
-`pages[0].structured_data` 一律帶這四個鍵，看不出損壞時兩個陣列是 `[]`；`document_fields` 不帶值為空的鍵（見 §2），
-看不出損壞時沒有 `damaged_items`、`defect_labels`。判斷有沒有損壞請讀 `pages[0].structured_data`。
+四個鍵一律存在，`document_fields` 與 `pages[0].structured_data` 都一樣；看不出損壞時兩個陣列是 `[]`。
 
 VLM 不可用或影像無法辨識時降級為 `{"defect_labels": [], "damaged_items": [], "description": "", "confidence": 0.0}`，
 **不會回錯誤**，請以 `confidence` 判斷是否可用；失敗與否看 `pages[].llm_calls`。
@@ -576,7 +577,7 @@ VLM 不可用或影像無法辨識時降級為 `{"defect_labels": [], "damaged_i
 但**不保證涵蓋照片裡的所有東西**。
 
 `dropped` 不是給終端使用者看的，是給維護者看的：同一個詞反覆出現代表詞彙表該補。
-影像模糊或空房時四個欄位在 `pages[0].structured_data` 回空值（不是 `null`），`confidence` 為 `0.0`；`document_fields` 不帶這些空值的鍵（見 §2）。
+影像模糊或空房時四個欄位回空值（不是 `null`），`confidence` 為 `0.0`；`document_fields` 同樣帶這些鍵（見 §2）。
 
 ---
 
