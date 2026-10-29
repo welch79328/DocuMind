@@ -36,6 +36,7 @@
 | [testing/bedrock-vlm-eval-20261023.md](./testing/bedrock-vlm-eval-20261023.md) | 紀錄：Bedrock 東京視覺模型 vs 線上（謄本、模擬掃描、單據、修繕照片、縮圖、flex、價格） |
 | [testing/bedrock-qwen-switch-20261028.md](./testing/bedrock-qwen-switch-20261028.md) | 紀錄：帳單／照片／合約改走 Bedrock Qwen3 VL（flex）的線上切換與改前改後 |
 | [testing/qwen-direct-read-20261029.md](./testing/qwen-direct-read-20261029.md) | 紀錄：收據、帳單、合約改 Qwen 直讀（不跑本機 OCR）與修繕物件欄位的線上實測 |
+| [testing/document-fields-fixed-keys-20261029.md](./testing/document-fields-fixed-keys-20261029.md) | 紀錄：`document_fields` 固定帶鍵（對接規格 2.7.0）的存檔重算與線上實測 |
 
 各版的計畫與驗收清單在 `.kiro/specs/transcript-*/acceptance.md`。
 
