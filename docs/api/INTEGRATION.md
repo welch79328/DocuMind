@@ -1,6 +1,6 @@
 # DocuMind OCR 對接規格（給外部系統開發者）
 
-> 版本 2.7.0 ／ 2026-10-29（2.7.0：`document_fields` 固定帶鍵——各頁 `structured_data` 有的鍵一律出現，各頁都是空值時回空值本身（`null`、`[]`、`""`），不再省略，見 §2；2.6.0：新增文件類型 `receipt`（收據、發票，回 `amount`、`date`），見 §3.3.1；修繕照片新增 `damaged_items`，見 §3.4；`/classify` 能回 `receipt`；帳單、合約的影像與掃描 PDF 可改由視覺模型直讀、不跑本機 OCR（伺服器設定 `DIRECT_READ_DOCUMENT_TYPES`，預設不列），直讀類與照片類一律呼叫模型、不看 `enable_llm`，見 §2.1、§6；2.5.0：每頁新增 `llm_calls`，列出這一頁每次 LLM 呼叫送到哪個供應商、模型、服務等級、成功或錯誤類別，見 §2.4；LLM 補欄位呼叫失敗時 `llm_used_for_extraction` 為 `false`；2.4.0：謄本新增固定輸出格式 `transcript_records`，每張謄本的鍵固定、沒印回 `null`／`[]`，附 JSON Schema，見 §3.1.3；2.3.0：謄本新增 `transcripts`，謄本上印的每一項都依原文標籤回傳，見 §3.1.2；2.2.0：謄本新增 `print_date`；原文印空白的欄位回 `null`；土地／建物專屬的必要欄位只在該部存在時要求，見 §3.1；2.1.2：合約欄位的值改為半形數字與標點、帶框字還原，見 §3.2；2.1.1：持分欄位的值統一為「分數」或「全部」，見 §3.1；2.1.0：謄本新增 6 個清單欄位與 `land_rights_scope`，並寫明各單值欄位的取值範圍）
+> 版本 2.7.1 ／ 2026-10-29（2.7.1：只改文件、回應不變——§3.5 點交照片範例改為實際格式（`furniture`、`appliance` 是物件陣列，8 個鍵與降級值寫明）；§3.2、§3.3 寫明金額欄位可能是數字；2.7.0：`document_fields` 固定帶鍵——各頁 `structured_data` 有的鍵一律出現，各頁都是空值時回空值本身（`null`、`[]`、`""`），不再省略，見 §2；2.6.0：新增文件類型 `receipt`（收據、發票，回 `amount`、`date`），見 §3.3.1；修繕照片新增 `damaged_items`，見 §3.4；`/classify` 能回 `receipt`；帳單、合約的影像與掃描 PDF 可改由視覺模型直讀、不跑本機 OCR（伺服器設定 `DIRECT_READ_DOCUMENT_TYPES`，預設不列），直讀類與照片類一律呼叫模型、不看 `enable_llm`，見 §2.1、§6；2.5.0：每頁新增 `llm_calls`，列出這一頁每次 LLM 呼叫送到哪個供應商、模型、服務等級、成功或錯誤類別，見 §2.4；LLM 補欄位呼叫失敗時 `llm_used_for_extraction` 為 `false`；2.4.0：謄本新增固定輸出格式 `transcript_records`，每張謄本的鍵固定、沒印回 `null`／`[]`，附 JSON Schema，見 §3.1.3；2.3.0：謄本新增 `transcripts`，謄本上印的每一項都依原文標籤回傳，見 §3.1.2；2.2.0：謄本新增 `print_date`；原文印空白的欄位回 `null`；土地／建物專屬的必要欄位只在該部存在時要求，見 §3.1；2.1.2：合約欄位的值改為半形數字與標點、帶框字還原，見 §3.2；2.1.1：持分欄位的值統一為「分數」或「全部」，見 §3.1；2.1.0：謄本新增 6 個清單欄位與 `land_rights_scope`，並寫明各單值欄位的取值範圍）
 > 本文件由 `docs/API_INTEGRATION.md` 與 `docs/api/02-INTEGRATION-API.md` 合併而成。
 > 標示「實測」的數字皆取自線上環境(`54.248.201.66`),日期各自註明。
 > 唯一需要串的端點是 `POST /api/v1/analyze`；其餘為輔助。
@@ -485,7 +485,8 @@ curl -X POST "http://54.248.201.66:8085/api/v1/analyze/batch" \
   "parties":           { "party_a": null, "party_b": null, "party_a_address": null, "party_b_address": null },
   "financial_terms":   { "contract_amount": null, "currency": null,
                          "payment_method": null, "payment_deadline": null },
-  "extraction_confidence": 0.0
+  "extraction_confidence": 0.0,
+  "llm_used_for_extraction": false
 }
 ```
 
@@ -506,9 +507,15 @@ curl -X POST "http://54.248.201.66:8085/api/v1/analyze/batch" \
 `llm_used_for_extraction` 在模型直讀成功時為 `true`、呼叫失敗時為 `false`（欄位全空、必要欄位全進 `needs_confirmation`）；`pages[].ocr_raw` 為 `null`。
 是否為租約由模型判斷，通用合約不要求租賃欄位。多頁合約逐頁直讀、跨頁「只填補缺值」彙整，與 `document_fields` 一致。
 
+**金額欄位的型別**（`contract_amount`、`monthly_rent`、`deposit`、`management_fee`、`parking_fee`）：規則抽取與直讀一律是字串；
+非直讀路徑由 LLM 補值時可能是數字（例：`25000`）。請兩種都接受，或一律轉成字串再處理。
+
 ### 3.3 `bill`
 
 `amount`（金額）、`date`（日期）、`account_no`（戶號）。
+
+`amount` 的型別：規則抽取與直讀一律是字串；非直讀路徑（文字層 PDF 等）由 LLM 補值時可能是數字（例：`714`）。請兩種都接受，
+或一律轉成字串再處理。
 
 **直讀（影像與掃描 PDF，伺服器開啟 `bill` 直讀時）：** 回應鍵與舊版完全相同
 （`amount`、`date`、`account_no`、`field_confidences`、`needs_confirmation`、`extraction_confidence`、
@@ -559,15 +566,25 @@ VLM 不可用或影像無法辨識時降級為 `{"defect_labels": [], "damaged_i
 ```json
 {
   "space": "living_room",
-  "space_label": "客廳",
-  "furniture": ["sofa", "coffee_table"],
-  "appliance": ["tv", "air_conditioner"],
+  "space_label": "客廳/餐廳",
+  "furniture": [
+    { "key": "sofa", "label": "沙發", "confidence": 0.9 },
+    { "key": "table", "label": "桌子", "confidence": 0.9 }
+  ],
+  "appliance": [
+    { "key": "TV", "label": "電視", "confidence": 0.86 }
+  ],
   "description": "客廳配置三人座沙發與電視…",
   "confidence": 0.86,
   "dropped": ["裝飾畫"],
-  "field_confidences": {}
+  "field_confidences": { "sofa": 0.9, "table": 0.9, "TV": 0.86 }
 }
 ```
+
+- `furniture`、`appliance` 是物件陣列：`key`（詞彙表的品項 key）、`label`（中文名）、`confidence`（該品項信心度）。
+  分到哪一類以詞彙表為準，不看模型放在哪個陣列；同一品項只出現一次。
+- `field_confidences` 的鍵是品項 key，值同該品項的 `confidence`；沒有品項時為 `{}`。
+- `dropped` 是字串陣列（模型講了、但對不上詞彙表的原文）。
 
 **輸出經過白名單過濾：只回傳詞彙表裡的 7 個空間 key 與 94 個品項 key。**
 模型講「電冰箱」「單人床架」這類自由文字，對不上就丟棄並記進 `dropped`。
@@ -577,7 +594,10 @@ VLM 不可用或影像無法辨識時降級為 `{"defect_labels": [], "damaged_i
 但**不保證涵蓋照片裡的所有東西**。
 
 `dropped` 不是給終端使用者看的，是給維護者看的：同一個詞反覆出現代表詞彙表該補。
-影像模糊或空房時四個欄位回空值（不是 `null`），`confidence` 為 `0.0`；`document_fields` 同樣帶這些鍵（見 §2）。
+8 個鍵一律存在，`document_fields` 同樣帶這些鍵（見 §2）。空房或影像模糊時 `furniture`、`appliance` 為 `[]`、`confidence` 偏低（`space` 可能仍有值）。
+模型呼叫失敗或回應無法解析時降級為
+`{"space": null, "space_label": "", "furniture": [], "appliance": [], "description": "", "confidence": 0.0, "dropped": [], "field_confidences": {}}`，
+**不會回錯誤**，請以 `confidence` 判斷是否可用；失敗與否看 `pages[].llm_calls`。
 
 ---
 
