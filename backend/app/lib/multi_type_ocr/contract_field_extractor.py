@@ -17,6 +17,7 @@ import re
 import logging
 from typing import Dict, Any, Optional
 from app.lib.multi_type_ocr.contract_patterns import PATTERNS
+from app.lib.multi_type_ocr.field_extraction_base import llm_value_as_text
 from app.lib.multi_type_ocr.text_normalize import normalize_for_matching, normalize_pattern
 from app.lib.llm_service import LLMService
 from app.lib.llm_service.llm_service import build_structured_extraction_prompt
@@ -492,7 +493,7 @@ class ContractFieldExtractor:
         # LLM 提取的非 None 欄位覆蓋正則結果
         for field_name, llm_value in llm_fields.items():
             if llm_value is not None and llm_value != "":
-                merged[field_name] = llm_value
+                merged[field_name] = llm_value_as_text(llm_value)
                 logger.debug(f"欄位 {field_name} 使用 LLM 提取結果")
 
         return merged

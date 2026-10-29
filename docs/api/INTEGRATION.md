@@ -1,6 +1,6 @@
 # DocuMind OCR 對接規格（給外部系統開發者）
 
-> 版本 2.7.1 ／ 2026-10-29（2.7.1：只改文件、回應不變——§3.5 點交照片範例改為實際格式（`furniture`、`appliance` 是物件陣列，8 個鍵與降級值寫明）；§3.2、§3.3 寫明金額欄位可能是數字；2.7.0：`document_fields` 固定帶鍵——各頁 `structured_data` 有的鍵一律出現，各頁都是空值時回空值本身（`null`、`[]`、`""`），不再省略，見 §2；2.6.0：新增文件類型 `receipt`（收據、發票，回 `amount`、`date`），見 §3.3.1；修繕照片新增 `damaged_items`，見 §3.4；`/classify` 能回 `receipt`；帳單、合約的影像與掃描 PDF 可改由視覺模型直讀、不跑本機 OCR（伺服器設定 `DIRECT_READ_DOCUMENT_TYPES`，預設不列），直讀類與照片類一律呼叫模型、不看 `enable_llm`，見 §2.1、§6；2.5.0：每頁新增 `llm_calls`，列出這一頁每次 LLM 呼叫送到哪個供應商、模型、服務等級、成功或錯誤類別，見 §2.4；LLM 補欄位呼叫失敗時 `llm_used_for_extraction` 為 `false`；2.4.0：謄本新增固定輸出格式 `transcript_records`，每張謄本的鍵固定、沒印回 `null`／`[]`，附 JSON Schema，見 §3.1.3；2.3.0：謄本新增 `transcripts`，謄本上印的每一項都依原文標籤回傳，見 §3.1.2；2.2.0：謄本新增 `print_date`；原文印空白的欄位回 `null`；土地／建物專屬的必要欄位只在該部存在時要求，見 §3.1；2.1.2：合約欄位的值改為半形數字與標點、帶框字還原，見 §3.2；2.1.1：持分欄位的值統一為「分數」或「全部」，見 §3.1；2.1.0：謄本新增 6 個清單欄位與 `land_rights_scope`，並寫明各單值欄位的取值範圍）
+> 版本 2.8.0 ／ 2026-10-29（2.8.0：欄位值一律是字串——模型補欄位時回的數字（如帳單 `amount` `714`、合約 `deposit` `50000`）改回字串 `"714"`、`"50000"`，見 §3；2.7.1：只改文件、回應不變——§3.5 點交照片範例改為實際格式（`furniture`、`appliance` 是物件陣列，8 個鍵與降級值寫明）；§3.2、§3.3 補金額欄位型別說明；2.7.0：`document_fields` 固定帶鍵——各頁 `structured_data` 有的鍵一律出現，各頁都是空值時回空值本身（`null`、`[]`、`""`），不再省略，見 §2；2.6.0：新增文件類型 `receipt`（收據、發票，回 `amount`、`date`），見 §3.3.1；修繕照片新增 `damaged_items`，見 §3.4；`/classify` 能回 `receipt`；帳單、合約的影像與掃描 PDF 可改由視覺模型直讀、不跑本機 OCR（伺服器設定 `DIRECT_READ_DOCUMENT_TYPES`，預設不列），直讀類與照片類一律呼叫模型、不看 `enable_llm`，見 §2.1、§6；2.5.0：每頁新增 `llm_calls`，列出這一頁每次 LLM 呼叫送到哪個供應商、模型、服務等級、成功或錯誤類別，見 §2.4；LLM 補欄位呼叫失敗時 `llm_used_for_extraction` 為 `false`；2.4.0：謄本新增固定輸出格式 `transcript_records`，每張謄本的鍵固定、沒印回 `null`／`[]`，附 JSON Schema，見 §3.1.3；2.3.0：謄本新增 `transcripts`，謄本上印的每一項都依原文標籤回傳，見 §3.1.2；2.2.0：謄本新增 `print_date`；原文印空白的欄位回 `null`；土地／建物專屬的必要欄位只在該部存在時要求，見 §3.1；2.1.2：合約欄位的值改為半形數字與標點、帶框字還原，見 §3.2；2.1.1：持分欄位的值統一為「分數」或「全部」，見 §3.1；2.1.0：謄本新增 6 個清單欄位與 `land_rights_scope`，並寫明各單值欄位的取值範圍）
 > 本文件由 `docs/API_INTEGRATION.md` 與 `docs/api/02-INTEGRATION-API.md` 合併而成。
 > 標示「實測」的數字皆取自線上環境(`54.248.201.66`),日期各自註明。
 > 唯一需要串的端點是 `POST /api/v1/analyze`；其餘為輔助。
@@ -216,6 +216,10 @@ curl -X POST "http://54.248.201.66:8085/api/v1/analyze/batch" \
 `field_confidences`（逐欄位 0.0–1.0）、`needs_confirmation`（信心不足、建議人工確認的欄位名陣列）、
 `extraction_confidence`（必要欄位平均）。`transcript`、`bill`、`contract` 另附 `llm_used_for_extraction`（bool；LLM 補欄位的呼叫成功才是 `true`，
 沒有呼叫或呼叫失敗都是 `false`，失敗的細節見 `pages[].llm_calls`）；`receipt` 沒有這個鍵，每頁都由模型直讀。
+
+**欄位值一律是字串**（2.8.0 起）：`transcript`、`bill`、`contract`、`receipt` 的單值欄位（含合約巢狀區塊裡的欄位）不是字串就是 `null`，不會是數字。
+金額照讀到的樣子回字串（例：`"25,000"`、`"714"`），要計算請自行轉數字。模型回整數值時不帶小數點（`25000.0` 回 `"25000"`）。
+`field_confidences`、`extraction_confidence` 這類信心度才是數字。
 
 **信心度是「這欄怎麼讀到的」標籤，不是準確率，請勿顯示成百分比。**
 `transcript`、`bill` 的 `field_confidences` 只會是下列幾個值，沒有中間值：
@@ -507,15 +511,9 @@ curl -X POST "http://54.248.201.66:8085/api/v1/analyze/batch" \
 `llm_used_for_extraction` 在模型直讀成功時為 `true`、呼叫失敗時為 `false`（欄位全空、必要欄位全進 `needs_confirmation`）；`pages[].ocr_raw` 為 `null`。
 是否為租約由模型判斷，通用合約不要求租賃欄位。多頁合約逐頁直讀、跨頁「只填補缺值」彙整，與 `document_fields` 一致。
 
-**金額欄位的型別**（`contract_amount`、`monthly_rent`、`deposit`、`management_fee`、`parking_fee`）：規則抽取與直讀一律是字串；
-非直讀路徑由 LLM 補值時可能是數字（例：`25000`）。請兩種都接受，或一律轉成字串再處理。
-
 ### 3.3 `bill`
 
 `amount`（金額）、`date`（日期）、`account_no`（戶號）。
-
-`amount` 的型別：規則抽取與直讀一律是字串；非直讀路徑（文字層 PDF 等）由 LLM 補值時可能是數字（例：`714`）。請兩種都接受，
-或一律轉成字串再處理。
 
 **直讀（影像與掃描 PDF，伺服器開啟 `bill` 直讀時）：** 回應鍵與舊版完全相同
 （`amount`、`date`、`account_no`、`field_confidences`、`needs_confirmation`、`extraction_confidence`、

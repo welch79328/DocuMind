@@ -39,6 +39,21 @@ def _first_captured_group(match) -> Optional[str]:
 
 
 
+def llm_value_as_text(value: Any) -> Any:
+    """模型補值寫進欄位前的型別統一(對接規格 2.8.0):數字一律轉字串。
+
+    規則抽取與直讀的值本來就是字串;只有模型補值會回 JSON 數字(實測帳單 amount 714、
+    合約 deposit 50000),同一欄位在字串與數字間浮動,對接方得寫兩套判斷。
+    整數值不帶小數點(25000.0 → "25000");其餘照 repr(1234.5 → "1234.5")。
+    bool 不是數字、物件與陣列不是單值,一律原樣。
+    """
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return value
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    return repr(value) if isinstance(value, float) else str(value)
+
+
 class RegexFieldExtractor:
     """規則 + LLM Vision 欄位抽取基類"""
 
@@ -94,7 +109,7 @@ class RegexFieldExtractor:
             if llm_fields is not None:
                 for key, value in llm_fields.items():
                     if key in self.KEY_FIELDS and value:
-                        fields[key] = value
+                        fields[key] = llm_value_as_text(value)
                         confidences[key] = self._LLM_CONFIDENCE
                 needs = [k for k in required if confidences[k] < self.threshold]
                 llm_used = True
