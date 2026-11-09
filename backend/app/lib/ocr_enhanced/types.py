@@ -5,7 +5,7 @@ Type Definitions for OCR Enhanced Module
 確保型別安全與介面契約清晰。
 """
 
-from typing import TypedDict, Protocol, Optional, Literal
+from typing import TypedDict, Protocol, Optional, Literal, NotRequired
 import numpy as np
 
 
@@ -66,11 +66,13 @@ class EngineResult(TypedDict):
         text: 辨識文字
         confidence: 信心度 (0-1)
         processing_time_ms: 處理時間（毫秒）
+        lines: 行框(選填,僅 PaddleOCR):[{"text", "box": [x0,y0,x1,y1] 比例}];取不到為 None
     """
     engine: str
     text: str
     confidence: float
     processing_time_ms: int
+    lines: NotRequired[Optional[list]]
 
 
 # ============================================================================

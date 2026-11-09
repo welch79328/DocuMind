@@ -641,11 +641,15 @@ class AnalyzeService:
         enable_llm: bool,
         question: Optional[str] = None,
         few_shot: Optional[List[dict]] = None,
+        ocr_lines_out: Optional[dict] = None,
     ) -> dict:
         """
         執行完整的文件分析流程
 
         流程：S3 上傳 → OCR 處理（注入 few-shot）→ 統計計算 → 組裝回應
+
+        ocr_lines_out:呼叫端傳入的容器;有傳才把各頁 OCR 行框({頁碼: [{"text","box"}]})放進去
+        (謄本照片位置用),沒傳就丟棄。頁結果與回應一律不留行框(私有鍵 _ocr_lines)。
         """
         import time
 
@@ -658,6 +662,12 @@ class AnalyzeService:
         pages, total_pages = await self._process_ocr(
             file_contents, filename, document_type, enable_llm, few_shot
         )
+
+        # 2b. 取出各頁私有行框:頁結果不留;只在呼叫端傳入容器時交出(不存實例屬性)
+        for page in pages:
+            lines = page.pop("_ocr_lines", None)
+            if lines and ocr_lines_out is not None:
+                ocr_lines_out[page.get("page_number")] = lines
 
         # 3. AI 問答（可選）
         answer = None

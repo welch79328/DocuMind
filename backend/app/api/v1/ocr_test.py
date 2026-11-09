@@ -366,6 +366,8 @@ async def _process_single_page(
         total_pages=total_pages,
         enable_llm=enable_llm
     )
+    # 行框是內部私有鍵,不進回應
+    result.pop("_ocr_lines", None)
 
     # 步驟 4: 如果提供了 ground_truth，計算準確率（向後兼容）
     if ground_truth:

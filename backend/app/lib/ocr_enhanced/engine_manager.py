@@ -279,10 +279,27 @@ class EngineManager:
             # (2.x 是 list[list[[bbox, (text, conf)]]],結構完全不同)
             text_lines = []
             confidences = []
+            # 行框(比例座標):rec_polys 每行外接矩形 ÷ 送進 predict() 的影像寬高;
+            # rec_polys 缺或與 rec_texts 數量不符 → None(不猜)
+            img_h, img_w = img_rgb.shape[:2]
+            lines = []
+            lines_ok = True
 
             for page in (result or []):
                 texts = page.get("rec_texts") or []
                 scores = page.get("rec_scores") or []
+                polys = page.get("rec_polys")
+                if polys is None or len(polys) != len(texts) or not img_w or not img_h:
+                    lines_ok = False
+                else:
+                    for t, poly in zip(texts, polys):
+                        arr = np.asarray(poly, dtype=float).reshape(-1, 2)
+                        lines.append({"text": t, "box": [
+                            round(float(arr[:, 0].min()) / img_w, 4),
+                            round(float(arr[:, 1].min()) / img_h, 4),
+                            round(float(arr[:, 0].max()) / img_w, 4),
+                            round(float(arr[:, 1].max()) / img_h, 4),
+                        ]})
                 for text_content, confidence in zip(texts, scores):
                     text_lines.append(text_content)
                     confidences.append(float(confidence))
@@ -293,16 +310,17 @@ class EngineManager:
             # 計算平均信心度
             avg_confidence = sum(confidences) / len(confidences) if confidences else 0.0
 
-            return text, avg_confidence, processing_time_ms
+            return text, avg_confidence, processing_time_ms, (lines if lines_ok else None)
 
         # 使用 asyncio.to_thread 執行同步函數
-        text, confidence, processing_time_ms = await asyncio.to_thread(_ocr_sync)
+        text, confidence, processing_time_ms, lines = await asyncio.to_thread(_ocr_sync)
 
         return {
             "engine": "paddleocr",
             "text": text,
             "confidence": self._standardize_confidence("paddleocr", confidence),
-            "processing_time_ms": processing_time_ms
+            "processing_time_ms": processing_time_ms,
+            "lines": lines,
         }
 
     async def _run_tesseract(self, image: np.ndarray) -> EngineResult:

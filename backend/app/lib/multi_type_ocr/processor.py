@@ -173,6 +173,10 @@ class OcrDocumentProcessor(DocumentProcessor):
         """OCR 文字提取,回傳 (文字, 信心度 0.0-1.0)"""
         pass
 
+    def _take_page_ocr_lines(self) -> Optional[List[Dict[str, Any]]]:
+        """子類別可覆寫:取出本頁 OCR 行框(私有鍵 _ocr_lines 用);預設沒有。"""
+        return None
+
     @staticmethod
     def _to_bgr_array(image: Image.Image) -> np.ndarray:
         """
@@ -453,6 +457,7 @@ class OcrDocumentProcessor(DocumentProcessor):
         else:
             raw_text, ocr_confidence = await self.extract_text(preprocessed_image)
         ocr_raw_result = {"text": raw_text, "confidence": ocr_confidence}
+        page_ocr_lines = self._take_page_ocr_lines()
 
         # 步驟 3b:各候選純規則式抽取 → 欄位層共識(零 LLM 成本)
         consensus = None
@@ -554,6 +559,10 @@ class OcrDocumentProcessor(DocumentProcessor):
                 "available": consensus["consensus_available"],
                 "agreements": consensus["agreements"],
             }
+
+        # 私有鍵:行框只供 AnalyzeService 取出後交給呼叫端,不進回應(取出後頁結果不留)
+        if page_ocr_lines:
+            result["_ocr_lines"] = page_ocr_lines
 
         return result
 

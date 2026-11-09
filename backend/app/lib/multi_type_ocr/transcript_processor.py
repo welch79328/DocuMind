@@ -6,7 +6,8 @@
 """
 
 import logging
-from typing import Dict, Any, Optional
+from contextvars import ContextVar
+from typing import Dict, Any, List, Optional
 from PIL import Image
 
 from .processor import OcrDocumentProcessor
@@ -17,6 +18,13 @@ from ..ocr_enhanced.postprocessor import TranscriptPostprocessor
 from .transcript_field_extractor import TranscriptFieldExtractor
 
 logger = logging.getLogger(__name__)
+
+# 該頁任務這一次 extract_text 取得的 PaddleOCR 行框(S3)。
+# 放 ContextVar 而不是實例屬性:同一請求的各頁以 asyncio.gather 並發、共用一個處理器,
+# 每頁是獨立任務、各有自己的 context,不會互相覆蓋。
+_PAGE_OCR_LINES: ContextVar[Optional[List[Dict[str, Any]]]] = ContextVar(
+    "transcript_page_ocr_lines", default=None
+)
 
 
 class TranscriptProcessor(OcrDocumentProcessor):
@@ -134,13 +142,20 @@ class TranscriptProcessor(OcrDocumentProcessor):
         """
         logger.debug("開始 OCR 文字提取")
 
+        _PAGE_OCR_LINES.set(None)
         try:
             # 轉換為 EngineManager 所需的 BGR numpy array(共用輔助方法)
             image_array = self._to_bgr_array(image)
 
             # 調用 EngineManager 提取文字
-            text, confidence, _engine_results = \
+            text, confidence, engine_results = \
                 await self.engine_manager.extract_text_multi_engine(image_array)
+
+            # 融合後文字＝PaddleOCR 那份 text 時,行框才算這頁的(Tesseract 等沒有行框)
+            for er in engine_results or []:
+                if er.get("engine") == "paddleocr" and er.get("lines") and er.get("text") == text:
+                    _PAGE_OCR_LINES.set(er["lines"])
+                    break
 
             logger.debug(f"OCR 完成，信心度: {confidence:.2f}")
 
@@ -149,6 +164,12 @@ class TranscriptProcessor(OcrDocumentProcessor):
         except Exception as e:
             logger.error(f"文字提取失敗: {str(e)}", exc_info=True)
             raise
+
+    def _take_page_ocr_lines(self) -> Optional[List[Dict[str, Any]]]:
+        """取出並清掉本頁任務這一次 extract_text 留下的行框(沒有就 None)。"""
+        lines = _PAGE_OCR_LINES.get()
+        _PAGE_OCR_LINES.set(None)
+        return lines
 
     async def extract_text_candidates(self, image: Image.Image) -> list:
         """

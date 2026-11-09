@@ -262,3 +262,183 @@ def compute_positions(texts: List[str], file_contents: bytes, records: List[Dict
         return None
     geos = _page_geometries(file_contents, texts)
     return [_sheet_positions(t, r, tr, geos) for t, r, tr in zip(transcripts, rebuilt, traces)]
+
+
+# ---------------------------------------------------------------------------
+# 照片／無文字層 PDF(S3,計畫 plan-s3.md §2 路徑 5):值文字反查 OCR 行,框到「值所在的那一行」
+# ---------------------------------------------------------------------------
+def _n(s: Any) -> str:
+    return _ND.sub("", normalize_for_matching(str(s)))
+
+
+def _exif_rotated(file_contents: Optional[bytes]) -> bool:
+    """影像檔 EXIF Orientation 標記存在且不是 1 → True(框的座標系與下游看到的方向不同,不猜)。PDF 不適用。"""
+    if not file_contents or file_contents[:5] == b"%PDF-":
+        return False
+    try:
+        import io
+        from PIL import Image
+        with Image.open(io.BytesIO(file_contents)) as im:
+            o = im.getexif().get(0x0112)
+        return o is not None and o != 1
+    except Exception:
+        return False     # 讀不出標記不當作有旋轉
+
+
+def _page_text(p: Dict[str, Any]) -> str:
+    # 與 analyze_service._attach_full_transcripts 取同一份文字解析
+    return (p.get("rule_postprocessed") or {}).get("text") or (p.get("ocr_raw") or {}).get("text") or ""
+
+
+def _located_pages(o: Any, acc: set) -> None:
+    """transcript 內所有 Located(值與 dict 鍵)出現過的頁(1 起算)。"""
+    if isinstance(o, Located):
+        acc.update(c[0] for c in o.cm if c is not None)
+    elif isinstance(o, str):
+        return
+    if isinstance(o, dict):
+        for k, v in o.items():
+            _located_pages(k, acc)
+            _located_pages(v, acc)
+    elif isinstance(o, (list, tuple)):
+        for v in o:
+            _located_pages(v, acc)
+
+
+def _sheet_page_sets(pages: List[Dict[str, Any]], records: List[Dict[str, Any]]) -> Optional[List[set]]:
+    """每張謄本出現在哪幾頁(pages 的索引 0 起算);帳目拿不到或與 records 對不上 → None(候選用全部頁)。"""
+    if len(pages) < 2:
+        return None
+    try:
+        from .transcript_full_parser import parse_with_ledger
+        transcripts = parse_with_ledger([_page_text(p) for p in pages], track=True)[0]
+        rebuilt, _ = build_with_trace(transcripts)
+        if rebuilt != records:
+            return None
+        out = []
+        for t in transcripts:
+            acc: set = set()
+            _located_pages(t, acc)
+            out.append({n - 1 for n in acc})
+        return out
+    except Exception:
+        return None
+
+
+def _pick_line(value: Any, path: str, cands: List[tuple], rank: int = 0, sibs: Tuple[str, ...] = ()) -> tuple:
+    """cands=[(頁, 行 dict, 正規化行文字)] 非空,依頁序、OCR 行序。
+    多行:先找「葉鍵與上一層鍵名(去掉 [i])出現在值之前」個數最多的第一行,再從它起往下數第 rank 個候選
+    (rank＝同一清單、同一欄位、同一個值在這一項之前出現過幾次,例:四個層次面積都是 96.51 → 依序第 0～3 行);
+    不夠就取最後一個。
+    鍵名最多的行裡有一行也印了同一清單項目的其他欄位值(sibs,已正規化)→ 取那一行、不往下數
+    (例:「建物坐落地號：公園段三小段 0167-0000 0168-0000」一行印了兩筆的段小段);只看鍵名最多的行,
+    不看別部的行(他項權利部的「共同擔保地號」「債務人」行常重複印這些值);鍵名一個都沒對上時不用這條
+    (OCR 常把值拆到沒印鍵名的下一行,這時其他欄位值會把它拉到別部)。"""
+    if len(cands) == 1:
+        return cands[0]
+    segs = [re.sub(r"\[\d+\]", "", s) for s in path.split(".")]
+    labs = [_n(s) for s in segs[-2:] if _n(s)]
+    nv = _n(value)
+
+    def n_labels_before(c):
+        t = c[2]
+        vi = t.find(nv) if nv in t else len(t)
+        return sum(1 for lb in labs if 0 <= t.find(lb) < vi)
+
+    # 鍵名在值之前對上最多的行;同數取先(例:「層次面積 95.41」勝過「總面積 95.41」)
+    best = max(n_labels_before(c) for c in cands)
+    tops = [c for c in cands if n_labels_before(c) == best]
+    with_sib = [c for c in tops if any(sv in c[2] for sv in sibs)] if best > 0 else []
+    if with_sib:
+        return with_sib[0]
+    # 從第一個最高分的行起往下數第 rank 個候選(續行常不印鍵名,例「層次面積：96.51」下面接「96.51」)
+    seq = cands[next(i for i, c in enumerate(cands) if n_labels_before(c) == best):]
+    return seq[min(rank, len(seq) - 1)]
+
+
+def _page_head(lines: List[tuple]) -> Optional[str]:
+    """頁首正規化文字:第一行到含「頁次」的那一行(每頁謄本頁首都印到頁次為止);前 12 行內沒有頁次 → None。"""
+    for j, c in enumerate(lines[:12]):
+        if "頁次" in c[2]:
+            return "".join(x[2] for x in lines[:j + 1])
+    return None
+
+
+def _head_pages(rec: Dict[str, Any], heads: Dict[int, Optional[str]]) -> Optional[set]:
+    """依每頁頁首印的編號與謄本種類,找這張謄本在哪幾頁(頁索引);頁首讀不到的頁一律留著。
+    先比編號(謄本.編號,例 00465-000),都沒對上再比種類(類型 + 「登記」,例「建物登記」);都沒對上 → None(用全部頁)。"""
+    unknown = {i for i, h in heads.items() if h is None}
+    known = {i: h for i, h in heads.items() if h is not None}
+    no = _n((rec.get("謄本") or {}).get("編號") or "")
+    kind = _n(rec.get("類型") or "")
+    for key in ([no] if no else []) + ([kind + "登記"] if kind else []):
+        hit = {i for i, h in known.items() if key in h}
+        if hit:
+            return hit | unknown
+    return None
+
+
+def _clamp_box(box: List[float]) -> List[float]:
+    return [round(min(1.0, max(0.0, float(x))), 4) for x in box]
+
+
+def compute_photo_positions(
+    pages: List[Dict[str, Any]],
+    ocr_lines: Optional[Dict[int, List[Dict[str, Any]]]],
+    file_contents: Optional[bytes],
+    records: List[Dict[str, Any]],
+    filled: List[Dict[str, Any]],
+):
+    """照片／無文字層 PDF → 每張一份 {葉子路徑: (值, position)}(只放有位置的);不適用 → None。
+
+    pages:analyze 的頁結果;ocr_lines:{頁碼: [{"text","box"}]};records:補值前;filled:補值後(位置對補值後的值)。
+    只用 text_layer 非 true、有行框、且 ocr_raw.text＝各行 text 以 \\n 相接的頁;EXIF 方向非 1 → None。"""
+    if not ocr_lines or not pages or _exif_rotated(file_contents):
+        return None
+    usable: Dict[int, List[tuple]] = {}      # 頁索引 → [(頁碼, 行, 正規化行文字)]
+    for i, p in enumerate(pages):
+        if not isinstance(p, dict) or p.get("text_layer") is True:
+            continue
+        pno = p.get("page_number")
+        lines = ocr_lines.get(pno)
+        if not lines or "\n".join(l["text"] for l in lines) != (p.get("ocr_raw") or {}).get("text"):
+            continue
+        usable[i] = [(pno, l, _n(l["text"])) for l in lines]
+    if not usable:
+        return None
+    sets = _sheet_page_sets(pages, records)
+    heads = {i: _page_head(usable[i]) for i in usable}
+    out = []
+    for si, rec in enumerate(filled):
+        # 帳目記到這張的頁 → 只用那些頁;帳目拿不到或沒記到(OCR 文字常解析不出帶來源的值)→ 改看每頁頁首;
+        # 頁首也對不上 → 候選用全部頁(計畫 §2 路徑 5、AM-8)
+        allowed = sets[si] if sets is not None and si < len(sets) and sets[si] else _head_pages(rec, heads)
+        pool = [c for i in sorted(usable) if allowed is None or i in allowed for c in usable[i]]
+        m: Dict[str, Tuple[Any, Dict[str, Any]]] = {}
+        seen: Dict[tuple, int] = {}     # (去掉 [i] 的路徑, 值) → 之前出現過幾次(AM-9:清單第 k 次同值對第 k 個行)
+        all_leaves = list(_leaves({k: v for k, v in rec.items() if k not in _SKIP_KEYS}))
+        for path, value in all_leaves:
+            if isinstance(value, bool) or not isinstance(value, (str, int, float)):
+                continue
+            nv = _n(value)
+            if not nv:
+                continue
+            is_num = isinstance(value, (int, float))
+            cands = [c for c in pool
+                     if nv in c[2] or (is_num and any(to_number(t) == value for t in _NUM.findall(c[2])))]
+            if not cands:
+                continue
+            tk = (re.sub(r"\[\d+\]", "[]", path), nv)
+            rank = seen.get(tk, 0) if "[" in path else 0
+            seen[tk] = rank + 1
+            sibs: Tuple[str, ...] = ()
+            if "]" in path:                       # 同一清單項目的其他欄位值(AM-9)
+                item = path[:path.rindex("]") + 1]
+                sibs = tuple(x for x in (_n(v) for q, v in all_leaves
+                                         if q != path and q.startswith(item + ".") and not isinstance(v, bool)
+                                         and isinstance(v, (str, int, float)))
+                             if x and x != nv)
+            pno, line, _ = _pick_line(value, path, cands, rank, sibs)
+            m[path] = (value, {"page": pno, "box": _clamp_box(line["box"]), "unit": "ratio"})
+        out.append(m)
+    return out

@@ -800,11 +800,26 @@ def _electronic_positions(result: Dict[str, Any], records: List[Dict[str, Any]],
         return None
 
 
-def apply_transcript_format(result: Dict[str, Any], file_contents: Optional[bytes] = None) -> Dict[str, Any]:
+def _photo_positions(result: Dict[str, Any], records: List[Dict[str, Any]], filled: List[Dict[str, Any]],
+                     file_contents: Optional[bytes], ocr_lines: Optional[Dict[int, list]]):
+    """照片／無文字層 PDF 的位置表(S3,每張一份);不適用或失敗 → None(position 全為 null)。"""
+    if not ocr_lines:
+        return None
+    try:
+        from .transcript_positions import compute_photo_positions
+        return compute_photo_positions(result.get("pages") or [], ocr_lines, file_contents, records, filled)
+    except Exception as e:
+        logger.warning(f"謄本照片位置組裝失敗,position 全為 null: {e!r}")
+        return None
+
+
+def apply_transcript_format(result: Dict[str, Any], file_contents: Optional[bytes] = None,
+                            ocr_lines: Optional[Dict[int, list]] = None) -> Dict[str, Any]:
     """transcript_format="v2":回傳新 dict(深拷貝,不改輸入)。
 
     file_contents(上傳原檔)有給、且各頁 text_layer 為 true(電子 PDF)時,值的 position 填電子檔上的框(S2);
-    其餘(照片、沒給原檔、位置組裝失敗、重建的 records 與輸入不同)position 一律 None。補進的值 position 為 None。
+    照片／無文字層 PDF 有給 ocr_lines({頁碼: OCR 行框})時,值的 position 填「值所在那一行」的框(S3,含補進的值);
+    其餘(沒給原檔、位置組裝失敗、重建的 records 與輸入不同)position 一律 None。電子 PDF 補進的值 position 為 None。
 
     document_fields.transcript_records 換成補值並包 {value, position} 的版本;
     拿掉 25 個單值欄位、6 種清單與 transcripts;每頁 structured_data 只拿掉這 31 個舊鍵。
@@ -822,6 +837,8 @@ def apply_transcript_format(result: Dict[str, Any], file_contents: Optional[byte
         if isinstance(records, list):
             posmaps = _electronic_positions(new, records, file_contents)
             filled = fill_from_rules(records, result["document_fields"])
+            if posmaps is None:
+                posmaps = _photo_positions(new, records, filled, file_contents, ocr_lines)
             df["transcript_records"] = [_wrap_record(r, posmaps[i] if posmaps and i < len(posmaps) else None)
                                         for i, r in enumerate(filled)]
         for k in old_keys | {"transcripts"}:

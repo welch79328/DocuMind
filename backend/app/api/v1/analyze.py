@@ -390,6 +390,7 @@ async def analyze_document(
 
         # 6. 呼叫分析服務(傳入正規化後的權威型別與 few-shot)
         service = AnalyzeService()
+        ocr_lines: dict = {}
         result = await service.analyze(
             file_contents=contents,
             filename=file.filename or "unknown",
@@ -397,6 +398,7 @@ async def analyze_document(
             enable_llm=enable_llm,
             question=question,
             few_shot=few_shot,
+            ocr_lines_out=ocr_lines,
         )
 
         # 7. 信心度攔截:低信心自動入複核佇列並標示 needs_review
@@ -404,7 +406,7 @@ async def analyze_document(
         # 8. 謄本 v2 格式:須在信心度攔截之後(複核佇列存的是未轉換的 pages)
         if transcript_format == "v2" and resolved_document_type == "transcript":
             from app.lib.multi_type_ocr.transcript_records import apply_transcript_format
-            return apply_transcript_format(result, contents)
+            return apply_transcript_format(result, contents, ocr_lines=ocr_lines)
         return result
 
     except AnalyzeError as e:

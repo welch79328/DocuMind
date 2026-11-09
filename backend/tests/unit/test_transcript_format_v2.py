@@ -200,12 +200,14 @@ class TestApi:
         seen = {}
         real = tr.apply_transcript_format
 
-        def spy(result, file_contents=None):
+        def spy(result, file_contents=None, ocr_lines=None):
             seen["contents"] = file_contents
-            return real(result, file_contents)
+            seen["ocr_lines"] = ocr_lines
+            return real(result, file_contents, ocr_lines=ocr_lines)
         with patch.object(tr, "apply_transcript_format", spy):
             resp = await _post(transcript_format="v2")
         assert resp.status_code == 200 and seen["contents"] == b"%PDF-1.4 fake"
+        assert seen["ocr_lines"] == {}      # S3:單檔端點傳入收行框的容器(此測試的假 service 沒有行框)
 
     async def test_invalid_value_400(self, db_override):
         resp = await _post(transcript_format="v3")
