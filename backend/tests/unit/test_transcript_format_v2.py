@@ -194,6 +194,19 @@ class TestApi:
         assert "building_number" not in df and "transcripts" not in df
         assert df["transcript_records"][0]["謄本"]["編號"] == {"value": "100", "position": None}
 
+    async def test_v2_passes_uploaded_bytes_to_transform(self, db_override):
+        """S2:電子 PDF 位置要從上傳原檔取,API 第 8 步把 contents 傳進轉換"""
+        from app.lib.multi_type_ocr import transcript_records as tr
+        seen = {}
+        real = tr.apply_transcript_format
+
+        def spy(result, file_contents=None):
+            seen["contents"] = file_contents
+            return real(result, file_contents)
+        with patch.object(tr, "apply_transcript_format", spy):
+            resp = await _post(transcript_format="v2")
+        assert resp.status_code == 200 and seen["contents"] == b"%PDF-1.4 fake"
+
     async def test_invalid_value_400(self, db_override):
         resp = await _post(transcript_format="v3")
         assert resp.status_code == 400

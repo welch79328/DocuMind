@@ -21,6 +21,7 @@ build_with_trace 另回傳每個原文值的去處(驗收 R2/R3 對帳用);API �
 """
 
 import json
+import logging
 import os
 import re
 from typing import Any, Dict, Iterator, List, Optional, Tuple
@@ -30,6 +31,8 @@ from .text_normalize import is_blank_marker, normalize_for_matching
 _CODES_PATH = os.path.join(os.path.dirname(__file__), "transcript_records_codes.json")
 with open(_CODES_PATH, encoding="utf-8") as _f:
     CODES = json.load(_f)
+
+logger = logging.getLogger(__name__)
 
 PARTS = ("標示部", "所有權部", "他項權利部")
 VERDICTS = ("有", "未見", "無法判定")
@@ -764,22 +767,44 @@ def fill_from_rules(records: List[Dict[str, Any]], fields: Dict[str, Any]) -> Li
     return out
 
 
-def _wrap(o: Any) -> Any:
+def _wrap(o: Any, path: str = "", pos: Optional[Dict[str, Any]] = None) -> Any:
+    """每個有值葉子包成 {value, position}。pos={葉子路徑: (值, position)}(S2),路徑與值都對上才附位置,否則 None。"""
     if isinstance(o, dict):
-        return {k: _wrap(v) for k, v in o.items()}
+        return {k: _wrap(v, f"{path}.{k}" if path else k, pos) for k, v in o.items()}
     if isinstance(o, list):
-        return [_wrap(v) for v in o]
+        return [_wrap(v, f"{path}[{i}]", pos) for i, v in enumerate(o)]
     if o is None:
         return None
-    return {"value": o, "position": None}
+    hit = (pos or {}).get(path)
+    p = hit[1] if hit and type(hit[0]) is type(o) and hit[0] == o else None
+    return {"value": o, "position": p}
 
 
-def _wrap_record(rec: Dict[str, Any]) -> Dict[str, Any]:
-    return {k: (v if k in _UNWRAPPED_KEYS else _wrap(v)) for k, v in rec.items()}
+def _wrap_record(rec: Dict[str, Any], pos: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    return {k: (v if k in _UNWRAPPED_KEYS else _wrap(v, k, pos)) for k, v in rec.items()}
 
 
-def apply_transcript_format(result: Dict[str, Any]) -> Dict[str, Any]:
+def _electronic_positions(result: Dict[str, Any], records: List[Dict[str, Any]], file_contents: Optional[bytes]):
+    """電子 PDF 的位置表(每張一份);不適用或失敗 → None(position 全為 null,不影響其他欄位)。"""
+    pages = result.get("pages") or []
+    if not file_contents or not pages or not all(isinstance(p, dict) and p.get("text_layer") is True for p in pages):
+        return None
+    try:
+        from .transcript_positions import compute_positions
+        # 與 analyze_service._attach_full_transcripts 取同一份文字解析
+        texts = [(p.get("rule_postprocessed") or {}).get("text") or (p.get("ocr_raw") or {}).get("text") or ""
+                 for p in pages]
+        return compute_positions(texts, file_contents, records)
+    except Exception as e:
+        logger.warning(f"謄本位置組裝失敗,position 全為 null: {e!r}")
+        return None
+
+
+def apply_transcript_format(result: Dict[str, Any], file_contents: Optional[bytes] = None) -> Dict[str, Any]:
     """transcript_format="v2":回傳新 dict(深拷貝,不改輸入)。
+
+    file_contents(上傳原檔)有給、且各頁 text_layer 為 true(電子 PDF)時,值的 position 填電子檔上的框(S2);
+    其餘(照片、沒給原檔、位置組裝失敗、重建的 records 與輸入不同)position 一律 None。補進的值 position 為 None。
 
     document_fields.transcript_records 換成補值並包 {value, position} 的版本;
     拿掉 25 個單值欄位、6 種清單與 transcripts;每頁 structured_data 只拿掉這 31 個舊鍵。
@@ -795,7 +820,10 @@ def apply_transcript_format(result: Dict[str, Any]) -> Dict[str, Any]:
     if isinstance(df, dict):
         records = df.get("transcript_records")
         if isinstance(records, list):
-            df["transcript_records"] = [_wrap_record(r) for r in fill_from_rules(records, result["document_fields"])]
+            posmaps = _electronic_positions(new, records, file_contents)
+            filled = fill_from_rules(records, result["document_fields"])
+            df["transcript_records"] = [_wrap_record(r, posmaps[i] if posmaps and i < len(posmaps) else None)
+                                        for i, r in enumerate(filled)]
         for k in old_keys | {"transcripts"}:
             df.pop(k, None)
     for page in new.get("pages") or []:

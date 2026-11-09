@@ -404,7 +404,7 @@ async def analyze_document(
         # 8. 謄本 v2 格式:須在信心度攔截之後(複核佇列存的是未轉換的 pages)
         if transcript_format == "v2" and resolved_document_type == "transcript":
             from app.lib.multi_type_ocr.transcript_records import apply_transcript_format
-            return apply_transcript_format(result)
+            return apply_transcript_format(result, contents)
         return result
 
     except AnalyzeError as e:

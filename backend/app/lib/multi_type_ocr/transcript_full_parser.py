@@ -28,7 +28,7 @@ TranscriptFieldExtractor 一個欄位一條規則,只回 25 個單值欄位＋6 
 
 import re
 import unicodedata
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from .text_normalize import is_blank_marker, normalize_for_matching
 
@@ -45,6 +45,56 @@ LABEL = re.compile(rf"((?<![{CJK}])[{CJK}](?:[ ]{{1,6}}[{CJK}])+(?![{CJK}])|[{CJ
 
 # 帳目裡「略過」的原因只能是這四種(驗收 E1)
 SKIP_REASONS = ("空行", "續次頁標記", "列印完畢標記", "重複頁首")
+
+
+class Located(str):
+    """帶來源位置的字串(S2):cm[j] = 第 j 個字在正規化後原文的 (頁, 行, 欄),不是原文印出的字(補的空白、
+    標籤尾綴)為 None。是 str 子類,等值、可 json、可 deepcopy;只在 track=True 時才出現。"""
+
+    def __new__(cls, s: str = "", cm=None):
+        o = super().__new__(cls, s)
+        o.cm = list(cm) if cm is not None else [None] * len(s)
+        return o
+
+    @property
+    def spans(self) -> List[Tuple[int, int, int, int]]:
+        """[(頁, 行, 起, 迄)],起迄為該行正規化後的字元索引([起, 迄))。相鄰的字併成一段。"""
+        out: List[List[int]] = []
+        cur = None
+        for c in self.cm:
+            if c is None:
+                cur = None
+            elif cur is not None and cur[0] == c[0] and cur[1] == c[1] and cur[3] == c[2]:
+                cur[3] = c[2] + 1
+            else:
+                cur = [c[0], c[1], c[2], c[2] + 1]
+                out.append(cur)
+        return [tuple(x) for x in out]
+
+    def slice(self, a: int, b: int) -> "Located":
+        return Located(str(self)[a:b], self.cm[a:b])
+
+
+def _cm_of(x) -> list:
+    return x.cm if isinstance(x, Located) else [None] * len(x)
+
+
+def _cat(a, sep: str, b):
+    """a + sep + b;任一邊是 Located 時結果也是 Located(sep 不是原文印的字,位置為 None)。"""
+    if isinstance(a, Located) or isinstance(b, Located):
+        return Located(str(a) + sep + str(b), _cm_of(a) + [None] * len(sep) + _cm_of(b))
+    return a + sep + b
+
+
+def _rstrip(x):
+    return x.slice(0, len(x.rstrip())) if isinstance(x, Located) else x.rstrip()
+
+
+def _strip(x):
+    if not isinstance(x, Located):
+        return x.strip()
+    n0 = len(x) - len(x.lstrip())
+    return x.slice(n0, n0 + len(x.strip()))
 
 
 def display_width(s: str) -> int:
@@ -67,8 +117,43 @@ def is_padding_star(left, right) -> bool:
     )
 
 
-def clean(v: str) -> str:
-    """去補位星號、保留遮罩星號,收空白。"""
+def _clean_located(v: str, cm: list) -> "Located":
+    """clean 的逐字記位置版:輸出字串與 clean(v) 相同,每個輸出字帶來源位置(補位星號換成的空白為 None)。"""
+    want = clean(v)
+    n0 = len(v) - len(v.lstrip())
+    v2 = v.strip()
+    cm2 = cm[n0:n0 + len(v2)]
+    chars, i = [], 0
+    for m in re.finditer(r"\*+", v2):
+        left = v2[m.start() - 1] if m.start() > 0 else None
+        right = v2[m.end()] if m.end() < len(v2) else None
+        chars += list(zip(v2[i:m.start()], cm2[i:m.start()]))
+        if is_padding_star(left, right):
+            chars.append((" ", None))
+        else:
+            chars += list(zip(m.group(0), cm2[m.start():m.end()]))
+        i = m.end()
+    chars += list(zip(v2[i:], cm2[i:]))
+    joined = "".join(c for c, _ in chars)
+    out, pos = [], 0
+    for m in re.finditer(r"\s{2,}", joined):
+        out += chars[pos:m.start()]
+        out.append((" ", chars[m.start()][1]))
+        pos = m.end()
+    out += chars[pos:]
+    t = "".join(c for c, _ in out)
+    lead = len(t) - len(t.lstrip())
+    t2 = t.strip()
+    out = out[lead:lead + len(t2)]
+    if t2 != want:     # 與 clean 不一致就不給位置(寧可 null,不給錯框)
+        return Located(want)
+    return Located(t2, [c for _, c in out])
+
+
+def clean(v: str, cm: Optional[list] = None):
+    """去補位星號、保留遮罩星號,收空白。cm 給了就回 Located(逐字帶來源位置)。"""
+    if cm is not None:
+        return _clean_located(v, cm)
     v = v.strip()
     out, i = [], 0
     for m in re.finditer(r"\*+", v):
@@ -81,12 +166,32 @@ def clean(v: str) -> str:
     return re.sub(r"\s{2,}", " ", "".join(out)).strip()
 
 
-def label_pairs(line: str) -> List[Tuple[str, str, int]]:
-    """一行裡的 [(標籤, 值, 標籤起點)]。行首「(0001)」回傳為「次序」;第一個標籤前的文字回傳為「<標籤>_前文」。"""
+def _line_cm(loc, a: int, b: int) -> list:
+    return [(loc[0], loc[1], k) for k in range(a, b)]
+
+
+def _label_key(text: str, start: int, loc, suffix: str = ""):
+    """標籤(去掉內部空白)。loc=(頁, 行) 時回 Located,字位置對回該行。"""
+    plain = re.sub(r"\s+", "", text) + suffix
+    if loc is None:
+        return plain
+    cm = [(loc[0], loc[1], start + k) for k, ch in enumerate(text) if not ch.isspace()] + [None] * len(suffix)
+    return Located(plain, cm) if len(cm) == len(plain) else Located(plain)
+
+
+def label_pairs(line: str, loc=None) -> List[Tuple[str, str, int]]:
+    """一行裡的 [(標籤, 值, 標籤起點)]。行首「(0001)」回傳為「次序」;第一個標籤前的文字回傳為「<標籤>_前文」。
+    loc=(頁, 行) 時標籤與值是 Located(S2 記位置);預設行為不變。"""
+    def seg(a: int, b: int):
+        return clean(line[a:b], _line_cm(loc, a, b)) if loc else clean(line[a:b])
+
     out = []
     m0 = ENTRY_NO.match(line)
     if m0:
-        out.append(("次序", m0.group(2), m0.start(2)))
+        no = m0.group(2)
+        if loc:
+            no = Located(no, _line_cm(loc, m0.start(2), m0.end(2)))
+        out.append((Located("次序") if loc else "次序", no, m0.start(2)))
         line = line[:m0.start()] + " " * (m0.end() - m0.start()) + line[m0.end():]
     keep = []
     for m in LABEL.finditer(line):
@@ -97,10 +202,10 @@ def label_pairs(line: str) -> List[Tuple[str, str, int]]:
             continue
         keep.append(m)
     if keep and line[:keep[0].start()].strip():
-        out.append((re.sub(r"\s+", "", keep[0].group(1)) + "_前文", clean(line[:keep[0].start()]), 0))
+        out.append((_label_key(keep[0].group(1), keep[0].start(1), loc, "_前文"), seg(0, keep[0].start()), 0))
     for i, m in enumerate(keep):
         end = keep[i + 1].start() if i + 1 < len(keep) else len(line)
-        out.append((re.sub(r"\s+", "", m.group(1)), clean(line[m.end():end]), m.start()))
+        out.append((_label_key(m.group(1), m.start(1), loc), seg(m.end(), end), m.start()))
     return out
 
 
@@ -126,15 +231,18 @@ def _set_last(d, k, v):
 
 def _join_note(a: str, b: str) -> str:
     """注意事項跨行成段:中英數之間緊接,其餘補一個空白。"""
-    a, b = a.rstrip(), b.strip()
+    a, b = _rstrip(a), _strip(b)
     if not a:
         return b
     tight = re.match(rf"[{CJK}、,。()A-Za-z0-9]", a[-1]) and re.match(rf"[{CJK}、,。()A-Za-z0-9]", b[:1] or " ")
-    return a + ("" if tight else " ") + b
+    return _cat(a, "" if tight else " ", b)
 
 
-def parse_with_ledger(pages: List[str]) -> Tuple[List[Dict[str, Any]], List[Tuple[int, int, str, str]]]:
-    """回傳 (謄本清單, 帳目)。帳目每一行原文一筆 (頁, 行, 去處, 說明),頁與行從 1、0 起算。"""
+def parse_with_ledger(pages: List[str], track: bool = False) -> Tuple[List[Dict[str, Any]], List[Tuple[int, int, str, str]]]:
+    """回傳 (謄本清單, 帳目)。帳目每一行原文一筆 (頁, 行, 去處, 說明),頁與行從 1、0 起算。
+
+    track=True(S2):值與標籤(含 dict 鍵)是 Located,帶 spans(正規化後該行的字元索引);
+    track=False(預設)輸出與加入此參數之前逐位元相同。"""
     transcripts: List[Dict[str, Any]] = []
     ledger: List[Tuple[int, int, str, str]] = []
     cur = sec = entry = None
@@ -150,19 +258,34 @@ def parse_with_ledger(pages: List[str]) -> Tuple[List[Dict[str, Any]], List[Tupl
         pmax = max((display_width(l) for l in raw), default=0)
         title = idm = None
         head_end, head_lines = 0, set()
+        idm_i = 0
+
+        def LC(text, i, start):          # track 時把正規化行內的一段包成 Located
+            return Located(text, [(pno, i, start + k) for k in range(len(text))]) if track else text
+
+        def CL(i, line, a, b):           # clean(line[a:b]),track 時帶位置
+            return clean(line[a:b], [(pno, i, k) for k in range(a, b)] if track else None)
+
+        def ST(i, line):                 # line.strip(),track 時帶位置
+            return LC(line.strip(), i, len(line) - len(line.lstrip()))
+
+        def LP(line, i):                 # label_pairs
+            return label_pairs(line, (pno, i) if track else None)
+
         for i, ln in enumerate(lines[:10]):
             if TITLE.match(ln):
-                title = TITLE.match(ln).group(1); head_end = i + 1; head_lines.add(i)
+                tm = TITLE.match(ln)
+                title = LC(tm.group(1), i, tm.start(1)); head_end = i + 1; head_lines.add(i)
             elif title and not idm and IDLINE.match(ln):
-                idm = IDLINE.match(ln); head_end = i + 1; head_lines.add(i)
+                idm = IDLINE.match(ln); idm_i = i; head_end = i + 1; head_lines.add(i)
             elif title and PAGE_NO.search(ln):
                 head_end = i + 1
                 break
-        tid = idm.group(2) if idm else None
+        tid = LC(idm.group(2), idm_i, idm.start(2)) if idm else None
         new = cur is None or bool(tid and tid != cur["header"].get("編號"))
         if new:
-            cur = {"header": {"謄本種類": title, "地段": idm.group(1) if idm else None, "編號": tid,
-                              "編號類型": idm.group(3) if idm else None},
+            cur = {"header": {"謄本種類": title, "地段": LC(idm.group(1), idm_i, idm.start(1)) if idm else None, "編號": tid,
+                              "編號類型": LC(idm.group(3), idm_i, idm.start(3)) if idm else None},
                    "sections": [], "注意事項": [], "頁緣": [], "_頁首行": set()}
             transcripts.append(cur)
             sec = entry = last = top = group = None
@@ -180,9 +303,9 @@ def parse_with_ledger(pages: List[str]) -> Tuple[List[Dict[str, Any]], List[Tupl
                 cur["_頁首行"].add(ln.strip())
                 if indent == 0:
                     cur["頁緣"].append(ln.strip()); ledger.append((pno, i, "頁緣", ln.strip())); continue
-                pairs = label_pairs(ln)
+                pairs = LP(ln, i)
                 if not pairs:
-                    _put(cur["header"], "附註", clean(ln)); ledger.append((pno, i, "頁首附註", ln.strip())); continue
+                    _put(cur["header"], "附註", CL(i, ln, 0, len(ln))); ledger.append((pno, i, "頁首附註", ln.strip())); continue
                 for k, v, _ in pairs:
                     _put(cur["header"], k, v)
                 ledger.append((pno, i, "頁首", ln.strip()))
@@ -194,7 +317,7 @@ def parse_with_ledger(pages: List[str]) -> Tuple[List[Dict[str, Any]], List[Tupl
             if PRINT_END.search(ln):
                 state = "notes"; ledger.append((pno, i, "略過", "列印完畢標記")); continue
             if state == "notes":
-                s = ln.strip()
+                s = ST(i, ln)
                 if NOTE_ITEM.match(s) or not cur["注意事項"]:
                     cur["注意事項"].append(s)
                 else:
@@ -208,7 +331,7 @@ def parse_with_ledger(pages: List[str]) -> Tuple[List[Dict[str, Any]], List[Tupl
                 last = top = group = None; base_indent = None
                 ledger.append((pno, i, "部", sec["部"])); continue
             container = entry if sec is not None else cur["header"]
-            pairs = label_pairs(ln)
+            pairs = LP(ln, i)
             if pairs and ENTRY_NO.match(ln) and sec is not None and entry:
                 entry = {}; sec["entries"].append(entry); container = entry; top = group = None
             if pairs:
@@ -246,11 +369,19 @@ def parse_with_ledger(pages: List[str]) -> Tuple[List[Dict[str, Any]], List[Tupl
                 ledger.append((pno, i, "欄位", ",".join(p[0] for p in pairs)))
                 last = (container, pairs, indent, display_width(raw[i]), pmax); continue
             # ---- 沒有標籤的行 ----
-            s = clean(ln)
+            s = CL(i, ln, 0, len(ln))
             if last:
                 c, ps, lab_indent, w, pm = last
                 k = ps[-1][0]; v = _get_last(c, k)
-                chunks = [clean(x) for x in re.split(r"\s{2,}", ln.strip()) if x.strip()]
+                if track:
+                    st, lead, chunks, cpos = ln.strip(), len(ln) - len(ln.lstrip()), [], 0
+                    for cm_ in list(re.finditer(r"\s{2,}", st)) + [None]:
+                        cend = cm_.start() if cm_ else len(st)
+                        if st[cpos:cend].strip():
+                            chunks.append(CL(i, ln, lead + cpos, lead + cend))
+                        cpos = cm_.end() if cm_ else cend
+                else:
+                    chunks = [clean(x) for x in re.split(r"\s{2,}", ln.strip()) if x.strip()]
                 if isinstance(v, str) and v == "":
                     _set_last(c, k, s); ledger.append((pno, i, "值(換行)", k))
                     last = (c, ps, lab_indent, display_width(raw[i]), pm); continue
@@ -259,10 +390,10 @@ def parse_with_ledger(pages: List[str]) -> Tuple[List[Dict[str, Any]], List[Tupl
                         _put(c, kk, ch)
                     ledger.append((pno, i, "表格續行", ",".join(p[0] for p in ps))); continue
                 if w >= pm - 3 and isinstance(v, str):
-                    _set_last(c, k, v + s); ledger.append((pno, i, "續行(寫滿換行)", k))
+                    _set_last(c, k, _cat(v, "", s)); ledger.append((pno, i, "續行(寫滿換行)", k))
                     last = (c, ps, lab_indent, display_width(raw[i]), pm); continue
                 if isinstance(v, str) and not is_blank_marker(v) and indent > lab_indent:
-                    _set_last(c, k, v.rstrip() + " " + s); ledger.append((pno, i, "續行", k)); continue
+                    _set_last(c, k, _cat(_rstrip(v), " ", s)); ledger.append((pno, i, "續行", k)); continue
             _put(sec if sec is not None else cur["header"], "附註", s)
             ledger.append((pno, i, "附註", s))
     for t in transcripts:
@@ -270,6 +401,6 @@ def parse_with_ledger(pages: List[str]) -> Tuple[List[Dict[str, Any]], List[Tupl
     return transcripts, ledger
 
 
-def parse_transcript_pages(pages: List[str]) -> List[Dict[str, Any]]:
-    """謄本各頁文字 → [{header, sections: [{部, entries, 附註?}], 注意事項, 頁緣}]。"""
-    return parse_with_ledger(pages)[0]
+def parse_transcript_pages(pages: List[str], track: bool = False) -> List[Dict[str, Any]]:
+    """謄本各頁文字 → [{header, sections: [{部, entries, 附註?}], 注意事項, 頁緣}]。track=True 見 parse_with_ledger。"""
+    return parse_with_ledger(pages, track)[0]

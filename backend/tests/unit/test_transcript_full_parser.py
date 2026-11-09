@@ -313,3 +313,63 @@ class TestAudit:
         t[0]["頁緣"].remove("臺北市大安地政事務所")
         miss = audit(self.PAGES, t, ledger)[1]
         assert sum(miss.values()) == len("臺北市大安地政事務所")
+
+
+# ---------------- S2:track=True 記位置;track=False(預設)輸出不變 ----------------
+def _all_strs(o):
+    if isinstance(o, dict):
+        for k, v in o.items():
+            yield k
+            yield from _all_strs(v)
+    elif isinstance(o, (list, tuple)):
+        for v in o:
+            yield from _all_strs(v)
+    elif isinstance(o, str):
+        yield o
+
+
+class TestTrack:
+    PAGES = [P1, P2, P3]
+
+    def test_default_has_no_located_and_equals_track_false(self):
+        from app.lib.multi_type_ocr.transcript_full_parser import Located
+        a = parse_with_ledger(self.PAGES)
+        assert a == parse_with_ledger(self.PAGES, track=False)
+        assert all(type(s) is str for s in _all_strs(a))             # 預設路徑沒有 Located
+        assert not any(isinstance(s, Located) for s in _all_strs(parse_transcript_pages(self.PAGES)))
+
+    def test_track_true_values_equal_and_json_same(self):
+        import copy
+        import json
+        plain = parse_with_ledger(self.PAGES)
+        tr = parse_with_ledger(self.PAGES, track=True)
+        assert tr == plain
+        assert json.dumps(tr, ensure_ascii=False, default=list) == json.dumps(plain, ensure_ascii=False, default=list)
+        assert copy.deepcopy(tr[0]) == plain[0]
+
+    def test_spans_point_at_the_value_text(self):
+        from app.lib.multi_type_ocr.transcript_full_parser import Located
+        t = parse_transcript_pages(self.PAGES, track=True)
+        lines = [N(p).splitlines() for p in self.PAGES]
+
+        def text_of(v):
+            assert isinstance(v, Located) and v.spans
+            return "".join(lines[p - 1][l][a:b] for p, l, a, b in v.spans)
+
+        mark = t[0]["sections"][0]["entries"][0]
+        assert text_of(mark["建物門牌"]) == "忠孝東路四段285號五樓"
+        assert text_of(mark["總面積"]) == "193.02平方公尺"                 # 補位星號去掉,不在 spans 內
+        assert text_of(t[0]["header"]["編號"]) == "01921-000"
+        # 標籤(dict 鍵)也帶位置
+        key = next(k for k in mark if k == "建物門牌")
+        assert text_of(key) == "建物門牌"
+        # 層數 的標籤中間有空白:位置只含字
+        assert text_of(next(k for k in mark if k == "層數")) == "層數"
+        # 續行接字:兩段 spans,位置在兩行
+        sp = mark["層次"].spans if not isinstance(mark["層次"], list) else mark["層次"][0].spans
+        assert sp and sp[0][0] == 1
+
+    def test_continued_value_spans_cover_both_lines(self):
+        t = parse_transcript_pages(self.PAGES, track=True)
+        code = t[0]["header"]["謄本檢查號"]
+        assert [(p, l) for p, l, _, _ in code.spans] == [(1, 4), (1, 5)]

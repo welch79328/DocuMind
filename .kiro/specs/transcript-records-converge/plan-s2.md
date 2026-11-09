@@ -11,7 +11,8 @@
 - 終點的目標文件：`acceptance.md`（envelope §5 已點名）。
 
 風險觸發：資料／序列化格式（帶參數回應的 `position` 從一律 `null` 變成有值）＋跨元件驗收（AIChatbot 正式機、jgb2 staging 讀不帶參數的回應，必須不變）→ 送審前派 plan-verifier、收案前 verifier（envelope 收案 verifier 在 S1～S3 後一次，見 §6）。
-審查紀錄：第 1 輪 REVISE `~/jgb-archive/transcript-photo-fullparse-eval-20261109/reviews/plan-review-s2-round1-20261109.md`（7 項全 FIX）；第 2 輪 REVISE `…/reviews/plan-review-s2-round2-20261109.md`（4 項全 FIX，本版，新準備期）；收尾審查第 3 輪 READY `…/reviews/plan-review-s2-round3-20261109.md`
+審查紀錄：/Users/chenqinghuang/jgb-archive/transcript-photo-fullparse-eval-20261109/reviews/plan-review-s2-round3-20261109.md（收尾審查第 3 輪 READY）
+審查沿革：第 1 輪 REVISE `~/jgb-archive/transcript-photo-fullparse-eval-20261109/reviews/plan-review-s2-round1-20261109.md`（7 項全 FIX）；第 2 輪 REVISE `…/reviews/plan-review-s2-round2-20261109.md`（4 項全 FIX，本版，新準備期）；收尾審查第 3 輪 READY `…/reviews/plan-review-s2-round3-20261109.md`
 
 ## 1. 本片承接的規則與驗收項（不改，只引用）
 
@@ -69,7 +70,7 @@
 
 **前提**：S1 已完成（`E/runs/s1_impl.txt` C1～C4、`E/runs/s1_http.txt` C5～C9 263 PASS 0 FAIL、`E/runs/s1_c15.txt` C15 0 FAIL），但未 commit（AUTO 不含 commit 權）。
 
-**回滾**（S2 單獨還原、保留 S1）：開工前已把 S1 狀態存成基準 `~/jgb-archive/transcript-photo-fullparse-eval-20261109/baseline_s1/`（`SHA1SUMS` 列 6 個檔：`analyze.py`、`transcript_records.py`、`test_api_backward_compat.py`、`test_transcript_format_v2.py` 為 S1 版；`transcript_full_parser.py`、`test_transcript_full_parser.py` 為 HEAD 原檔；另存 S1 照片輸出 `baseline_s1/s1_impl_out/`）。S2 會碰的 repo 檔＝這 6 個＋新增檔；executor 碰到清單外的既有檔須先停、回報主會話（主會話補進基準再續）。還原步驟：(1) `cd ~/jgb-archive/transcript-photo-fullparse-eval-20261109/baseline_s1 && shasum -c SHA1SUMS` 確認基準未變；(2) 把 6 個檔複製回 repo 同路徑；(3) 刪 S2 新增檔（`transcript_positions.py`、`test_transcript_positions.py`，若有；以 `git status --porcelain` 對照開工前的未追蹤清單：`.claude/`、`.kiro/specs/transcript-records-converge/`、`backend/tests/unit/test_transcript_format_v2.py`）；(4) repo 內 6 檔 `shasum` 與 `SHA1SUMS` 相同，跑單元測試全套，失敗清單與 S1 時的 18 個逐項相同（S1 時清單存 `baseline_s1/fail_s1.txt`）。業主若決定先 commit S1，回滾改為 `git checkout <S1 commit> -- <S2 碰的檔>`＋刪 S2 新增檔。
+**回滾**（S2 單獨還原、保留 S1）：開工前已把 S1 狀態存成基準 `~/jgb-archive/transcript-photo-fullparse-eval-20261109/baseline_s1/`（`SHA1SUMS` 列 6 個檔：`analyze.py`、`transcript_records.py`、`test_api_backward_compat.py`、`test_transcript_format_v2.py` 為 S1 版；`transcript_full_parser.py`、`test_transcript_full_parser.py` 為 HEAD 原檔；另存 S1 照片輸出 `baseline_s1/s1_impl_out/`）。S2 會碰的 repo 檔＝這 6 個＋新增檔；executor 碰到清單外的既有檔須先停、回報主會話（主會話補進基準再續）。還原步驟：(1) `cd ~/jgb-archive/transcript-photo-fullparse-eval-20261109/baseline_s1 && shasum -c SHA1SUMS` 確認基準未變；(2) 把 6 個檔複製回 repo 同路徑；(3) 刪 S2 新增檔（`transcript_positions.py`、`test_transcript_positions.py`，若有；以 `git status --porcelain` 對照開工前的未追蹤清單：`.claude/`、`.kiro/specs/transcript-records-converge/`、`backend/tests/unit/test_transcript_format_v2.py`）；(4) repo 內 6 檔 `shasum` 與 `SHA1SUMS` 相同，跑單元測試全套，失敗清單與 S1 時的 18 個逐項相同（S1 時清單存 `baseline_s1/fail_s1.txt`）。業主 2026-11-09 選「先 commit S1」：S1＝commit `76fa153`（分支 transcript-converge，未 push），回滾以此為準——`git checkout 76fa153 -- <S2 碰的 6 檔>`＋刪 S2 新增檔，再跑第 (4) 步；基準檔留作備援。原寫法：業主若決定先 commit S1，回滾改為 `git checkout <S1 commit> -- <S2 碰的檔>`＋刪 S2 新增檔。
 
 非目標：照片位置（S3）、補進值的定位（S3）、規格與 schema 文字（S4）、改 `analyze_service`／OCR、信心度。
 
