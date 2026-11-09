@@ -311,6 +311,10 @@ async def analyze_document(
         default=None,
         description="針對文件的問題（選填，提供時會基於 OCR 結果使用 AI 回答）"
     ),
+    transcript_format: Optional[str] = Form(
+        default=None,
+        description="謄本回應格式（選填）。不帶＝現行格式；`v2`＝transcript_records 補值並把每個值包成 {value, position}，不回舊的單值欄位／清單。僅 document_type=transcript 有效，其他類型忽略"
+    ),
     db: Session = Depends(get_db),
 ):
     """
@@ -359,10 +363,20 @@ async def analyze_document(
     |------------|-----------|------|
     | UNSUPPORTED_FILE_TYPE | 400 | 不支援的檔案格式 |
     | UNSUPPORTED_DOCUMENT_TYPE | 400 | 不支援的文件類型 |
+    | INVALID_TRANSCRIPT_FORMAT | 400 | transcript_format 不是 v2（或不帶） |
     | FILE_TOO_LARGE | 413 | 檔案超過 20MB |
     | PROCESSING_ERROR | 500 | 處理過程發生錯誤 |
     """
     try:
+        if transcript_format not in (None, "v2"):
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "detail": f"不支援的 transcript_format：{transcript_format}。支援的值：v2",
+                    "error_code": "INVALID_TRANSCRIPT_FORMAT",
+                },
+            )
+
         # 1. 文件類型驗證與正規化(動態白名單 + 舊型別收斂)
         resolved_document_type = _resolve_document_type(document_type)
 
@@ -387,6 +401,10 @@ async def analyze_document(
 
         # 7. 信心度攔截:低信心自動入複核佇列並標示 needs_review
         _apply_confidence_gating(result, db)
+        # 8. 謄本 v2 格式:須在信心度攔截之後(複核佇列存的是未轉換的 pages)
+        if transcript_format == "v2" and resolved_document_type == "transcript":
+            from app.lib.multi_type_ocr.transcript_records import apply_transcript_format
+            return apply_transcript_format(result)
         return result
 
     except AnalyzeError as e:

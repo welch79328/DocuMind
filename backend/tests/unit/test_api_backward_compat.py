@@ -34,6 +34,10 @@ from app.schemas.analyze import (
 # 本規格開工前就存在的端點參數(凍結清單)
 FROZEN_REQUEST_PARAMS = {"file", "document_type", "enable_llm", "question"}
 
+# 後續規格新增的請求參數,一律選填;新增要在這裡明文登記
+# 2026-11-09 transcript_format(謄本 v2 格式;.kiro/specs/transcript-records-converge S1)
+ADDED_REQUEST_PARAMS = {"transcript_format"}
+
 # 本規格開工前就存在的回應欄位(凍結清單)
 FROZEN_RESPONSE_FIELDS = {
     "file_name", "file_url", "document_type", "total_pages",
@@ -76,7 +80,13 @@ def _client_visible_params() -> set:
 class TestRequestParamsUnchanged:
     def test_client_visible_params_exactly_match_frozen_list(self):
         """端點請求參數不變:既不得少,也不得偷加必填參數"""
-        assert _client_visible_params() == FROZEN_REQUEST_PARAMS
+        assert _client_visible_params() == FROZEN_REQUEST_PARAMS | ADDED_REQUEST_PARAMS
+
+    def test_added_request_params_are_optional(self):
+        """新增的參數不帶時預設 None,舊呼叫端不受影響"""
+        sig = inspect.signature(analyze_document).parameters
+        for name in ADDED_REQUEST_PARAMS:
+            assert sig[name].default.default is None, name
 
     def test_db_stays_a_dependency_not_a_request_field(self):
         """db 是 Depends 注入(本規格開工前就有),不得變成呼叫端要送的欄位"""

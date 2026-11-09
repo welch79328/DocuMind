@@ -267,11 +267,25 @@ def _as_list(path: tuple, value: Any) -> List[Tuple[tuple, Any]]:
     return [(path, value)]
 
 
+def _is_list_key(k: str) -> bool:
+    """固定鍵中值為陣列的鍵(與 docs/api/transcript_records.schema.json 一致);其餘鍵空值為 null"""
+    return (k in ("層次", "附屬建物", "共有部分", "其他登記事項", "管理者", "前次移轉現值")
+            or k in SPLIT_LIST_KEYS or k in LOT_KEYS)
+
+
+def _blank_entry(keys) -> Dict[str, Any]:
+    return {k: ([] if _is_list_key(k) else None) for k in keys}
+
+
+def _blank_shared_part() -> Dict[str, Any]:
+    """標示部.共有部分 一筆的固定鍵"""
+    return {"坐落": None, "建號": None, "面積": None, "權利範圍": None, "其他登記事項": []}
+
+
 def _put_entry_fields(sh: _Sheet, part: str, kind: str, entry_path: tuple, entry: Dict[str, Any],
                       keys: Tuple[str, ...], dest_prefix: str) -> Dict[str, Any]:
     """一筆(或標示部)的標籤 → 固定鍵。"""
-    rec: Dict[str, Any] = {k: ([] if k in ("層次", "附屬建物", "共有部分", "其他登記事項", "管理者", "前次移轉現值")
-                               or k in SPLIT_LIST_KEYS or k in LOT_KEYS else None) for k in keys}
+    rec: Dict[str, Any] = _blank_entry(keys)
     pairs = {a: (out, b, ka, kb) for out, a, b, ka, kb in PAIRED.get(kind, []) if out in keys}
     paired_b = {b: a for a, (_, b, _, _) in pairs.items()}
     done = set()
@@ -406,7 +420,7 @@ def _shared_parts(sh, part, path, value, dest):
     out = []
     for p, v in _as_list(path, value):
         i = len(out)
-        rec = {"坐落": None, "建號": None, "面積": None, "權利範圍": None, "其他登記事項": []}
+        rec = _blank_shared_part()
         group = v if isinstance(v, dict) else {"_值": v}
         head_path = p + ("_值",) if isinstance(v, dict) else p
         head = group.get("_值")
@@ -666,3 +680,127 @@ def build_with_trace(transcripts: List[Dict[str, Any]]) -> Tuple[List[Dict[str, 
 def build_transcript_records(transcripts: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """transcripts(全文解析結果)→ 固定格式 transcript_records。"""
     return build_with_trace(transcripts)[0]
+
+
+# ---------------------------------------------------------------------------
+# 帶參數 transcript_format="v2" 的回應:規則補值 + 位置包裝(S1,位置一律 null)
+# ---------------------------------------------------------------------------
+_FILL_B_SINGLE = {"建物門牌": ("building_address", None), "主要用途": ("main_usage", None),
+                  "主要建材": ("main_material", None), "層數": ("total_floors", None),
+                  "總面積": ("total_area", to_number), "建築完成日期": ("completion_date", None)}
+_FILL_L_SINGLE = {"面積": ("area", to_number), "使用分區": ("land_use_zone", None),
+                  "使用地類別": ("land_use_type", None)}
+_DATE_OK = re.compile(r"\d+\s*年\s*\d+\s*月\s*\d+\s*日")
+_UNWRAPPED_KEYS = ("判定", "部是否印出")
+
+
+def _skel(keys) -> Dict[str, Any]:
+    return _blank_entry(keys)
+
+
+def fill_from_rules(records: List[Dict[str, Any]], fields: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """用規則抽取的單值/清單欄位補 transcript_records 的空格(深拷貝,不改輸入)。
+
+    只補 null/空清單,不覆蓋既有值。整份只有 1 張時才補單值;清單項目須「屬於該張」:
+    項目 transcript_id 等於該張 謄本.編號,或項目沒有 transcript_id 且整份只有 1 張。
+    日期鍵(以「日期」結尾)須含年月日三段數字才補。補完以 _verdicts 重算 判定。
+    """
+    import copy
+    out = copy.deepcopy(records)
+    f = fields or {}
+    one = len(out) == 1
+    for r in out:
+        if r.get("類型") is None and one:
+            r["類型"] = "建物" if f.get("building_number") else ("土地" if f.get("land_number") else None)
+        kind = r.get("類型")
+        if kind is None:
+            continue
+        no = r["謄本"].get("編號")
+        if one and no is None:
+            no = f.get("building_number") if kind == "建物" else f.get("land_number")
+            r["謄本"]["編號"] = no
+        tid = no
+        mine = lambda it: ((tid is not None and it.get("transcript_id") == tid)
+                           or (it.get("transcript_id") is None and one))
+        if r.get("標示部") is None:
+            r["標示部"] = _skel(BUILDING_MARK_KEYS if kind == "建物" else LAND_MARK_KEYS)
+        m = r["標示部"]
+        if one:
+            for k, (src, conv) in (_FILL_B_SINGLE if kind == "建物" else _FILL_L_SINGLE).items():
+                v = f.get(src)
+                if k.endswith("日期") and not _DATE_OK.search(str(v or "")):
+                    continue
+                if m.get(k) is None and v not in (None, ""):
+                    m[k] = conv(v) if conv else v
+        if kind == "建物":
+            def _area(x):
+                return to_number(x["area"]) if x.get("area") else None
+            if not m["層次"]:
+                m["層次"] = [{"層次": x.get("level"), "面積": _area(x)}
+                           for x in f.get("floors") or [] if mine(x)]
+            if not m["建物坐落地號"] and one:
+                m["建物坐落地號"] = [{"段小段": x.get("section"), "編號": x.get("number")}
+                                 for x in f.get("land_numbers") or []]
+            if not m["附屬建物"]:
+                m["附屬建物"] = [{"用途": x.get("usage"), "面積": _area(x)}
+                              for x in f.get("sub_buildings") or [] if mine(x)]
+            if not m["共有部分"]:
+                m["共有部分"] = [{**_blank_shared_part(), "建號": x.get("build_number"), "面積": _area(x),
+                                  "權利範圍": x.get("rights_scope")}
+                              for x in f.get("shared_parts") or [] if mine(x)]
+        if not r["所有權部"]:
+            keys = LAND_OWNER_KEYS if kind == "土地" else OWNER_KEYS
+            for x in f.get("owners") or []:
+                if mine(x) and x.get("part") == ("land" if kind == "土地" else "building"):
+                    e = _skel(keys)
+                    e.update({"登記次序": x.get("order"), "所有權人": x.get("name"),
+                              "權利範圍": x.get("rights_scope")})
+                    r["所有權部"].append(e)
+        if not r["他項權利部"] and one and f.get("other_right_type"):
+            e = _skel(RIGHT_KEYS)
+            e["權利種類"] = f["other_right_type"]
+            r["他項權利部"].append(e)
+        r["判定"] = _verdicts(r)
+    return out
+
+
+def _wrap(o: Any) -> Any:
+    if isinstance(o, dict):
+        return {k: _wrap(v) for k, v in o.items()}
+    if isinstance(o, list):
+        return [_wrap(v) for v in o]
+    if o is None:
+        return None
+    return {"value": o, "position": None}
+
+
+def _wrap_record(rec: Dict[str, Any]) -> Dict[str, Any]:
+    return {k: (v if k in _UNWRAPPED_KEYS else _wrap(v)) for k, v in rec.items()}
+
+
+def apply_transcript_format(result: Dict[str, Any]) -> Dict[str, Any]:
+    """transcript_format="v2":回傳新 dict(深拷貝,不改輸入)。
+
+    document_fields.transcript_records 換成補值並包 {value, position} 的版本;
+    拿掉 25 個單值欄位、6 種清單與 transcripts;每頁 structured_data 只拿掉這 31 個舊鍵。
+    """
+    import copy
+    # 函式內匯入:analyze_service 載入時會匯入本模組,頂層匯入會循環
+    from app.services.analyze_service import _LIST_DETAIL_KEYS
+    from .transcript_field_extractor import TranscriptFieldExtractor
+
+    old_keys = set(TranscriptFieldExtractor.KEY_FIELDS) | set(_LIST_DETAIL_KEYS)
+    new = copy.deepcopy(result)
+    df = new.get("document_fields")
+    if isinstance(df, dict):
+        records = df.get("transcript_records")
+        if isinstance(records, list):
+            df["transcript_records"] = [_wrap_record(r) for r in fill_from_rules(records, result["document_fields"])]
+        for k in old_keys | {"transcripts"}:
+            df.pop(k, None)
+    for page in new.get("pages") or []:
+        sd = page.get("structured_data")
+        if isinstance(sd, dict):
+            for k in old_keys:
+                sd.pop(k, None)
+    return new
