@@ -1,6 +1,6 @@
 # 謄本解析：現況、決策與待辦
 
-> 最後更新 2026-10-24 ／ 線上版本見 §3（54.248.201.66）
+> 最後更新 2026-11-09 ／ 線上版本見 §3（54.248.201.66）
 > 驗收範本、跑法與量測結果見 [`docs/testing/transcript-online-acceptance.md`](../testing/transcript-online-acceptance.md)；
 > 對接格式見 [`docs/api/INTEGRATION.md`](../api/INTEGRATION.md) §3.1。
 
@@ -59,8 +59,10 @@
 | **線上機規格**：OCR 每頁 15–24 秒、多頁掃描件連送會 OOM | 未處理 | 業主決定（費用） |
 | 小修：`transcripts` 注意事項內連續空白未收成一個 | 未處理（外觀問題，不影響對帳） | — |
 | 待查：尾端遮罩接數字（如 `A12345****`）會被當補位去掉；兩種舊版面（見驗收文件 §4）未重驗 | 無樣本 | 有樣本再驗 |
-| **TFS-2 jgb2 改讀 `transcript_records`**（層次 2–4、共有部分權利範圍、持分面積、他項權利／查封判定、多筆土地標的）：需人工 10 → 2 欄 | 待開 Monday 單 | 業主核准 |
-| **TFS-3 AIChatbot `transcript_mapper.py` 改讀 `transcript_records`** | 未開始 | 業主核准 |
+| **TFS-2 jgb2 改讀 `transcript_records`**（層次 2–4、共有部分權利範圍、持分面積、他項權利／查封判定、多筆土地標的）：需人工 10 → 2 欄 | jgb2 單 #13285430228（Monday「J2 處理中」，2026-11-09 查）已在 `origin/staging` 實作：層次 2–4、共有部分權利範圍讀 `transcript_records`，持分面積讀 `shared_parts`；未合進 `origin/master`（`487ed21e27` 沒有 `TranscriptFieldMapper.php`，jgb2 正式站尚無謄本辨識）。照片上 `transcript_records` 幾乎讀不到，建議讀法見 INTEGRATION 2.8.1 §3.1.3 | JGB |
+| **TFS-3 AIChatbot `transcript_mapper.py` 改讀 `transcript_records`** | `transcript_mapper.py`（`/ocr-mapping` 端點）未改，仍讀 `pages[].structured_data`。另一條路徑 `documind_client.py` 的 `extract_deed_fields`（站內幫手）已讀：電子謄本讀 `transcript_records`；掃描／拍照讀 `building_address`、`main_usage`、`total_area`（信心度 ≥0.85 且不在 `needs_confirmation`），並以 `floor_area_checks`、`shared_parts`、`land_numbers` 判斷多張謄本；2026-10-29 上 AIChatbot 正式機（AIChatbot DSP-125）。以上為 AIChatbot `origin/main` 2026-11-09 查 | 業主核准 |
+| **照片／掃描謄本全文**：2026-11-09 評估，模擬照片 15 頁全文讀對率現行 6.2%、最好的做法（OCR 排版＋Qwen 校字）61.1%，未過 97% 門檻（`docs/testing/transcript-photo-fullparse-eval-20261109.md`） | 評估完成；要不要開線往上推未定 | 業主決定 |
+| **下游讀三種格式**：同一個值同時出現在單值欄位、清單、`transcript_records`，三處在照片上準確度不同；AIChatbot 正式機三種都讀，移除任何一種都要先改 AIChatbot | 未規劃 | 業主決定 |
 | 25 欄 `section`／`subsection` 遇平鎮區、前鎮區、新市區等會切錯（`transcript_field_extractor.py` 以非貪婪比對切到第一個區鄉鎮市）；`transcript_records` 已改用全國鄉鎮市區名稱表 | 未處理（25 欄停止擴充，下游改讀 `transcript_records` 即解） | — |
 | 待查（TFS-1 verifier）：同一張謄本兩段同名標示部時後段值被略過（trace 仍記去處）；新版類別前綴單獨成項會被當空白；「公同共有 1分之1」權利範圍轉不出（原文進其他欄位） | 無樣本 | 有樣本再驗 |
 | 待查：掃描件只讀到標示部時，全部類範圍會給他項權利「未見」（TFS-1 verifier；INTEGRATION 措辭 A1 已於 2026-10-15 修正） | 掃描件線處理 | 升級機器後 |
