@@ -14,13 +14,13 @@
 | 項目 | 狀態 |
 |---|---|
 | 25 個單值欄位＋6 種清單 | 正確；三份真實謄本皆不需人工 |
-| 全文 `document_fields.transcripts` | 土地、建物謄本上印的每一項依原文標籤回傳（含住址、權狀字號、他項權利部整段、地目、公告土地現值、謄本檢查號）；5 份電子謄本逐字對帳 0 遺失 |
+| 全文 `document_fields.transcripts` | 不帶參數時，土地、建物謄本上印的每一項依原文標籤回傳（帶 `transcript_format=v2` 不回，見 INTEGRATION §3.1.4）（含住址、權狀字號、他項權利部整段、地目、公告土地現值、謄本檢查號）；5 份電子謄本逐字對帳 0 遺失 |
 | 值掛在對的標籤、筆、張 | 2026-10-14 逐項全面核對（不是抽查）：5 份共 11 張、28 個部、396 個頂層項目（另含頁首），每一個「標籤:值」對照原文，**0 錯**。方法：本機用線上同版 PyMuPDF 1.24.13 抽文字層，跑 `parse_transcript_pages`，與原文逐行並排 |
 | 值內混有說明句 | `謄本檢查號`／`謄本種類碼` 的值帶著同一行後半句（如 `…8806,可至:http://land.hinet.net 查驗本謄本之正確性`），原文就印在同一個標籤後面，照原文保留；要純代碼需在下游取第一個逗號前 |
 | 原文被回傳的比例 | 約 15% → 100% |
 | 速度 | 40–72 ms／份（伺服器端） |
 | 車位 | **未完成**：公設車位行保留為文字未拆；無電子樣本可驗 |
-| 固定輸出格式 `document_fields.transcript_records` | 每張謄本一筆、鍵固定（依官方格式），沒印回 `null`／`[]`，附 JSON Schema（`docs/api/transcript_records.schema.json`）、判定 有／未見／無法判定。每張土地 86 鍵、建物 84 鍵（1 位所有權人、1 筆他項權利計；逐鍵見 INTEGRATION §3.1.3）。5 份電子謄本（土地 4 張、建物 7 張）：11 張全部符合 Schema、640 個原文值每個都有去處、「其他欄位」0 項；線上實測輸出＝本機 |
+| 固定輸出格式 `document_fields.transcript_records` | 每張謄本一筆、鍵固定（依官方格式），不帶參數時沒印回 `null`／`[]`（帶 `transcript_format=v2` 見 INTEGRATION §3.1.4），附 JSON Schema（`docs/api/transcript_records.schema.json`）、判定 有／未見／無法判定。每張土地 86 鍵、建物 84 鍵（1 位所有權人、1 筆他項權利計；逐鍵見 INTEGRATION §3.1.3）。5 份電子謄本（土地 4 張、建物 7 張）：11 張全部符合 Schema、640 個原文值每個都有去處、「其他欄位」0 項；線上實測輸出＝本機 |
 
 ## 3. 已上線的改動（2026-10-14～15）
 | 版本 | 內容 | 驗收清單 |
@@ -59,10 +59,10 @@
 | **線上機規格**：OCR 每頁 15–24 秒、多頁掃描件連送會 OOM | 未處理 | 業主決定（費用） |
 | 小修：`transcripts` 注意事項內連續空白未收成一個 | 未處理（外觀問題，不影響對帳） | — |
 | 待查：尾端遮罩接數字（如 `A12345****`）會被當補位去掉；兩種舊版面（見驗收文件 §4）未重驗 | 無樣本 | 有樣本再驗 |
-| **TFS-2 jgb2 改讀 `transcript_records`**（層次 2–4、共有部分權利範圍、持分面積、他項權利／查封判定、多筆土地標的）：需人工 10 → 2 欄 | jgb2 單 #13285430228（Monday「J2 處理中」，2026-11-09 查）已在 `origin/staging` 實作：層次 2–4、共有部分權利範圍讀 `transcript_records`，持分面積讀 `shared_parts`；未合進 `origin/master`（`487ed21e27` 沒有 `TranscriptFieldMapper.php`，jgb2 正式站尚無謄本辨識）。照片上 `transcript_records` 幾乎讀不到，建議讀法見 INTEGRATION 2.8.1 §3.1.3 | JGB |
-| **TFS-3 AIChatbot `transcript_mapper.py` 改讀 `transcript_records`** | `transcript_mapper.py`（`/ocr-mapping` 端點）未改，仍讀 `pages[].structured_data`。另一條路徑 `documind_client.py` 的 `extract_deed_fields`（站內幫手）已讀：電子謄本讀 `transcript_records`；掃描／拍照讀 `building_address`、`main_usage`、`total_area`（信心度 ≥0.85 且不在 `needs_confirmation`），並以 `floor_area_checks`、`shared_parts`、`land_numbers` 判斷多張謄本；2026-10-29 上 AIChatbot 正式機（AIChatbot DSP-125）。以上為 AIChatbot `origin/main` 2026-11-09 查 | 業主核准 |
+| **TFS-2 jgb2 改讀 `transcript_records`**（層次 2–4、共有部分權利範圍、持分面積、他項權利／查封判定、多筆土地標的）：需人工 10 → 2 欄 | jgb2 單 #13285430228（Monday「J2 處理中」，2026-11-09 查）已在 `origin/staging` 實作：層次 2–4、共有部分權利範圍讀 `transcript_records`，持分面積讀 `shared_parts`；未合進 `origin/master`（`487ed21e27` 沒有 `TranscriptFieldMapper.php`，jgb2 正式站尚無謄本辨識）。不帶參數時照片上 `transcript_records` 幾乎讀不到；DocuMind 2.9.0 起帶 `transcript_format=v2` 時照片的值會補進 `transcript_records` 並附位置（INTEGRATION §3.1.4），jgb2 可改帶參數（本線不改 jgb2） | JGB |
+| **TFS-3 AIChatbot `transcript_mapper.py` 改讀 `transcript_records`** | `transcript_mapper.py`（`/ocr-mapping` 端點）未改，仍讀 `pages[].structured_data`；DocuMind 2.9.0 起可改帶 `transcript_format=v2`（INTEGRATION §3.1.4），本線不改 AIChatbot。另一條路徑 `documind_client.py` 的 `extract_deed_fields`（站內幫手）已讀：電子謄本讀 `transcript_records`；掃描／拍照讀 `building_address`、`main_usage`、`total_area`（信心度 ≥0.85 且不在 `needs_confirmation`），並以 `floor_area_checks`、`shared_parts`、`land_numbers` 判斷多張謄本；2026-10-29 上 AIChatbot 正式機（AIChatbot DSP-125）。以上為 AIChatbot `origin/main` 2026-11-09 查 | 業主核准 |
 | **照片／掃描謄本全文**：2026-11-09 評估，模擬照片 15 頁全文讀對率現行 6.2%、最好的做法（OCR 排版＋Qwen 校字）61.1%，未過 97% 門檻（`docs/testing/transcript-photo-fullparse-eval-20261109.md`） | 評估完成；要不要開線往上推未定 | 業主決定 |
-| **下游讀三種格式**：同一個值同時出現在單值欄位、清單、`transcript_records`，三處在照片上準確度不同；AIChatbot 正式機三種都讀，移除任何一種都要先改 AIChatbot | 未規劃 | 業主決定 |
+| **下游讀三種格式**：同一個值同時出現在單值欄位、清單、`transcript_records`，三處在照片上準確度不同；AIChatbot 正式機三種都讀，移除任何一種都要先改 AIChatbot | DocuMind 2.9.0 已做帶參數格式 `transcript_format=v2`（只有一種謄本結構，INTEGRATION §3.1.4）；不帶參數的五種舊格式已公告棄用（§3.1.5）；下游改帶參數由 AIChatbot、jgb2 各自排 | 移除舊格式：AIChatbot、jgb2 都改帶參數後業主確認，另開一片 |
 | 25 欄 `section`／`subsection` 遇平鎮區、前鎮區、新市區等會切錯（`transcript_field_extractor.py` 以非貪婪比對切到第一個區鄉鎮市）；`transcript_records` 已改用全國鄉鎮市區名稱表 | 未處理（25 欄停止擴充，下游改讀 `transcript_records` 即解） | — |
 | 待查（TFS-1 verifier）：同一張謄本兩段同名標示部時後段值被略過（trace 仍記去處）；新版類別前綴單獨成項會被當空白；「公同共有 1分之1」權利範圍轉不出（原文進其他欄位） | 無樣本 | 有樣本再驗 |
 | 待查：掃描件只讀到標示部時，全部類範圍會給他項權利「未見」（TFS-1 verifier；INTEGRATION 措辭 A1 已於 2026-10-15 修正） | 掃描件線處理 | 升級機器後 |

@@ -16,14 +16,16 @@ docs/
 │
 ├── api/                                   # 🔌 對外串接
 │   ├── INTEGRATION.md                    # 對外串接規格（端點、欄位、錯誤碼、實測數據）
-│   └── transcript_records.schema.json    # 謄本固定輸出格式的 JSON Schema
+│   ├── transcript_records.schema.json    # 謄本固定輸出格式的 JSON Schema（不帶參數，已棄用）
+│   └── transcript_records_v2.schema.json # 謄本帶參數格式 transcript_format=v2 的 JSON Schema
 │
 ├── planning/
 │   ├── 03-TECH-STACK.md                  # 技術棧現況
 │   └── transcript-status.md              # 謄本解析現況、決策、待辦
 │
 ├── testing/
-│   └── transcript-online-acceptance.md   # 謄本驗收範本、跑法、線上結果
+│   ├── transcript-online-acceptance.md   # 謄本驗收範本、跑法、線上結果
+│   └── transcript-v2-20261109.md         # 紀錄：謄本帶參數格式本機實測（補值、位置）
 │
 ├── frontend/
 │   └── 01-FRONTEND-DESIGN.md             # 前端（Vue 3 + Vite）頁面與元件

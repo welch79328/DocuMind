@@ -25,7 +25,8 @@
 | 文件 | 說明 |
 |------|------|
 | [api/INTEGRATION.md](./api/INTEGRATION.md) | **對外串接規格**：端點、欄位、錯誤碼、實測速度與準確率 |
-| [api/transcript_records.schema.json](./api/transcript_records.schema.json) | 謄本固定輸出格式 `transcript_records` 的 JSON Schema（INTEGRATION §3.1.3） |
+| [api/transcript_records.schema.json](./api/transcript_records.schema.json) | 謄本固定輸出格式 `transcript_records` 的 JSON Schema（不帶參數的舊形狀，已棄用；INTEGRATION §3.1.3） |
+| [api/transcript_records_v2.schema.json](./api/transcript_records_v2.schema.json) | 謄本帶參數格式 `transcript_format=v2` 的 JSON Schema（每個值 `{value, position}`；INTEGRATION §3.1.4） |
 
 ### 2. 謄本
 
@@ -39,6 +40,7 @@
 | [testing/document-fields-fixed-keys-20261029.md](./testing/document-fields-fixed-keys-20261029.md) | 紀錄：`document_fields` 固定帶鍵（對接規格 2.7.0）的存檔重算與線上實測 |
 | [testing/amount-string-type-20261029.md](./testing/amount-string-type-20261029.md) | 紀錄：模型補值一律回字串（對接規格 2.8.0）的探針與線上實測 |
 | [testing/transcript-photo-fullparse-eval-20261109.md](./testing/transcript-photo-fullparse-eval-20261109.md) | 紀錄：照片／掃描謄本全文解析評估（15 張模擬照片、OCR／Qwen 四種做法、門檻判定） |
+| [testing/transcript-v2-20261109.md](./testing/transcript-v2-20261109.md) | 紀錄：謄本帶參數格式 `transcript_format=v2` 本機實測（照片補值、電子與照片位置、複核佇列；INTEGRATION §3.1.4 引用） |
 
 各版的計畫與驗收清單在 `.kiro/specs/transcript-*/acceptance.md`。
 
