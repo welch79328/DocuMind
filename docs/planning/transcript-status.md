@@ -1,6 +1,6 @@
 # 謄本解析：現況、決策與待辦
 
-> 最後更新 2026-11-09 ／ 線上版本見 §3（54.248.201.66）
+> 最後更新 2026-11-11 ／ 線上版本見 §3（54.248.201.66）
 > 驗收範本、跑法與量測結果見 [`docs/testing/transcript-online-acceptance.md`](../testing/transcript-online-acceptance.md)；
 > 對接格式見 [`docs/api/INTEGRATION.md`](../api/INTEGRATION.md) §3.1。
 
@@ -22,13 +22,14 @@
 | 車位 | **未完成**：公設車位行保留為文字未拆；無電子樣本可驗 |
 | 固定輸出格式 `document_fields.transcript_records` | 每張謄本一筆、鍵固定（依官方格式），不帶參數時沒印回 `null`／`[]`（帶 `transcript_format=v2` 見 INTEGRATION §3.1.4），附 JSON Schema（`docs/api/transcript_records.schema.json`）、判定 有／未見／無法判定。每張土地 86 鍵、建物 84 鍵（1 位所有權人、1 筆他項權利計；逐鍵見 INTEGRATION §3.1.3）。5 份電子謄本（土地 4 張、建物 7 張）：11 張全部符合 Schema、640 個原文值每個都有去處、「其他欄位」0 項；線上實測輸出＝本機 |
 
-## 3. 已上線的改動（2026-10-14～15）
+## 3. 已上線的改動
 | 版本 | 內容 | 驗收清單 |
 |---|---|---|
 | `3d07e2e` | 比對用文字正規化通用化：帶框字（㈲㈥）還原，謄本、帳單、合約共用（合約值因此改為半形） | `.kiro/specs/transcript-enclosed-chars/` |
 | `48dc2ab` | 必要欄位依「部」決定（建物謄本不要求使用分區、純土地不要求建物欄位）；原文空白回 `null`（信心度 0.9）；新增 `print_date`；對接文件補記合約值改半形 | `.kiro/specs/transcript-section-required/` |
 | `b48fa74` | 全文解析 `transcripts`（依版面分張／分部／分筆、讀所有「標籤:值」） | `.kiro/specs/transcript-full-parse/` |
 | `729629d`（TFS-1，2026-10-15） | 固定輸出格式 `transcript_records`＋JSON Schema；對接文件 2.4.0 §3.1.3（含 jgb2 31 欄對照） | `.kiro/specs/transcript-fixed-schema/` |
+| `84b890e`（2026-11-11 上線） | 帶參數格式 `transcript_format=v2`：照片規則補值、每個值附位置 `{value, position}`；對接文件 2.9.0 §3.1.4、§3.1.5 | `.kiro/specs/transcript-records-converge/`；線上確認 `docs/testing/transcript-v2-online-20261111.md` |
 
 每一版都經過：Plan 獨立審查 → 業主核准 → 實作與單元測試 → 獨立驗證（CONFIRMED）→ 上線 → 真實電子謄本線上實測（輸出＝本機重放、速度不變；TFS-1 起為 5 份）。
 回滾點：上一版的 commit（`729629d` 的回滾點為 `b48fa74`）。

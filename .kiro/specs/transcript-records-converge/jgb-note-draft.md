@@ -38,4 +38,4 @@ DocuMind 2.9.0 起，謄本可以要新格式：每個值旁邊附上它在原�
 沒有固定日期。等 AIChatbot 和 jgb2 都改帶 `v2`、DocuMind 維護方確認後，才另開一版把預設改成新格式並拿掉舊格式。在那之前，不帶參數的回應不變。
 
 **9. 還沒驗的範圍**
-所有實測都是 `enable_llm=false`（不帶時預設是 `true`，AI 補判的值會一起補進來，正確率沒量）；正式機尚未部署驗證；樣本只有 5 份文件，沒見過的版面仍可能讀錯或框錯。實測數字見 `docs/testing/transcript-v2-20261109.md`。
+所有實測都是 `enable_llm=false`（不帶時預設是 `true`，AI 補判的值會一起補進來，正確率沒量）；正式機 2026-11-11 已部署，線上確認結果和本機相同；樣本只有 5 份文件，沒見過的版面仍可能讀錯或框錯。實測數字見 `docs/testing/transcript-v2-20261109.md`、`docs/testing/transcript-v2-online-20261111.md`。

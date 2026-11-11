@@ -41,6 +41,7 @@
 | [testing/amount-string-type-20261029.md](./testing/amount-string-type-20261029.md) | 紀錄：模型補值一律回字串（對接規格 2.8.0）的探針與線上實測 |
 | [testing/transcript-photo-fullparse-eval-20261109.md](./testing/transcript-photo-fullparse-eval-20261109.md) | 紀錄：照片／掃描謄本全文解析評估（15 張模擬照片、OCR／Qwen 四種做法、門檻判定） |
 | [testing/transcript-v2-20261109.md](./testing/transcript-v2-20261109.md) | 紀錄：謄本帶參數格式 `transcript_format=v2` 本機實測（照片補值、電子與照片位置、複核佇列；INTEGRATION §3.1.4 引用） |
+| [testing/transcript-v2-online-20261111.md](./testing/transcript-v2-online-20261111.md) | 紀錄：謄本帶參數格式正式機部署與線上確認（C14） |
 
 各版的計畫與驗收清單在 `.kiro/specs/transcript-*/acceptance.md`。
 
