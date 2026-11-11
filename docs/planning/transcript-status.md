@@ -64,7 +64,7 @@
 | **TFS-3 AIChatbot `transcript_mapper.py` 改讀 `transcript_records`** | `transcript_mapper.py`（`/ocr-mapping` 端點）未改，仍讀 `pages[].structured_data`；DocuMind 2.9.0 起可改帶 `transcript_format=v2`（INTEGRATION §3.1.4），本線不改 AIChatbot。另一條路徑 `documind_client.py` 的 `extract_deed_fields`（站內幫手）已讀：電子謄本讀 `transcript_records`；掃描／拍照讀 `building_address`、`main_usage`、`total_area`（信心度 ≥0.85 且不在 `needs_confirmation`），並以 `floor_area_checks`、`shared_parts`、`land_numbers` 判斷多張謄本；2026-10-29 上 AIChatbot 正式機（AIChatbot DSP-125）。以上為 AIChatbot `origin/main` 2026-11-09 查 | 業主核准 |
 | **照片／掃描謄本全文**：2026-11-09 評估，模擬照片 15 頁全文讀對率現行 6.2%、最好的做法（OCR 排版＋Qwen 校字）61.1%，未過 97% 門檻（`docs/testing/transcript-photo-fullparse-eval-20261109.md`） | 評估完成；要不要開線往上推未定 | 業主決定 |
 | **下游讀三種格式**：同一個值同時出現在單值欄位、清單、`transcript_records`，三處在照片上準確度不同；AIChatbot 正式機三種都讀，移除任何一種都要先改 AIChatbot | DocuMind 2.9.0 已做帶參數格式 `transcript_format=v2`（只有一種謄本結構，INTEGRATION §3.1.4）；不帶參數的五種舊格式已公告棄用（§3.1.5）；下游改帶參數由 AIChatbot、jgb2 各自排 | 移除舊格式：AIChatbot、jgb2 都改帶參數後業主確認，另開一片 |
-| 25 欄 `section`／`subsection` 遇平鎮區、前鎮區、新市區等會切錯（`transcript_field_extractor.py` 以非貪婪比對切到第一個區鄉鎮市）；`transcript_records` 已改用全國鄉鎮市區名稱表；帶參數 `transcript_format=v2` 照片的 `謄本.段`／`小段` 也改從全文以同一張表切（INTEGRATION 2.10.0 V2-30） | 未處理（25 欄停止擴充，下游改讀 `transcript_records` 即解） | — |
+| 25 欄 `section`／`subsection` 遇平鎮區、前鎮區、新市區等會切錯（`transcript_field_extractor.py` 以非貪婪比對切到第一個區鄉鎮市）；`transcript_records` 已改用全國鄉鎮市區名稱表 | 未處理（25 欄停止擴充，下游改讀 `transcript_records` 即解） | — |
 | 待查（TFS-1 verifier）：同一張謄本兩段同名標示部時後段值被略過（trace 仍記去處）；新版類別前綴單獨成項會被當空白；「公同共有 1分之1」權利範圍轉不出（原文進其他欄位） | 無樣本 | 有樣本再驗 |
 | 待查：掃描件只讀到標示部時，全部類範圍會給他項權利「未見」（TFS-1 verifier；INTEGRATION 措辭 A1 已於 2026-10-15 修正） | 掃描件線處理 | 升級機器後 |
 | 線上複核佇列 113 筆待處理（謄本 104 筆，多為開發測試件，業主裁示先不刪） | 不動 | 業主決定何時清 |

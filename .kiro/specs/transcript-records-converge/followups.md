@@ -5,7 +5,7 @@
 | # | 問題 | 依據 | 去處 | 決定者 |
 |---|---|---|---|---|
 | F1 | `enable_llm=true` 時帶參數的補值正確率沒量（`enable_llm` 不帶時預設 `true`，25 欄可能含 LLM 補判的值，會照樣補進 `transcript_records`） | `docs/testing/transcript-v2-20261109.md` §7；INTEGRATION §3.1.4「補值」 | 開新線：先量 `enable_llm=true` 補值正確率，量完再決定要不要改（模型費用在該線計畫先估） | 業主 2026-11-09「照建議」 |
-| F2 | `transcript_records` 是 `[]` 或不存在時，帶參數的回應沒有任何謄本值（舊欄位照樣拿掉），下游只能改用不帶參數 | INTEGRATION §3.1.4「帶參數時不回的舊格式」末條；`git show 328ea6c:backend/tests/unit/test_transcript_v2_spec.py` 的 `test_v2_07_absent_or_empty_records_still_drop_old_keys`；R8 已裁「只拿掉舊欄位」，改它要另開一片並重新核可 | 併入「移除舊格式、預設改新格式」那一版；2026-11-11 JGB 回報後改由 `.kiro/specs/transcript-v2-jgb-gaps/` R3 處理（組 1 張，INTEGRATION 2.10.0 V2-07） | 業主 2026-11-09「照建議」；2026-11-11「改，組 1 張」 |
+| F2 | `transcript_records` 是 `[]` 或不存在時，帶參數的回應沒有任何謄本值（舊欄位照樣拿掉），下游只能改用不帶參數 | INTEGRATION §3.1.4「帶參數時不回的舊格式」末條；`test_transcript_v2_spec.py::test_v2_07_absent_or_empty_records_still_drop_old_keys`；R8 已裁「只拿掉舊欄位」，改它要另開一片並重新核可 | 併入「移除舊格式、預設改新格式」那一版 | 業主 2026-11-09「照建議」 |
 | F3 | 照片行框已知框錯：登記次序「0001」框到別部的同號行；`謄本.編號類型` 的「建號」框到抬頭 | `docs/testing/transcript-v2-20261109.md` §5；`E/runs/s3_c11_photo.txt` | 不處理（四種樣本皆過門檻，規格已寫可能框到別行） | 業主 2026-11-09「照建議」 |
 | F4 | 照片的 `needs_confirmation` 抓不到 OCR 讀錯（7 個錯值 0 個列入，2/5 頁 `needs_review` 為 `false`）；兩種格式都一樣，不是本線引入 | `docs/testing/transcript-v2-20261109.md` §6；`E/runs/s4_nc_wrong_values.txt` | 照片品質線，待查（排在電子檔工作之後） | 業主 2026-11-09「照建議」 |
 | F5 | D3 純影像 PDF 6 頁真 OCR 只解析出 1 張謄本（電子原檔 3 張），跨張的值會落在同一張或補不進 | `E/runs/s4_schema.txt` (3)、`E/runs/s4_schema_d3pdf_v2.json` | 照片品質線，待查（排在電子檔工作之後） | 業主 2026-11-09「照建議」 |

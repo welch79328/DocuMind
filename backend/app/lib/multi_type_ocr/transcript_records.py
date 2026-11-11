@@ -483,16 +483,10 @@ def _pair(sh, part, entry_path, entry, a, b, ka, kb, dest):
     return [r for _, r in rows]
 
 
-def _blank_header() -> Dict[str, Any]:
-    """謄本(頁首)固定鍵的空白形狀:頁首附註為 [],其餘 null。"""
-    out: Dict[str, Any] = {k: None for k in HEADER_KEYS}
-    out["頁首附註"] = []
-    return out
-
-
 def _header(sh: _Sheet) -> Dict[str, Any]:
     h = sh.t.get("header") or {}
-    out = _blank_header()
+    out: Dict[str, Any] = {k: None for k in HEADER_KEYS}
+    out["頁首附註"] = []
     for label, value in h.items():
         path = ("頁首", label)
         canon = _SYNONYMS.get(("頁首", label), label)
@@ -707,62 +701,16 @@ def _skel(keys) -> Dict[str, Any]:
     return _blank_entry(keys)
 
 
-# 段、小段:行政區用全國鄉鎮市區名稱表比對(長的先),不靠「鄉鎮市區」字尾切,平鎮區/前鎮區/新市區才切得對
-_SECTION_LINE = re.compile("(?:" + "|".join(map(re.escape, _TOWNS)) + r")([一-鿿]+?(?<!小)段)([一-鿿\d]+?小段)?[0-9Oo]{3,5}[-－]")
-
-
-def _section_from_texts(texts: Optional[List[str]]) -> Tuple[Optional[str], Optional[str]]:
-    """全文第一個「鄉鎮市區＋段(＋小段)＋地號/建號」行 → (段, 小段);行政區對不上名稱表 → (None, None)。"""
-    for t in texts or []:
-        for line in (t or "").split("\n"):
-            m = _SECTION_LINE.search(re.sub(r"\s+", "", line))
-            if not m:
-                continue
-            sec = m.group(1)
-            again = True
-            while again:    # 縣轄市/省轄市後面接區名(新竹市東區○○段):段名去掉區名
-                again = False
-                for town in _TOWNS:
-                    if sec.startswith(town) and len(sec) > len(town) + 1:
-                        sec, again = sec[len(town):], True
-                        break
-            return sec, m.group(2)
-    return None, None
-
-
-def _skeleton(f: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """transcript_records 為空時組 1 張:有建號 → 建物張;只有地號 → 土地張;都沒有 → []。"""
-    kind = "建物" if f.get("building_number") else ("土地" if f.get("land_number") else None)
-    if kind is None:
-        return []
-    return [{"謄本": _blank_header(), "類型": kind, "標示部": None, "所有權部": [], "他項權利部": [],
-             "判定": None, "部是否印出": {p: False for p in PARTS}, "部附註": {p: [] for p in PARTS},
-             "注意事項": [], "其他欄位": []}]
-
-
-def _parking_item(p: Dict[str, Any]) -> Optional[Dict[str, Optional[str]]]:
-    """shared_parts[].parking 一筆 → 其他登記事項一項,內容與電子謄本那行同格式
-    「含停車位編號2號,權利範圍:1000分之55」(number 本身已帶「號」);項目形狀同電子謄本(split_other_item)。"""
-    no, sc = p.get("number"), p.get("rights_scope")
-    if not no and not sc:
-        return None
-    return split_other_item("含停車位" + (f"編號{no}" if no else "") + (f",權利範圍:{sc}" if sc else ""))
-
-
-def fill_from_rules(records: List[Dict[str, Any]], fields: Dict[str, Any],
-                    texts: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+def fill_from_rules(records: List[Dict[str, Any]], fields: Dict[str, Any]) -> List[Dict[str, Any]]:
     """用規則抽取的單值/清單欄位補 transcript_records 的空格(深拷貝,不改輸入)。
 
     只補 null/空清單,不覆蓋既有值。整份只有 1 張時才補單值;清單項目須「屬於該張」:
     項目 transcript_id 等於該張 謄本.編號,或項目沒有 transcript_id 且整份只有 1 張。
     日期鍵(以「日期」結尾)須含年月日三段數字才補。補完以 _verdicts 重算 判定。
-    records 為空 → 依 building_number/land_number 組 1 張再補(都沒有 → [])。
-    整份 1 張時另補:段/小段(texts 全文用名稱表切)、清單補完仍空的 層次 與 所有權部(單值第 1 筆)。
-    共有部分由 shared_parts 補進時,parking 轉成「含停車位…」放進該筆 其他登記事項。
     """
     import copy
+    out = copy.deepcopy(records)
     f = fields or {}
-    out = copy.deepcopy(records) or _skeleton(f)
     one = len(out) == 1
     for r in out:
         if r.get("類型") is None and one:
@@ -780,13 +728,6 @@ def fill_from_rules(records: List[Dict[str, Any]], fields: Dict[str, Any],
         if r.get("標示部") is None:
             r["標示部"] = _skel(BUILDING_MARK_KEYS if kind == "建物" else LAND_MARK_KEYS)
         m = r["標示部"]
-        hdr = r["謄本"]
-        if one and (hdr.get("段") is None or hdr.get("小段") is None):
-            s, ss = _section_from_texts(texts)
-            if hdr.get("段") is None and s:
-                hdr["段"] = s
-            if hdr.get("小段") is None and ss and hdr.get("段") == s:   # 小段只取自同一段那行
-                hdr["小段"] = ss
         if one:
             for k, (src, conv) in (_FILL_B_SINGLE if kind == "建物" else _FILL_L_SINGLE).items():
                 v = f.get(src)
@@ -800,9 +741,6 @@ def fill_from_rules(records: List[Dict[str, Any]], fields: Dict[str, Any],
             if not m["層次"]:
                 m["層次"] = [{"層次": x.get("level"), "面積": _area(x)}
                            for x in f.get("floors") or [] if mine(x)]
-            if not m["層次"] and one and (f.get("floor_level") or f.get("floor_area")):
-                m["層次"] = [{"層次": f.get("floor_level") or None,
-                             "面積": to_number(f["floor_area"]) if f.get("floor_area") else None}]
             if not m["建物坐落地號"] and one:
                 m["建物坐落地號"] = [{"段小段": x.get("section"), "編號": x.get("number")}
                                  for x in f.get("land_numbers") or []]
@@ -811,8 +749,7 @@ def fill_from_rules(records: List[Dict[str, Any]], fields: Dict[str, Any],
                               for x in f.get("sub_buildings") or [] if mine(x)]
             if not m["共有部分"]:
                 m["共有部分"] = [{**_blank_shared_part(), "建號": x.get("build_number"), "面積": _area(x),
-                                  "權利範圍": x.get("rights_scope"),
-                                  "其他登記事項": [i for i in map(_parking_item, x.get("parking") or []) if i]}
+                                  "權利範圍": x.get("rights_scope")}
                               for x in f.get("shared_parts") or [] if mine(x)]
         if not r["所有權部"]:
             keys = LAND_OWNER_KEYS if kind == "土地" else OWNER_KEYS
@@ -822,11 +759,6 @@ def fill_from_rules(records: List[Dict[str, Any]], fields: Dict[str, Any],
                     e.update({"登記次序": x.get("order"), "所有權人": x.get("name"),
                               "權利範圍": x.get("rights_scope")})
                     r["所有權部"].append(e)
-            scope = f.get("land_rights_scope") if kind == "土地" else f.get("rights_scope")
-            if not r["所有權部"] and one and (f.get("owner") or scope):
-                e = _skel(keys)
-                e.update({"所有權人": f.get("owner") or None, "權利範圍": scope or None})
-                r["所有權部"].append(e)
         if not r["他項權利部"] and one and f.get("other_right_type"):
             e = _skel(RIGHT_KEYS)
             e["權利種類"] = f["other_right_type"]
@@ -902,13 +834,9 @@ def apply_transcript_format(result: Dict[str, Any], file_contents: Optional[byte
     df = new.get("document_fields")
     if isinstance(df, dict):
         records = df.get("transcript_records")
-        if records is None:     # 不存在 → 與 [] 同樣處理:組 1 張再補
-            records = []
         if isinstance(records, list):
-            texts = [(p.get("rule_postprocessed") or {}).get("text") or (p.get("ocr_raw") or {}).get("text") or ""
-                     for p in new.get("pages") or [] if isinstance(p, dict)]
             posmaps = _electronic_positions(new, records, file_contents)
-            filled = fill_from_rules(records, result["document_fields"], texts)
+            filled = fill_from_rules(records, result["document_fields"])
             if posmaps is None:
                 posmaps = _photo_positions(new, records, filled, file_contents, ocr_lines)
             df["transcript_records"] = [_wrap_record(r, posmaps[i] if posmaps and i < len(posmaps) else None)

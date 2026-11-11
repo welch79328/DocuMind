@@ -1,6 +1,6 @@
 # DocuMind OCR 對接規格（給外部系統開發者）
 
-> 版本 2.10.0 ／ 2026-11-11（2.10.0：只影響帶參數 `transcript_format=v2`——照片讀不出結構時多補 `謄本.段`、`謄本.小段`（從全文以全國鄉鎮市區名稱切）、清單沒出來時用單值補第 1 筆 `標示部.層次` 與 `所有權部`、公設車位寫進 `共有部分[].其他登記事項`；`transcript_records` 是 `[]` 或不存在時依建號／地號組 1 張再補，不再回空；不帶參數的回應不變（§3.1.4）；2.9.0：`/analyze` 新增參數 `transcript_format=v2`（只對謄本）——`transcript_records` 每個值包成 `{value, position}`，附值在原檔的位置，照片的空格由 25 欄與清單補進，並拿掉 25 欄、6 種清單與 `transcripts`；不帶參數的回應不變；不帶參數的五種謄本舊格式公告棄用（§3.1.4、§3.1.5，新 schema `transcript_records_v2.schema.json`）；2.8.1：只改文件、回應不變——§3.1.3 的 jgb2 建物謄本表單對照表補「建議讀法」一欄：主建物層次 2–4、共有部分權利範圍與持分面積在清單 `floors`、`shared_parts` 就有，與 `transcript_records` 都有的值先讀清單；照片、掃描謄本的全文解析實測約 6%；§8 補 2026-11-09 另一批較難模擬照片的 25 欄本機實測 77%；2.8.0：欄位值一律是字串——模型補欄位時回的數字（如帳單 `amount` `714`、合約 `deposit` `50000`）改回字串 `"714"`、`"50000"`，見 §3；2.7.1：只改文件、回應不變——§3.5 點交照片範例改為實際格式（`furniture`、`appliance` 是物件陣列，8 個鍵與降級值寫明）；§3.2、§3.3 補金額欄位型別說明；2.7.0：`document_fields` 固定帶鍵——各頁 `structured_data` 有的鍵一律出現，各頁都是空值時回空值本身（`null`、`[]`、`""`），不再省略，見 §2；2.6.0：新增文件類型 `receipt`（收據、發票，回 `amount`、`date`），見 §3.3.1；修繕照片新增 `damaged_items`，見 §3.4；`/classify` 能回 `receipt`；帳單、合約的影像與掃描 PDF 可改由視覺模型直讀、不跑本機 OCR（伺服器設定 `DIRECT_READ_DOCUMENT_TYPES`，預設不列），直讀類與照片類一律呼叫模型、不看 `enable_llm`，見 §2.1、§6；2.5.0：每頁新增 `llm_calls`，列出這一頁每次 LLM 呼叫送到哪個供應商、模型、服務等級、成功或錯誤類別，見 §2.4；LLM 補欄位呼叫失敗時 `llm_used_for_extraction` 為 `false`；2.4.0：謄本新增固定輸出格式 `transcript_records`，每張謄本的鍵固定、沒印回 `null`／`[]`，附 JSON Schema，見 §3.1.3；2.3.0：謄本新增 `transcripts`，謄本上印的每一項都依原文標籤回傳，見 §3.1.2；2.2.0：謄本新增 `print_date`；原文印空白的欄位回 `null`；土地／建物專屬的必要欄位只在該部存在時要求，見 §3.1；2.1.2：合約欄位的值改為半形數字與標點、帶框字還原，見 §3.2；2.1.1：持分欄位的值統一為「分數」或「全部」，見 §3.1；2.1.0：謄本新增 6 個清單欄位與 `land_rights_scope`，並寫明各單值欄位的取值範圍）
+> 版本 2.9.0 ／ 2026-11-09（2.9.0：`/analyze` 新增參數 `transcript_format=v2`（只對謄本）——`transcript_records` 每個值包成 `{value, position}`，附值在原檔的位置，照片的空格由 25 欄與清單補進，並拿掉 25 欄、6 種清單與 `transcripts`；不帶參數的回應不變；不帶參數的五種謄本舊格式公告棄用（§3.1.4、§3.1.5，新 schema `transcript_records_v2.schema.json`）；2.8.1：只改文件、回應不變——§3.1.3 的 jgb2 建物謄本表單對照表補「建議讀法」一欄：主建物層次 2–4、共有部分權利範圍與持分面積在清單 `floors`、`shared_parts` 就有，與 `transcript_records` 都有的值先讀清單；照片、掃描謄本的全文解析實測約 6%；§8 補 2026-11-09 另一批較難模擬照片的 25 欄本機實測 77%；2.8.0：欄位值一律是字串——模型補欄位時回的數字（如帳單 `amount` `714`、合約 `deposit` `50000`）改回字串 `"714"`、`"50000"`，見 §3；2.7.1：只改文件、回應不變——§3.5 點交照片範例改為實際格式（`furniture`、`appliance` 是物件陣列，8 個鍵與降級值寫明）；§3.2、§3.3 補金額欄位型別說明；2.7.0：`document_fields` 固定帶鍵——各頁 `structured_data` 有的鍵一律出現，各頁都是空值時回空值本身（`null`、`[]`、`""`），不再省略，見 §2；2.6.0：新增文件類型 `receipt`（收據、發票，回 `amount`、`date`），見 §3.3.1；修繕照片新增 `damaged_items`，見 §3.4；`/classify` 能回 `receipt`；帳單、合約的影像與掃描 PDF 可改由視覺模型直讀、不跑本機 OCR（伺服器設定 `DIRECT_READ_DOCUMENT_TYPES`，預設不列），直讀類與照片類一律呼叫模型、不看 `enable_llm`，見 §2.1、§6；2.5.0：每頁新增 `llm_calls`，列出這一頁每次 LLM 呼叫送到哪個供應商、模型、服務等級、成功或錯誤類別，見 §2.4；LLM 補欄位呼叫失敗時 `llm_used_for_extraction` 為 `false`；2.4.0：謄本新增固定輸出格式 `transcript_records`，每張謄本的鍵固定、沒印回 `null`／`[]`，附 JSON Schema，見 §3.1.3；2.3.0：謄本新增 `transcripts`，謄本上印的每一項都依原文標籤回傳，見 §3.1.2；2.2.0：謄本新增 `print_date`；原文印空白的欄位回 `null`；土地／建物專屬的必要欄位只在該部存在時要求，見 §3.1；2.1.2：合約欄位的值改為半形數字與標點、帶框字還原，見 §3.2；2.1.1：持分欄位的值統一為「分數」或「全部」，見 §3.1；2.1.0：謄本新增 6 個清單欄位與 `land_rights_scope`，並寫明各單值欄位的取值範圍）
 > 本文件由 `docs/API_INTEGRATION.md` 與 `docs/api/02-INTEGRATION-API.md` 合併而成。
 > 標示「實測」的數字皆取自線上環境(`54.248.201.66`),日期各自註明。
 > 唯一需要串的端點是 `POST /api/v1/analyze`；其餘為輔助。
@@ -498,7 +498,7 @@ curl -X POST "http://54.248.201.66:8085/api/v1/analyze/batch" \
 
 #### 3.1.4 帶參數格式 `transcript_format=v2`（2.9.0 起；**新串接用這個格式**）
 
-本節與 §3.1.5 每句句末的方括號是依據：V2 編號是程式行為，各對應會實跑的單元測試（清單見 `.kiro/specs/transcript-records-converge/plan-s4.md` §2.5；V2-30～V2-32 與 2.10.0 改寫的 V2-07、V2-24～V2-26 見 `backend/tests/unit/test_transcript_v2_spec.py` 同名測試）；「實測」指向量測紀錄的章節；「政策」是規則編號（`.kiro/specs/transcript-records-converge/acceptance.md`）〔政策：R7〕。
+本節與 §3.1.5 每句句末的方括號是依據：V2 編號是程式行為，各對應會實跑的單元測試（清單見 `.kiro/specs/transcript-records-converge/plan-s4.md` §2.5）；「實測」指向量測紀錄的章節；「政策」是規則編號（`.kiro/specs/transcript-records-converge/acceptance.md`）〔政策：R7〕。
 
 ##### 怎麼拿
 
@@ -561,10 +561,7 @@ curl -X POST "http://54.248.201.66:8085/api/v1/analyze/batch" \
 - `類型` 已知而 `標示部` 為 `null`（謄本沒印標示部）時，回固定鍵的全空骨架（清單 `[]`、其餘 `null`），不限張數；有沒有印要看 `部是否印出.標示部`〔V2-14〕
 - 補完後 `判定` 依補進的內容重算，可能和不帶參數不同；`部是否印出` 不隨補值改，所以補進 `所有權部`、`他項權利部` 的筆時它仍可能是 `false`〔V2-15〕
 - 電子 PDF 也照同樣規則補〔V2-16〕
-- `謄本.段`、`謄本.小段` 是 `null` 且整份 1 張時，從全文找第一行「鄉鎮市區名稱＋段（＋小段）＋地號或建號」切出來補；鄉鎮市區以全國名稱表比對（平鎮區、前鎮區、新市區也切得對；新竹市東區這類，段名不含區名），行首沒有鄉鎮市區名稱就不補；`謄本.段` 已有值時，`小段` 只取自同一段那一行。不讀 25 欄 `section`、`subsection`，兩者可能不同（25 欄遇到「鎮」「市」結尾的區名會切錯）〔V2-30〕
-- 整份 1 張、清單補完後 `標示部.層次` 仍是 `[]` 時，用 `floor_level`、`floor_area` 補 1 筆；`所有權部` 仍是 `[]` 時，用 `owner` 與權利範圍補 1 筆（建物張取 `rights_scope`、土地張取 `land_rights_scope`），其餘鍵 `null`〔V2-31〕
-- `共有部分` 由 `shared_parts` 補進時，每個車位（`parking[]`）在該筆 `其他登記事項` 加一項，`內容` 與電子謄本那行同格式：`含停車位編號2號,權利範圍:1000分之55`（`類別`、`標籤` 為 `null`）；編號或權利範圍沒有時省略該段，兩者都沒有就不加；電子 PDF 讀出的 `共有部分` 不動〔V2-32〕
-- 照片補值：15 頁讀對從 73 格增加到 184 格，8 個錯值都與不帶參數時舊欄位的值相同；其中 2.10.0 新增 1 個（`謄本.段` 的 OCR 錯字，25 欄 `section` 是同一字）〔實測：docs/testing/transcript-v2-jgb-gaps-20261111.md#2. 本機：照片補值〕
+- 補值不新增錯：照片 15 頁讀對從 73 格增加到 167 格，7 個錯值都與不帶參數時舊欄位的值相同〔實測：docs/testing/transcript-v2-20261109.md#2. 照片補值沒有新增錯（C1～C4）〕
 - `enable_llm` 不帶時預設是 `true`〔V2-29〕
 - `enable_llm=true` 時 25 欄可能含 LLM 補判的值，補進 `transcript_records` 的值也可能來自 LLM；這部分沒有驗〔實測：docs/testing/transcript-v2-20261109.md#7. 沒有驗的範圍〕
 
@@ -574,20 +571,18 @@ curl -X POST "http://54.248.201.66:8085/api/v1/analyze/batch" \
 - 每頁 `pages[].structured_data` 只拿掉這 31 個鍵，其他鍵（例：`has_building_evidence`、`share_slots`、`validation_warnings`）照留〔V2-06〕
 - `document_fields` 其他鍵（`field_confidences`、`needs_confirmation`、`extraction_confidence`、`llm_used_for_extraction`）與不帶參數相同〔V2-05〕
 - 頂層 `needs_review` 與不帶參數相同，兩者都會建複核項目、回 `review_item_id`；複核佇列存的是未轉換的 `pages`（每頁仍有 25 欄與清單）與 `field_confidences`，與不帶參數相同〔V2-04〕
-- `transcript_records` 是 `[]` 或不存在（全文一張謄本都沒解析出來，或建構失敗）時，有 `building_number` 就組 1 張建物張，沒有而有 `land_number` 就組 1 張土地張，再照「整份 1 張」的規則補；組出那張的 `部是否印出` 全為 `false`、`謄本.頁首附註` 為 `[]`。兩個號碼都沒有時 `transcript_records` 為 `[]`，回應沒有任何謄本值〔V2-07〕
+- `transcript_records` 是 `[]` 或不存在（全文一張謄本都沒解析出來，或建構失敗）時，舊欄位照樣拿掉，回應沒有任何謄本值；這時請改用不帶參數〔V2-07〕
 
 ##### 帶參數拿不到、不帶參數拿得到的值
 
 | 不帶參數的值 | 帶參數為什麼拿不到 | 替代讀法 |
 |---|---|---|
-| `print_date`、`seizure_mark` | 補值不讀這 2 欄；照片讀不出結構時 `謄本.列印時間` 為 `null`，查封看 `判定.限制登記`（判法不同）〔V2-24〕 | 不帶參數讀 25 欄〔V2-24〕 |
-| `section`、`subsection`（全文切不出段時） | 不讀這 2 欄，改從全文切；行首沒有鄉鎮市區名稱、或整份 2 張以上時 `謄本.段`、`謄本.小段` 仍是 `null`〔V2-30〕 | 不帶參數讀 25 欄（遇「鎮」「市」結尾的區名會切錯）〔V2-30〕 |
-| `sub_building_usage`、`sub_building_area`、`shared_build_number`、`shared_area` | 不作補值來源，由 `sub_buildings`、`shared_parts` 清單補；清單沒輸出時拿不到〔V2-25〕 | 不帶參數讀 25 欄〔V2-25〕 |
-| 第 2 筆以後的層次與所有權人（清單沒輸出時） | 單值只記第 1 筆，只補第 1 筆；整份 2 張以上時不補〔V2-31〕 | 不帶參數讀 25 欄（同樣只有第 1 筆）〔V2-31〕 |
-| `shared_parts[].share_area`（持分面積、車位持分面積）、`parking_total`（車位總數）、`floor_area_checks` | DocuMind 算出的值，`transcript_records` 沒有對應鍵；車位編號與權利範圍寫進 `共有部分[].其他登記事項`（V2-32），鍵 `parking` 本身不回〔V2-26〕 | 持分面積自行以 `共有部分[].面積 × 權利範圍` 算；車位總數與面積核對要不帶參數〔V2-26〕 |
+| `section`、`subsection`、`print_date`、`seizure_mark` | 補值不讀這 4 欄；照片讀不出結構時 `謄本.段`、`謄本.小段`、`謄本.列印時間` 為 `null`，查封看 `判定.限制登記`（判法不同）〔V2-24〕 | 不帶參數讀 25 欄〔V2-24〕 |
+| `floor_level`、`floor_area`、`sub_building_usage`、`sub_building_area`、`shared_build_number`、`shared_area`、`owner`、`rights_scope`、`land_rights_scope` | 不作補值來源，由對應清單補；清單沒輸出時（例：`floors` 只在各層面積加總等於總面積時才有）拿不到〔V2-25〕 | 不帶參數讀 25 欄〔V2-25〕 |
+| `shared_parts[].share_area`（持分面積）、`shared_parts[].parking`、`parking_total`（車位）、`floor_area_checks` | DocuMind 算出的值，`transcript_records` 沒有對應鍵〔V2-26〕 | 持分面積自行以 `共有部分[].面積 × 權利範圍` 算；車位與面積核對要不帶參數〔V2-26〕 |
 | 整份 2 張以上時的標示部單值、`謄本.編號`、`建物坐落地號`、`他項權利部` | 只在整份 1 張時補〔V2-10〕 | 不帶參數讀 25 欄（25 欄不分張）〔V2-10〕 |
 | 清單裡對不到是哪一張的筆 | 不屬於該張就不補〔V2-12〕 | 不帶參數讀清單〔V2-12〕 |
-| 全部謄本值（`transcript_records` 是 `[]` 或不存在，且 `building_number`、`land_number` 都沒有時） | 判不出建物或土地，不組〔V2-07〕 | 改用不帶參數〔V2-07〕 |
+| 全部謄本值（`transcript_records` 是 `[]` 或不存在時） | 舊欄位照樣拿掉〔V2-07〕 | 改用不帶參數〔V2-07〕 |
 
 ##### `needs_confirmation` 仍用 25 欄的英文鍵名
 
@@ -601,11 +596,11 @@ curl -X POST "http://54.248.201.66:8085/api/v1/analyze/batch" \
 | `building_address`、`main_usage`、`main_material`、`total_floors`、`total_area`、`completion_date` | 建物張 `標示部.建物門牌`、`主要用途`、`主要建材`、`層數`、`總面積`、`建築完成日期` | 整份 1 張時補；日期要含年月日〔V2-10〕〔V2-13〕 |
 | `land_use_zone`、`land_use_type` | 土地張 `標示部.使用分區`、`使用地類別` | 整份 1 張時補〔V2-10〕 |
 | `other_right_type` | `他項權利部[0].權利種類` | 整份 1 張、他項權利部沒有筆時補一筆〔V2-10〕 |
-| `owner`、`rights_scope`、`land_rights_scope` | `所有權部[0].所有權人`、建物張（純土地為土地張）`所有權部[].權利範圍`、土地張 `所有權部[].權利範圍` | 先由 `owners` 清單補；補完仍沒有筆、整份 1 張時，補 1 筆 `所有權人`＋權利範圍（建物張 `rights_scope`、土地張 `land_rights_scope`）〔V2-12〕〔V2-31〕 |
-| `floor_level`、`floor_area` | `標示部.層次[0].層次`、`層次[0].面積` | 先由 `floors` 清單補；補完仍是 `[]`、整份 1 張時補 1 筆〔V2-12〕〔V2-31〕 |
+| `owner`、`rights_scope`、`land_rights_scope` | `所有權部[0].所有權人`、建物張（純土地為土地張）`所有權部[].權利範圍`、土地張 `所有權部[].權利範圍` | 不由這 3 欄補，由 `owners` 清單補〔V2-25〕〔V2-12〕 |
+| `floor_level`、`floor_area` | `標示部.層次[0].層次`、`層次[0].面積` | 不由這 2 欄補，由 `floors` 清單補〔V2-25〕〔V2-12〕 |
 | `sub_building_usage`、`sub_building_area` | `標示部.附屬建物[0].用途`、`附屬建物[0].面積` | 不由這 2 欄補，由 `sub_buildings` 清單補〔V2-25〕〔V2-12〕 |
 | `shared_build_number`、`shared_area` | `標示部.共有部分[0].建號`、`共有部分[0].面積` | 不由這 2 欄補，由 `shared_parts` 清單補〔V2-25〕〔V2-12〕 |
-| `section`、`subsection` | `謄本.段`、`謄本.小段` | 不讀這 2 欄；整份 1 張時改從全文切〔V2-24〕〔V2-30〕 |
+| `section`、`subsection` | `謄本.段`、`謄本.小段` | 不補〔V2-24〕 |
 | `print_date` | `謄本.列印時間`（到分；25 欄只到日） | 不補〔V2-24〕 |
 | `seizure_mark` | 無對應鍵；查封看 `判定.限制登記` | 不補〔V2-24〕 |
 
