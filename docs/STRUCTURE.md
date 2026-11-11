@@ -26,7 +26,8 @@ docs/
 ├── testing/
 │   ├── transcript-online-acceptance.md   # 謄本驗收範本、跑法、線上結果
 │   ├── transcript-v2-20261109.md         # 紀錄：謄本帶參數格式本機實測（補值、位置）
-│   └── transcript-v2-online-20261111.md  # 紀錄：謄本帶參數格式正式機部署與線上確認
+│   ├── transcript-v2-online-20261111.md  # 紀錄：謄本帶參數格式正式機部署與線上確認
+│   └── transcript-v2-jgb-gaps-20261111.md  # 紀錄：謄本帶參數格式補 JGB 回報的 4 項缺口
 │
 ├── frontend/
 │   └── 01-FRONTEND-DESIGN.md             # 前端（Vue 3 + Vite）頁面與元件

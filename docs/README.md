@@ -42,6 +42,7 @@
 | [testing/transcript-photo-fullparse-eval-20261109.md](./testing/transcript-photo-fullparse-eval-20261109.md) | 紀錄：照片／掃描謄本全文解析評估（15 張模擬照片、OCR／Qwen 四種做法、門檻判定） |
 | [testing/transcript-v2-20261109.md](./testing/transcript-v2-20261109.md) | 紀錄：謄本帶參數格式 `transcript_format=v2` 本機實測（照片補值、電子與照片位置、複核佇列；INTEGRATION §3.1.4 引用） |
 | [testing/transcript-v2-online-20261111.md](./testing/transcript-v2-online-20261111.md) | 紀錄：謄本帶參數格式正式機部署與線上確認（C14） |
+| [testing/transcript-v2-jgb-gaps-20261111.md](./testing/transcript-v2-jgb-gaps-20261111.md) | 紀錄：謄本帶參數格式補 JGB 回報的 4 項缺口（段小段、單值補層次與所有權人、空紀錄組 1 張、車位） |
 
 各版的計畫與驗收清單在 `.kiro/specs/transcript-*/acceptance.md`。
 

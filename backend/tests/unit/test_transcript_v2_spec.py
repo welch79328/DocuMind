@@ -1,6 +1,6 @@
 """S4: INTEGRATION.md §3.1.4 規格句〔V2-xx〕對應的行為測試(plan-s4.md §2.5)。
 
-只測既有行為,不改 backend/app/。測試名 test_v2_xx_ 的 xx 是規格行為 ID。
+測試名 test_v2_xx_ 的 xx 是規格行為 ID(V2-30～V2-32 出自 .kiro/specs/transcript-v2-jgb-gaps)。
 """
 
 import copy
@@ -124,7 +124,8 @@ def test_v2_06_building_evidence_and_share_slots_kept():
     assert not OLD_KEYS & set(sd)
 
 
-def test_v2_07_absent_or_empty_records_still_drop_old_keys():
+def test_v2_07_absent_or_empty_records_assembled_into_one_sheet():
+    """R3:transcript_records 是 [] 或不存在 → 依 building_number 組 1 張再補;舊鍵照樣拿掉"""
     for mode in ("empty", "absent"):
         r = _result()
         if mode == "empty":
@@ -133,7 +134,36 @@ def test_v2_07_absent_or_empty_records_still_drop_old_keys():
             del r["document_fields"]["transcript_records"]
         df = apply_transcript_format(r)["document_fields"]
         assert not (OLD_KEYS | {"transcripts"}) & set(df)
-        assert df.get("transcript_records") in ([], None) and ("transcript_records" in df) == (mode == "empty")
+        recs = df["transcript_records"]
+        assert len(recs) == 1 and recs[0]["類型"] == {"value": "建物", "position": None}
+        assert recs[0]["謄本"]["編號"]["value"] == "100"
+        assert recs[0]["標示部"]["建物門牌"]["value"] == "某路1號"
+        assert recs[0]["所有權部"][0]["所有權人"]["value"] == "甲"
+        assert recs[0]["部是否印出"] == {"標示部": False, "所有權部": False, "他項權利部": False}
+
+
+def test_v2_07_skeleton_shape_and_schema():
+    """R3/C4:組出那張的鍵與 _build_sheet 相同;謄本.頁首附註 為 [](包裝後亦然);通過帶參數 schema"""
+    from tests.unit.test_transcript_format_v2 import validate_v2
+    for f, kind in (({"building_number": "100"}, "建物"), ({"land_number": "0001-0000"}, "土地")):
+        out = fill_from_rules([], f)
+        ref = build_transcript_records([{}])[0]
+        assert len(out) == 1 and out[0]["類型"] == kind
+        assert set(out[0]) == set(ref) and set(out[0]["謄本"]) == set(ref["謄本"])
+        assert out[0]["謄本"]["頁首附註"] == [] and _wrap_record(out[0])["謄本"]["頁首附註"] == []
+        assert out[0]["部附註"] == {"標示部": [], "所有權部": [], "他項權利部": []}
+        assert out[0]["注意事項"] == [] and out[0]["其他欄位"] == []
+        assert validate_v2(out) == []
+
+
+def test_v2_07_no_number_returns_empty():
+    """R3:building_number、land_number 都沒有 → 回 [](判不出類型就不組)"""
+    assert fill_from_rules([], {"owner": "甲", "main_usage": "住家用"}) == []
+    r = _result()
+    r["document_fields"]["transcript_records"] = []
+    r["document_fields"]["building_number"] = None
+    r["document_fields"]["land_number"] = None
+    assert apply_transcript_format(r)["document_fields"]["transcript_records"] == []
 
 
 def test_v2_08_empty_string_wrapped():
@@ -189,29 +219,140 @@ def test_v2_15_filled_other_right_sets_verdict_but_not_printed_flag():
     assert out["部是否印出"] == r["部是否印出"]                        # 不隨補值改
 
 
-def test_v2_24_s1_unfilled_keys_change_nothing():
+def test_v2_24_unfilled_single_keys_change_nothing():
+    """section/subsection 單值不讀(段小段改從全文切,見 R1);print_date、seizure_mark 不補"""
     recs = [_one_building()]
     f = {"section": "某段", "subsection": "一小段", "print_date": "民國113年05月06日", "seizure_mark": "查封"}
     assert fill_from_rules(recs, f) == fill_from_rules(recs, {})
 
 
-def test_v2_25_list_covered_singles_change_nothing():
+# ---------------- V2-30(R1):段、小段從全文以鄉鎮市區名稱表切 ----------------
+def _sec(line, recs=None):
+    out = fill_from_rules(recs if recs is not None else [_one_building()], {}, [line])
+    return [(r["謄本"]["段"], r["謄本"]["小段"]) for r in out]
+
+
+def test_v2_30_town_names_ending_in_zhen_or_shi():
+    assert _sec("平鎮區平鎮段 0123-000 建號") == [("平鎮段", None)]
+    assert _sec("前鎮區前鎮段　1234-0000") == [("前鎮段", None)]
+    assert _sec("新市區新市段 0456-0000") == [("新市段", None)]
+
+
+def test_v2_30_county_prefix_subsection_and_city_district():
+    assert _sec("桃園市平鎮區平鎮段一小段 0123-0000") == [("平鎮段", "一小段")]
+    assert _sec("新竹市東區光復段 0234-0000") == [("光復段", None)]     # 段名不含「東區」
+    assert _sec("士林區福林段三小段　00123-000") == [("福林段", "三小段")]
+
+
+def test_v2_30_no_district_or_multi_sheet_not_filled():
+    assert _sec("福林段三小段 00123-000") == [(None, None)]              # 沒有鄉鎮市區名稱 → 不補
+    two = [_rec("1", "建物"), _rec("2", "建物")]
+    assert _sec("士林區福林段 00123-000", two) == [(None, None), (None, None)]
+
+
+def test_v2_30_existing_values_kept_and_subsection_only_from_same_section():
+    r = _one_building()
+    r["謄本"]["段"] = "原段"
+    assert _sec("士林區福林段三小段 00123-000", [r]) == [("原段", None)]   # 不覆蓋;小段不取自別段那行
+
+
+def test_v2_30_25_field_section_unchanged():
+    """業主裁定乙:不帶參數的 25 欄 section 不改(平鎮區仍照舊切法)"""
+    from app.lib.multi_type_ocr.transcript_field_extractor import TranscriptFieldExtractor
+    pat = TranscriptFieldExtractor.PATTERNS["section"].pattern
+    assert pat.startswith("(?:[一-鿿]+?[鄉鎮市區])?")
+
+
+def test_v2_25_list_covered_singles_not_read():
+    """附屬建物、共有部分的單值不讀(清單才是來源)"""
     recs = [_one_building()]
-    f = {"floor_level": "一層", "floor_area": "10.5", "sub_building_usage": "陽台", "sub_building_area": "3",
-         "shared_build_number": "200", "shared_area": "30", "owner": "甲", "rights_scope": "全部",
-         "land_rights_scope": "1分之1", "floors": [], "sub_buildings": [], "shared_parts": [], "owners": []}
+    f = {"sub_building_usage": "陽台", "sub_building_area": "3", "shared_build_number": "200", "shared_area": "30",
+         "sub_buildings": [], "shared_parts": []}
     assert fill_from_rules(recs, f) == fill_from_rules(recs, {})
+
+
+# ---------------- V2-31(R2):清單沒出來時用單值補第 1 筆 層次、所有權部 ----------------
+_SINGLES = {"floor_level": "一層", "floor_area": "10.5", "owner": "甲", "rights_scope": "全部",
+            "land_rights_scope": "1分之1"}
+
+
+def test_v2_31_building_singles_fill_first_entry():
+    out = fill_from_rules([_one_building()], dict(_SINGLES))[0]
+    assert out["標示部"]["層次"] == [{"層次": "一層", "面積": 10.5}]
+    assert [(e["所有權人"], e["權利範圍"]) for e in out["所有權部"]] == [("甲", "全部")]
+
+
+def test_v2_31_land_uses_land_rights_scope():
+    out = fill_from_rules([_rec("0001-0000", "土地")], dict(_SINGLES))[0]
+    assert [(e["所有權人"], e["權利範圍"]) for e in out["所有權部"]] == [("甲", "1分之1")]
+    assert "層次" not in out["標示部"]
+
+
+def test_v2_31_lists_win_and_multi_sheet_not_filled():
+    f = {**_SINGLES, "floors": [{"level": "二層", "area": "20"}],
+         "owners": [{"part": "building", "order": "1", "name": "乙", "rights_scope": "2分之1"}]}
+    out = fill_from_rules([_one_building()], f)[0]
+    assert out["標示部"]["層次"] == [{"層次": "二層", "面積": 20}]
+    assert [e["所有權人"] for e in out["所有權部"]] == ["乙"]
+    for r in fill_from_rules([_rec("1", "建物"), _rec("2", "建物")], dict(_SINGLES)):
+        assert r["標示部"]["層次"] == [] and r["所有權部"] == []
 
 
 def test_v2_26_computed_items_absent():
     r = _result()
     df = r["document_fields"]
     df["shared_parts"] = [{"build_number": "200", "area": "30", "rights_scope": "10分之1", "share_area": 3.0,
-                           "parking": [{"no": "1"}], "parking_total": 1}]
+                           "parking": [{"number": "1號", "rights_scope": "100分之5", "share_area": 1.5}],
+                           "parking_total": 1}]
     df["floor_area_checks"] = [{"ok": True}]
     out = apply_transcript_format(r)
     keys = set(_walk_keys(out))
     assert not {"share_area", "parking", "parking_total", "floor_area_checks"} & keys
+    sp = out["document_fields"]["transcript_records"][0]["標示部"]["共有部分"][0]
+    assert sp["其他登記事項"] == [{"類別": None, "標籤": None,
+                                  "內容": {"value": "含停車位編號1號,權利範圍:100分之5", "position": None}}]
+
+
+# ---------------- V2-32(R4):車位帶進 共有部分[].其他登記事項 ----------------
+def _sp(parking, existing=None):
+    r = _one_building()
+    if existing is not None:
+        r = fill_from_rules([r], {})[0]
+        r["標示部"]["共有部分"] = existing
+    f = {"shared_parts": [{"build_number": "11994-000", "area": "509.05", "rights_scope": "1000分之193",
+                           "parking": parking}]}
+    return fill_from_rules([r], f)[0]["標示部"]["共有部分"]
+
+
+def _texts(parking):
+    items = _sp(parking)[0]["其他登記事項"]
+    assert all(i["類別"] is None and i["標籤"] is None for i in items)    # 項目形狀同電子謄本(split_other_item)
+    return [i["內容"] for i in items]
+
+
+def test_v2_32_parking_formats():
+    """number 是 share reader 實際產出的形狀(已帶「號」),不得出現「號號」"""
+    assert _texts([{"number": "2號", "rights_scope": "1000分之55", "share_area": 28.0}]) == \
+        ["含停車位編號2號,權利範圍:1000分之55"]
+    assert _texts([{"number": "2號", "rights_scope": None}]) == ["含停車位編號2號"]
+    assert _texts([{"number": None, "rights_scope": "1000分之55"}]) == ["含停車位,權利範圍:1000分之55"]
+    assert _texts([{"number": None, "rights_scope": None}]) == []
+    two = _texts([{"number": "2號", "rights_scope": "1000分之55"}, {"number": "15號", "rights_scope": "全部"}])
+    assert two == ["含停車位編號2號,權利範圍:1000分之55", "含停車位編號15號,權利範圍:全部"]
+    assert not any("號號" in s for s in two)
+
+
+def test_v2_32_parking_from_real_share_reader():
+    """share reader 實際讀 02_shilin_build 車位行的輸出,轉出的字串"""
+    from app.lib.multi_type_ocr.transcript_field_extractor import TranscriptFieldExtractor
+    no = TranscriptFieldExtractor._PARKING_NUMBER.search("編號2號 權利範圍:1000分之55").group(1)
+    assert no == "2號"
+    assert _texts([{"number": no, "rights_scope": "1000分之55"}]) == ["含停車位編號2號,權利範圍:1000分之55"]
+
+
+def test_v2_32_existing_shared_part_untouched():
+    kept = [{"坐落": None, "建號": "1", "面積": 1.0, "權利範圍": "全部", "其他登記事項": []}]
+    assert _sp([{"number": "2號", "rights_scope": "1000分之55"}], existing=kept) == kept
 
 
 def test_v2_27_wrapped_leaf_has_only_value_and_position():
@@ -303,3 +444,20 @@ def test_v2_29_enable_llm_defaults_true():
     d = inspect.signature(analyze_api.analyze_document).parameters["enable_llm"].default
     assert getattr(d, "default", d) is True
 
+
+
+def test_v2_07_photo_positions_with_empty_records():
+    """C5:照片帶參數、紀錄為空時位置組裝不出錯;補進的值 position 為照片行框或 null"""
+    lines = [L("士林區福林段三小段 00123-000 建號", 0.1), L("建物門牌 某路1號", 0.2), L("所有權人 甲", 0.3)]
+    text = "\n".join(l["text"] for l in lines)
+    res = {"document_type": "transcript",
+           "document_fields": {"transcript_records": [], "building_number": "00123-000", "building_address": "某路1號",
+                               "owner": "甲", "rights_scope": "全部"},
+           "pages": [{"page_number": 1, "ocr_raw": {"text": text, "confidence": 0.9},
+                      "rule_postprocessed": {"text": text}, "structured_data": None}]}
+    out = apply_transcript_format(res, png(), ocr_lines={1: lines})["document_fields"]["transcript_records"]
+    assert len(out) == 1 and out[0]["謄本"]["段"]["value"] == "福林段" and out[0]["謄本"]["小段"]["value"] == "三小段"
+    ps = list(_all_positions(out))
+    assert any(p is not None for p in ps)
+    assert all(p is None or (p["page"] == 1 and p["unit"] == "ratio" and len(p["box"]) == 4) for p in ps)
+    assert out[0]["標示部"]["建物門牌"]["position"]["box"][1] == 0.2
