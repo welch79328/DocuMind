@@ -1,6 +1,6 @@
 # DocuMind OCR 對接規格（給外部系統開發者）
 
-> 版本 2.10.0 ／ 2026-11-11（2.10.0：只影響帶參數 `transcript_format=v2`——照片讀不出結構時多補 `謄本.段`、`謄本.小段`（從全文以全國鄉鎮市區名稱切）、清單沒出來時用單值補第 1 筆 `標示部.層次` 與 `所有權部`、公設車位寫進 `共有部分[].其他登記事項`；`transcript_records` 是 `[]` 或不存在時依建號／地號組 1 張再補，不再回空；不帶參數的回應不變（§3.1.4）；2.9.0：`/analyze` 新增參數 `transcript_format=v2`（只對謄本）——`transcript_records` 每個值包成 `{value, position}`，附值在原檔的位置，照片的空格由 25 欄與清單補進，並拿掉 25 欄、6 種清單與 `transcripts`；不帶參數的回應不變；不帶參數的五種謄本舊格式公告棄用（§3.1.4、§3.1.5，新 schema `transcript_records_v2.schema.json`）；2.8.1：只改文件、回應不變——§3.1.3 的 jgb2 建物謄本表單對照表補「建議讀法」一欄：主建物層次 2–4、共有部分權利範圍與持分面積在清單 `floors`、`shared_parts` 就有，與 `transcript_records` 都有的值先讀清單；照片、掃描謄本的全文解析實測約 6%；§8 補 2026-11-09 另一批較難模擬照片的 25 欄本機實測 77%；2.8.0：欄位值一律是字串——模型補欄位時回的數字（如帳單 `amount` `714`、合約 `deposit` `50000`）改回字串 `"714"`、`"50000"`，見 §3；2.7.1：只改文件、回應不變——§3.5 點交照片範例改為實際格式（`furniture`、`appliance` 是物件陣列，8 個鍵與降級值寫明）；§3.2、§3.3 補金額欄位型別說明；2.7.0：`document_fields` 固定帶鍵——各頁 `structured_data` 有的鍵一律出現，各頁都是空值時回空值本身（`null`、`[]`、`""`），不再省略，見 §2；2.6.0：新增文件類型 `receipt`（收據、發票，回 `amount`、`date`），見 §3.3.1；修繕照片新增 `damaged_items`，見 §3.4；`/classify` 能回 `receipt`；帳單、合約的影像與掃描 PDF 可改由視覺模型直讀、不跑本機 OCR（伺服器設定 `DIRECT_READ_DOCUMENT_TYPES`，預設不列），直讀類與照片類一律呼叫模型、不看 `enable_llm`，見 §2.1、§6；2.5.0：每頁新增 `llm_calls`，列出這一頁每次 LLM 呼叫送到哪個供應商、模型、服務等級、成功或錯誤類別，見 §2.4；LLM 補欄位呼叫失敗時 `llm_used_for_extraction` 為 `false`；2.4.0：謄本新增固定輸出格式 `transcript_records`，每張謄本的鍵固定、沒印回 `null`／`[]`，附 JSON Schema，見 §3.1.3；2.3.0：謄本新增 `transcripts`，謄本上印的每一項都依原文標籤回傳，見 §3.1.2；2.2.0：謄本新增 `print_date`；原文印空白的欄位回 `null`；土地／建物專屬的必要欄位只在該部存在時要求，見 §3.1；2.1.2：合約欄位的值改為半形數字與標點、帶框字還原，見 §3.2；2.1.1：持分欄位的值統一為「分數」或「全部」，見 §3.1；2.1.0：謄本新增 6 個清單欄位與 `land_rights_scope`，並寫明各單值欄位的取值範圍）
+> 版本 2.11.0 ／ 2026-11-13（2.11.0：`/analyze` 新增參數 `contract_format=v2`（只對合約）——`document_fields.rental_terms` 的 `date_start`、`date_end`、`monthly_rent`、`deposit`、`rental_address`、`tenant_name` 各包成 `{value, position}`，電子 PDF 附值在原檔的位置，照片與掃描檔 `position` 為 `null`；不帶參數的回應不變（§3.2.1）；2.10.0：只影響帶參數 `transcript_format=v2`——照片讀不出結構時多補 `謄本.段`、`謄本.小段`（從全文以全國鄉鎮市區名稱切）、清單沒出來時用單值補第 1 筆 `標示部.層次` 與 `所有權部`、公設車位寫進 `共有部分[].其他登記事項`；`transcript_records` 是 `[]` 或不存在時依建號／地號組 1 張再補，不再回空；不帶參數的回應不變（§3.1.4）；2.9.0：`/analyze` 新增參數 `transcript_format=v2`（只對謄本）——`transcript_records` 每個值包成 `{value, position}`，附值在原檔的位置，照片的空格由 25 欄與清單補進，並拿掉 25 欄、6 種清單與 `transcripts`；不帶參數的回應不變；不帶參數的五種謄本舊格式公告棄用（§3.1.4、§3.1.5，新 schema `transcript_records_v2.schema.json`）；2.8.1：只改文件、回應不變——§3.1.3 的 jgb2 建物謄本表單對照表補「建議讀法」一欄：主建物層次 2–4、共有部分權利範圍與持分面積在清單 `floors`、`shared_parts` 就有，與 `transcript_records` 都有的值先讀清單；照片、掃描謄本的全文解析實測約 6%；§8 補 2026-11-09 另一批較難模擬照片的 25 欄本機實測 77%；2.8.0：欄位值一律是字串——模型補欄位時回的數字（如帳單 `amount` `714`、合約 `deposit` `50000`）改回字串 `"714"`、`"50000"`，見 §3；2.7.1：只改文件、回應不變——§3.5 點交照片範例改為實際格式（`furniture`、`appliance` 是物件陣列，8 個鍵與降級值寫明）；§3.2、§3.3 補金額欄位型別說明；2.7.0：`document_fields` 固定帶鍵——各頁 `structured_data` 有的鍵一律出現，各頁都是空值時回空值本身（`null`、`[]`、`""`），不再省略，見 §2；2.6.0：新增文件類型 `receipt`（收據、發票，回 `amount`、`date`），見 §3.3.1；修繕照片新增 `damaged_items`，見 §3.4；`/classify` 能回 `receipt`；帳單、合約的影像與掃描 PDF 可改由視覺模型直讀、不跑本機 OCR（伺服器設定 `DIRECT_READ_DOCUMENT_TYPES`，預設不列），直讀類與照片類一律呼叫模型、不看 `enable_llm`，見 §2.1、§6；2.5.0：每頁新增 `llm_calls`，列出這一頁每次 LLM 呼叫送到哪個供應商、模型、服務等級、成功或錯誤類別，見 §2.4；LLM 補欄位呼叫失敗時 `llm_used_for_extraction` 為 `false`；2.4.0：謄本新增固定輸出格式 `transcript_records`，每張謄本的鍵固定、沒印回 `null`／`[]`，附 JSON Schema，見 §3.1.3；2.3.0：謄本新增 `transcripts`，謄本上印的每一項都依原文標籤回傳，見 §3.1.2；2.2.0：謄本新增 `print_date`；原文印空白的欄位回 `null`；土地／建物專屬的必要欄位只在該部存在時要求，見 §3.1；2.1.2：合約欄位的值改為半形數字與標點、帶框字還原，見 §3.2；2.1.1：持分欄位的值統一為「分數」或「全部」，見 §3.1；2.1.0：謄本新增 6 個清單欄位與 `land_rights_scope`，並寫明各單值欄位的取值範圍）
 > 本文件由 `docs/API_INTEGRATION.md` 與 `docs/api/02-INTEGRATION-API.md` 合併而成。
 > 標示「實測」的數字皆取自線上環境(`54.248.201.66`),日期各自註明。
 > 唯一需要串的端點是 `POST /api/v1/analyze`；其餘為輔助。
@@ -35,6 +35,7 @@
 | `enable_llm` | bool | ✗ | `true` | 只影響**謄本**、**有文字層的 PDF**，以及**沒開直讀的帳單、合約**：啟用 LLM 文字校正與補欄位（OCR 信心度 < 85% 才實際觸發，約 $0.02/頁）。**直讀類**（收據、帳單、合約的影像與掃描 PDF，伺服器開啟直讀時）與**照片類**（`repair_photo`、`handover_photo`）一律呼叫視覺模型，不論 `enable_llm` 為何（約 $0.001/頁） |
 | `question` | string | ✗ | `null` | 帶入時額外回傳 `answer`，基於本次 OCR 結果作答 |
 | `transcript_format` | string | ✗ | 不帶 | 只接受 `v2`：謄本改用帶位置的新格式（§3.1.4），新串接請帶。其他值回 `400 INVALID_TRANSCRIPT_FORMAT`（`document_type` 不是謄本也一樣）；`document_type` 不是 `transcript` 時帶 `v2` 不起作用 |
+| `contract_format` | string | ✗ | 不帶 | 只接受 `v2`：合約租賃六欄附值的位置（§3.2.1）。其他值回 `400 INVALID_CONTRACT_FORMAT`（`document_type` 不是合約也一樣）；`document_type` 不是 `contract` 時帶 `v2` 不起作用 |
 
 ### 2.2 `document_type` 可用值
 
@@ -83,6 +84,12 @@ curl -X POST "http://54.248.201.66:8085/api/v1/analyze" \
   -F "file=@合約.pdf" \
   -F "document_type=contract" \
   -F "question=合約金額是多少？"
+
+# 合約，租賃欄位附位置（§3.2.1）
+curl -X POST "http://54.248.201.66:8085/api/v1/analyze" \
+  -F "file=@合約.pdf" \
+  -F "document_type=contract" \
+  -F "contract_format=v2"
 ```
 
 ### 2.4 回應（200）
@@ -176,7 +183,7 @@ curl -X POST "http://54.248.201.66:8085/api/v1/analyze" \
 | `document_type` | string | ✗ | `handover_photo` | **整批共用**，不能混送 |
 | `enable_llm` | bool | ✗ | `true` | 同單張端點 |
 
-批次端點沒有 `transcript_format`，帶了不起作用；謄本要新格式請逐份送單張端點（§3.1.4）。
+批次端點沒有 `transcript_format`、`contract_format`，帶了不起作用；要新格式請逐份送單張端點（§3.1.4、§3.2.1）。
 
 ```bash
 curl -X POST "http://54.248.201.66:8085/api/v1/analyze/batch" \
@@ -659,6 +666,41 @@ curl -X POST "http://54.248.201.66:8085/api/v1/analyze/batch" \
 `llm_used_for_extraction` 在模型直讀成功時為 `true`、呼叫失敗時為 `false`（欄位全空、必要欄位全進 `needs_confirmation`）；`pages[].ocr_raw` 為 `null`。
 是否為租約由模型判斷，通用合約不要求租賃欄位。多頁合約逐頁直讀、跨頁「只填補缺值」彙整，與 `document_fields` 一致。
 
+#### 3.2.1 帶參數格式 `contract_format=v2`（2.11.0 起）
+
+`POST /api/v1/analyze` 帶 `contract_format=v2`、`document_type=contract` 時，`document_fields.rental_terms` 的六個欄位改成 `{value, position}`：
+
+```jsonc
+// 實際回應摘錄：合成租約，民國迄日跨兩行（本機實測 G1_03 與既有合成租約 textlayer_lease 兩份合併示意）
+"rental_terms": {
+  "date_start":     { "value": null, "position": null },
+  "date_end":       { "value": "115 5 31", "position": null },            // 「至中華民國115年」換行「5月31日止」：跨行給 null
+  "monthly_rent":   { "value": "貳萬伍仟", "position": { "page": 1, "box": [0.2306, 0.1734, 0.3113, 0.192], "unit": "ratio" } },
+  "deposit":        { "value": "伍萬", "position": { "page": 1, "box": [0.1903, 0.192, 0.2306, 0.2107], "unit": "ratio" } },
+  "rental_address": { "value": "臺北市中正區範例路1號3樓", "position": { "page": 1, "box": [0.1701, 0.1361, 0.4142, 0.1547], "unit": "ratio" } },
+  "tenant_name":    { "value": "鄭虛擬", "position": { "page": 3, "box": [0.1765, 0.5446, 0.2319, 0.5621], "unit": "ratio" } },
+  "management_fee": null,           // 其他租賃欄位不包，與不帶參數相同
+  ...
+}
+```
+
+- `value` 與不帶參數時同一欄的值相同（含 §3.2 的正規化形式；民國日期是三段數字以空白隔開，如 `113 1 1`）。
+- `position.page` 從 1 起算；`box` 是 `[左, 上, 右, 下]`，各除以頁寬、頁高，0～1；`unit` 固定 `"ratio"`。形狀與謄本 v2（§3.1.4）相同。
+- 只包這六欄；`rental_terms` 的其他欄位、`contract_metadata`、`parties`、`financial_terms`、`pages[]` 都與不帶參數相同。讀不到任何租賃欄位、沒有 `rental_terms` 時，帶參數也沒有這個鍵。
+- 不帶參數的回應不變。
+
+**`position` 框的是「這個值是從哪裡讀到的」**：抽錯的值也框它讀到的那段字，客人點了可以看到錯在哪裡、自己改。位置取自抽出值的那一次比對，不事後拿值搜全文（押金與月租同額時，各自框在自己那一行）。
+
+**`position` 為 `null` 的情形**（不給近似框）：
+- 值是 `null`。
+- 照片、掃描 PDF（沒有文字層）：線上走視覺模型直讀，模型只回值、不回位置。
+- 值的字跨兩行以上（例：「中華民國113年」換行「1月1日」）。單一個框會把兩行之間不相干的字框進去，所以不給。
+- 原檔重抽的文字與回應不符、頁面旋轉、重跑比對得到的值與回應不同等對不準的情形。
+
+**照片、掃描檔怎麼標頁碼**：這類檔案 `position` 一律 `null`。要標頁碼時，依頁序找第一個 `pages[].structured_data.rental_terms.<欄位>` 不是 `null`、也不是空字串的頁，取它的 `pages[].page_number`。`document_fields` 的值就是這樣跨頁取的（只填補缺值，先到先贏）。
+
+**實測**（`docs/testing/contract-v2-positions-20261113.md`）：21 份電子 PDF，包括 15 份合成租約、5 份 jgb2 範本與 1 份既有合成租約。給出的框錯框 0。有值的欄位中，跨行值以外的全部有框（21/21）。3 個民國日期跨行的值依規則給 `null`，所以含跨行為 21/24。電子合約的欄位抽取率本身不高：15 份合成租約有值的 88 格只抽到 19 格。沒抽到的欄位沒有值，也沒有框。
+
 ### 3.3 `bill`
 
 `amount`（金額）、`date`（日期）、`account_no`（戶號）。
@@ -763,6 +805,7 @@ VLM 不可用或影像無法辨識時降級為 `{"defect_labels": [], "damaged_i
 | `FILE_TOO_LARGE` | 413 | 檔案 > 20 MB |
 | `PROCESSING_ERROR` | 500 | 處理過程例外，訊息不外洩細節 |
 | `INVALID_TRANSCRIPT_FORMAT` | 400 | `transcript_format` 帶了 `v2` 以外的值（含空字串）；`document_type` 不是謄本也一樣（§3.1.4） |
+| `INVALID_CONTRACT_FORMAT` | 400 | `contract_format` 帶了 `v2` 以外的值（含空字串）；`document_type` 不是合約也一樣（§3.2.1） |
 | `NO_FILES` | 400 | 批次端點沒帶任何檔案 |
 | `TOO_MANY_FILES` | 400 | 批次端點超過 20 個檔案 |
 
