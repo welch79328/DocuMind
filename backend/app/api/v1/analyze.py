@@ -38,6 +38,7 @@ from app.lib.ocr_enhanced.quality_assessor import QualityAssessor
 from app.services.review_queue_service import ReviewQueueService
 from app.services.correction_sample_service import CorrectionSampleService
 from app.services.few_shot_selector import FewShotSelector
+from app.lib.multi_type_ocr.handover_photo_processor import apply_handover_format
 
 logger = logging.getLogger(__name__)
 
@@ -196,6 +197,16 @@ def _apply_confidence_gating(result: dict, db: Session) -> None:
         result["review_item_id"] = str(review_id)
 
 
+def _invalid_handover_format(value: Optional[str]) -> JSONResponse:
+    return JSONResponse(
+        status_code=400,
+        content={
+            "detail": f"不支援的 handover_format：{value}。支援的值：v2",
+            "error_code": "INVALID_HANDOVER_FORMAT",
+        },
+    )
+
+
 def _validate_type_file_compatibility(document_type: str, file: UploadFile) -> None:
     """驗證檔案格式與所選文件類型是否相容(需求 1.5)"""
     ext = _file_extension(file)
@@ -319,6 +330,10 @@ async def analyze_document(
         default=None,
         description="合約回應格式（選填）。不帶＝現行格式；`v2`＝document_fields.rental_terms 的 date_start、date_end、monthly_rent、deposit、rental_address、tenant_name 各包成 {value, position}；只有電子 PDF（文字層）給位置，照片與掃描檔 position 為 null。僅 document_type=contract 有效，其他類型忽略"
     ),
+    handover_format: Optional[str] = Form(
+        default=None,
+        description="點交照片回應格式（選填）。不帶＝現行格式；`v2`＝每個品項多 confidence（模型對該項自評）、box（0～1 比例框）、condition（損傷，30 字內），另有 damages[]。僅 document_type=handover_photo 有效，其他類型忽略"
+    ),
     db: Session = Depends(get_db),
 ):
     """
@@ -369,6 +384,7 @@ async def analyze_document(
     | UNSUPPORTED_DOCUMENT_TYPE | 400 | 不支援的文件類型 |
     | INVALID_TRANSCRIPT_FORMAT | 400 | transcript_format 不是 v2（或不帶） |
     | INVALID_CONTRACT_FORMAT | 400 | contract_format 不是 v2（或不帶） |
+    | INVALID_HANDOVER_FORMAT | 400 | handover_format 不是 v2（或不帶） |
     | FILE_TOO_LARGE | 413 | 檔案超過 20MB |
     | PROCESSING_ERROR | 500 | 處理過程發生錯誤 |
     """
@@ -390,6 +406,9 @@ async def analyze_document(
                 },
             )
 
+        if handover_format not in (None, "v2"):
+            return _invalid_handover_format(handover_format)
+
         # 1. 文件類型驗證與正規化(動態白名單 + 舊型別收斂)
         resolved_document_type = _resolve_document_type(document_type)
 
@@ -404,6 +423,11 @@ async def analyze_document(
         # 6. 呼叫分析服務(傳入正規化後的權威型別與 few-shot)
         service = AnalyzeService()
         ocr_lines: dict = {}
+        handover_v2 = handover_format == "v2" and resolved_document_type == "handover_photo"
+        handover_pages: dict = {}
+        extra = (
+            {"handover_format": "v2", "handover_v2_out": handover_pages} if handover_v2 else {}
+        )
         result = await service.analyze(
             file_contents=contents,
             filename=file.filename or "unknown",
@@ -412,6 +436,7 @@ async def analyze_document(
             question=question,
             few_shot=few_shot,
             ocr_lines_out=ocr_lines,
+            **extra,
         )
 
         # 7. 信心度攔截:低信心自動入複核佇列並標示 needs_review
@@ -424,6 +449,9 @@ async def analyze_document(
         if contract_format == "v2" and resolved_document_type == "contract":
             from app.lib.multi_type_ocr.contract_positions import apply_contract_format
             return apply_contract_format(result, contents)
+        # 9. 點交 v2 格式:同樣在信心度攔截之後(複核判定與佇列內容與不帶參數相同)
+        if handover_v2:
+            return apply_handover_format(result, handover_pages)
         return result
 
     except AnalyzeError as e:
@@ -532,6 +560,10 @@ async def analyze_batch(
         description="文件類型，整批共用（handover_photo: 點交照片）",
     ),
     enable_llm: bool = Form(default=True, description="是否啟用 LLM 文字校正"),
+    handover_format: Optional[str] = Form(
+        default=None,
+        description="點交照片回應格式（選填）。不帶＝現行格式；`v2`＝每個品項多 confidence（模型對該項自評）、box（0～1 比例框）、condition（損傷，30 字內），另有 damages[]。僅 document_type=handover_photo 有效，其他類型忽略"
+    ),
     db: Session = Depends(get_db),
 ):
     """
@@ -572,6 +604,9 @@ async def analyze_batch(
             },
         )
 
+    if handover_format not in (None, "v2"):
+        return _invalid_handover_format(handover_format)
+
     # 文件類型不合法是整批的問題,不是某一筆的問題,直接 400。
     try:
         resolved_document_type = _resolve_document_type(document_type)
@@ -589,6 +624,9 @@ async def analyze_batch(
 
     gate = asyncio.Semaphore(BATCH_MAX_CONCURRENT)
     service = AnalyzeService()
+    handover_v2 = handover_format == "v2" and resolved_document_type == "handover_photo"
+    # 每一筆的 v2 頁結果放這裡,不放進 item(item 會原樣回傳)
+    handover_pages: dict = {}
 
     async def _one(index: int, file: UploadFile) -> dict:
         """回傳純 dict,不在這裡組 Pydantic 模型——
@@ -597,6 +635,10 @@ async def analyze_batch(
         async with gate:
             try:
                 contents = await _validate_and_read(file, resolved_document_type)
+                extra = {}
+                if handover_v2:
+                    handover_pages[index] = {}
+                    extra = {"handover_format": "v2", "handover_v2_out": handover_pages[index]}
                 result = await service.analyze(
                     file_contents=contents,
                     filename=name,
@@ -604,6 +646,7 @@ async def analyze_batch(
                     enable_llm=enable_llm,
                     question=None,
                     few_shot=few_shot,
+                    **extra,
                 )
                 return {"index": index, "file_name": name,
                         "status": "ok", "result": result}
@@ -624,6 +667,11 @@ async def analyze_batch(
     for item in results:
         if item["status"] == "ok" and item.get("result") is not None:
             _apply_confidence_gating(item["result"], db)
+            # 點交 v2:攔截之後才換形狀(複核判定與佇列內容與不帶參數相同)
+            if handover_v2:
+                item["result"] = apply_handover_format(
+                    item["result"], handover_pages.get(item["index"]) or {}
+                )
 
     succeeded = sum(1 for r in results if r["status"] == "ok")
     return {

@@ -37,7 +37,8 @@ FROZEN_REQUEST_PARAMS = {"file", "document_type", "enable_llm", "question"}
 # 後續規格新增的請求參數,一律選填;新增要在這裡明文登記
 # 2026-11-09 transcript_format(謄本 v2 格式;.kiro/specs/transcript-records-converge S1)
 # 2026-11-13 contract_format(合約 v2 位置;.kiro/specs/contract-v2-positions)
-ADDED_REQUEST_PARAMS = {"transcript_format", "contract_format"}
+# 2026-11-13 handover_format(點交照片 v2 格式;.kiro/specs/handover-photo-v2 R1)
+ADDED_REQUEST_PARAMS = {"transcript_format", "contract_format", "handover_format"}
 
 # 本規格開工前就存在的回應欄位(凍結清單)
 FROZEN_RESPONSE_FIELDS = {

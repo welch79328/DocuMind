@@ -1,6 +1,6 @@
 # DocuMind OCR 對接規格（給外部系統開發者）
 
-> 版本 2.11.0 ／ 2026-11-13（2.11.0：`/analyze` 新增參數 `contract_format=v2`（只對合約）——`document_fields.rental_terms` 的 `date_start`、`date_end`、`monthly_rent`、`deposit`、`rental_address`、`tenant_name` 各包成 `{value, position}`，電子 PDF 附值在原檔的位置，照片與掃描檔 `position` 為 `null`；不帶參數的回應不變（§3.2.1）；2.10.0：只影響帶參數 `transcript_format=v2`——照片讀不出結構時多補 `謄本.段`、`謄本.小段`（從全文以全國鄉鎮市區名稱切）、清單沒出來時用單值補第 1 筆 `標示部.層次` 與 `所有權部`、公設車位寫進 `共有部分[].其他登記事項`；`transcript_records` 是 `[]` 或不存在時依建號／地號組 1 張再補，不再回空；不帶參數的回應不變（§3.1.4）；2.9.0：`/analyze` 新增參數 `transcript_format=v2`（只對謄本）——`transcript_records` 每個值包成 `{value, position}`，附值在原檔的位置，照片的空格由 25 欄與清單補進，並拿掉 25 欄、6 種清單與 `transcripts`；不帶參數的回應不變；不帶參數的五種謄本舊格式公告棄用（§3.1.4、§3.1.5，新 schema `transcript_records_v2.schema.json`）；2.8.1：只改文件、回應不變——§3.1.3 的 jgb2 建物謄本表單對照表補「建議讀法」一欄：主建物層次 2–4、共有部分權利範圍與持分面積在清單 `floors`、`shared_parts` 就有，與 `transcript_records` 都有的值先讀清單；照片、掃描謄本的全文解析實測約 6%；§8 補 2026-11-09 另一批較難模擬照片的 25 欄本機實測 77%；2.8.0：欄位值一律是字串——模型補欄位時回的數字（如帳單 `amount` `714`、合約 `deposit` `50000`）改回字串 `"714"`、`"50000"`，見 §3；2.7.1：只改文件、回應不變——§3.5 點交照片範例改為實際格式（`furniture`、`appliance` 是物件陣列，8 個鍵與降級值寫明）；§3.2、§3.3 補金額欄位型別說明；2.7.0：`document_fields` 固定帶鍵——各頁 `structured_data` 有的鍵一律出現，各頁都是空值時回空值本身（`null`、`[]`、`""`），不再省略，見 §2；2.6.0：新增文件類型 `receipt`（收據、發票，回 `amount`、`date`），見 §3.3.1；修繕照片新增 `damaged_items`，見 §3.4；`/classify` 能回 `receipt`；帳單、合約的影像與掃描 PDF 可改由視覺模型直讀、不跑本機 OCR（伺服器設定 `DIRECT_READ_DOCUMENT_TYPES`，預設不列），直讀類與照片類一律呼叫模型、不看 `enable_llm`，見 §2.1、§6；2.5.0：每頁新增 `llm_calls`，列出這一頁每次 LLM 呼叫送到哪個供應商、模型、服務等級、成功或錯誤類別，見 §2.4；LLM 補欄位呼叫失敗時 `llm_used_for_extraction` 為 `false`；2.4.0：謄本新增固定輸出格式 `transcript_records`，每張謄本的鍵固定、沒印回 `null`／`[]`，附 JSON Schema，見 §3.1.3；2.3.0：謄本新增 `transcripts`，謄本上印的每一項都依原文標籤回傳，見 §3.1.2；2.2.0：謄本新增 `print_date`；原文印空白的欄位回 `null`；土地／建物專屬的必要欄位只在該部存在時要求，見 §3.1；2.1.2：合約欄位的值改為半形數字與標點、帶框字還原，見 §3.2；2.1.1：持分欄位的值統一為「分數」或「全部」，見 §3.1；2.1.0：謄本新增 6 個清單欄位與 `land_rights_scope`，並寫明各單值欄位的取值範圍）
+> 版本 2.12.0 ／ 2026-11-13（2.12.0：`/analyze` 與 `/analyze/batch` 新增參數 `handover_format=v2`（只對點交照片）——`furniture`、`appliance` 每項改為 `{key, label, confidence, box, condition}`，`confidence` 是模型對該項的自評、沒給回 `null`，`box` 是 0～1 比例框，另有 `damages[]`；`field_confidences`、`needs_confirmation`、`extraction_confidence` 改依自評；`needs_review` 與複核佇列不變；不帶參數的回應不變（§3.5.1）；2.11.0：`/analyze` 新增參數 `contract_format=v2`（只對合約）——`document_fields.rental_terms` 的 `date_start`、`date_end`、`monthly_rent`、`deposit`、`rental_address`、`tenant_name` 各包成 `{value, position}`，電子 PDF 附值在原檔的位置，照片與掃描檔 `position` 為 `null`；不帶參數的回應不變（§3.2.1）；2.10.0：只影響帶參數 `transcript_format=v2`——照片讀不出結構時多補 `謄本.段`、`謄本.小段`（從全文以全國鄉鎮市區名稱切）、清單沒出來時用單值補第 1 筆 `標示部.層次` 與 `所有權部`、公設車位寫進 `共有部分[].其他登記事項`；`transcript_records` 是 `[]` 或不存在時依建號／地號組 1 張再補，不再回空；不帶參數的回應不變（§3.1.4）；2.9.0：`/analyze` 新增參數 `transcript_format=v2`（只對謄本）——`transcript_records` 每個值包成 `{value, position}`，附值在原檔的位置，照片的空格由 25 欄與清單補進，並拿掉 25 欄、6 種清單與 `transcripts`；不帶參數的回應不變；不帶參數的五種謄本舊格式公告棄用（§3.1.4、§3.1.5，新 schema `transcript_records_v2.schema.json`）；2.8.1：只改文件、回應不變——§3.1.3 的 jgb2 建物謄本表單對照表補「建議讀法」一欄：主建物層次 2–4、共有部分權利範圍與持分面積在清單 `floors`、`shared_parts` 就有，與 `transcript_records` 都有的值先讀清單；照片、掃描謄本的全文解析實測約 6%；§8 補 2026-11-09 另一批較難模擬照片的 25 欄本機實測 77%；2.8.0：欄位值一律是字串——模型補欄位時回的數字（如帳單 `amount` `714`、合約 `deposit` `50000`）改回字串 `"714"`、`"50000"`，見 §3；2.7.1：只改文件、回應不變——§3.5 點交照片範例改為實際格式（`furniture`、`appliance` 是物件陣列，8 個鍵與降級值寫明）；§3.2、§3.3 補金額欄位型別說明；2.7.0：`document_fields` 固定帶鍵——各頁 `structured_data` 有的鍵一律出現，各頁都是空值時回空值本身（`null`、`[]`、`""`），不再省略，見 §2；2.6.0：新增文件類型 `receipt`（收據、發票，回 `amount`、`date`），見 §3.3.1；修繕照片新增 `damaged_items`，見 §3.4；`/classify` 能回 `receipt`；帳單、合約的影像與掃描 PDF 可改由視覺模型直讀、不跑本機 OCR（伺服器設定 `DIRECT_READ_DOCUMENT_TYPES`，預設不列），直讀類與照片類一律呼叫模型、不看 `enable_llm`，見 §2.1、§6；2.5.0：每頁新增 `llm_calls`，列出這一頁每次 LLM 呼叫送到哪個供應商、模型、服務等級、成功或錯誤類別，見 §2.4；LLM 補欄位呼叫失敗時 `llm_used_for_extraction` 為 `false`；2.4.0：謄本新增固定輸出格式 `transcript_records`，每張謄本的鍵固定、沒印回 `null`／`[]`，附 JSON Schema，見 §3.1.3；2.3.0：謄本新增 `transcripts`，謄本上印的每一項都依原文標籤回傳，見 §3.1.2；2.2.0：謄本新增 `print_date`；原文印空白的欄位回 `null`；土地／建物專屬的必要欄位只在該部存在時要求，見 §3.1；2.1.2：合約欄位的值改為半形數字與標點、帶框字還原，見 §3.2；2.1.1：持分欄位的值統一為「分數」或「全部」，見 §3.1；2.1.0：謄本新增 6 個清單欄位與 `land_rights_scope`，並寫明各單值欄位的取值範圍）
 > 本文件由 `docs/API_INTEGRATION.md` 與 `docs/api/02-INTEGRATION-API.md` 合併而成。
 > 標示「實測」的數字皆取自線上環境(`54.248.201.66`),日期各自註明。
 > 唯一需要串的端點是 `POST /api/v1/analyze`；其餘為輔助。
@@ -36,6 +36,7 @@
 | `question` | string | ✗ | `null` | 帶入時額外回傳 `answer`，基於本次 OCR 結果作答 |
 | `transcript_format` | string | ✗ | 不帶 | 只接受 `v2`：謄本改用帶位置的新格式（§3.1.4），新串接請帶。其他值回 `400 INVALID_TRANSCRIPT_FORMAT`（`document_type` 不是謄本也一樣）；`document_type` 不是 `transcript` 時帶 `v2` 不起作用 |
 | `contract_format` | string | ✗ | 不帶 | 只接受 `v2`：合約租賃六欄附值的位置（§3.2.1）。其他值回 `400 INVALID_CONTRACT_FORMAT`（`document_type` 不是合約也一樣）；`document_type` 不是 `contract` 時帶 `v2` 不起作用 |
+| `handover_format` | string | ✗ | 不帶 | 只接受 `v2`：點交照片改用附信心值、位置框與損傷的新格式（§3.5.1）。其他值回 `400 INVALID_HANDOVER_FORMAT`（`document_type` 不是點交照片也一樣）；`document_type` 不是 `handover_photo` 時帶 `v2` 不起作用 |
 
 ### 2.2 `document_type` 可用值
 
@@ -182,6 +183,7 @@ curl -X POST "http://54.248.201.66:8085/api/v1/analyze" \
 | `files` | file[] | ✅ | — | 重複帶同名欄位，**一次最多 20 個**，單檔上限 20MB |
 | `document_type` | string | ✗ | `handover_photo` | **整批共用**，不能混送 |
 | `enable_llm` | bool | ✗ | `true` | 同單張端點 |
+| `handover_format` | string | ✗ | 不帶 | 同單張端點，整批共用（§3.5.1） |
 
 批次端點沒有 `transcript_format`、`contract_format`，帶了不起作用；要新格式請逐份送單張端點（§3.1.4、§3.2.1）。
 
@@ -787,6 +789,44 @@ VLM 不可用或影像無法辨識時降級為 `{"defect_labels": [], "damaged_i
 `{"space": null, "space_label": "", "furniture": [], "appliance": [], "description": "", "confidence": 0.0, "dropped": [], "field_confidences": {}}`，
 **不會回錯誤**，請以 `confidence` 判斷是否可用；失敗與否看 `pages[].llm_calls`。
 
+#### 3.5.1 帶參數格式 `handover_format=v2`（2.12.0 起）
+
+`/analyze` 或 `/analyze/batch` 帶 `handover_format=v2`、`document_type=handover_photo` 時，每張照片的 `pages[0].structured_data` 與 `document_fields` 改用下列格式。不帶參數時回應與 2.11.0 相同。
+
+```json
+{
+  "space": "room",
+  "space_label": "房間",
+  "furniture": [
+    { "key": "double_bed", "label": "雙人床", "confidence": 0.93,
+      "box": { "box": [0.12, 0.45, 0.68, 0.95], "unit": "ratio" }, "condition": "" },
+    { "key": "closet", "label": "衣櫃", "confidence": null,
+      "box": null, "condition": "左門板下緣剝落" }
+  ],
+  "appliance": [],
+  "damages": [
+    { "text": "窗邊牆面水漬約手掌大", "box": { "box": [0.7, 0.1, 0.85, 0.3], "unit": "ratio" } }
+  ],
+  "description": "臥室，雙人床靠牆，右側衣櫃",
+  "confidence": 0.9,
+  "dropped": [],
+  "field_confidences": { "double_bed": 0.93 }
+}
+```
+
+- `furniture`、`appliance` 每項恰好 5 個鍵：
+  - `confidence`：模型對**這一項**的自評，0～1（超出範圍夾回 0～1）。模型沒給或不是數字時為 `null`，不拿整張照片的 `confidence` 補。
+  - `box`：`{"box": [x0, y0, x1, y1], "unit": "ratio"}`，相對整張照片的 0～1 比例，原點在左上角，小數 4 位，與 `transcript_positions` 同格式。以下情況為 `null`：模型沒給、不是 4 個數字、超出 0～1、`x0 ≥ x1` 或 `y0 ≥ y1`、框面積小於整張的 0.5%。照片有 EXIF 方向時，座標以轉正後的照片為準（與瀏覽器顯示的方向相同）。
+  - `condition`：這一項看得到的損傷，最多 30 字（超過截斷）；沒看到損傷為 `""`。
+- `damages`：不屬於清單品項的損傷（牆面、地板、天花板等），每筆 `{text, box}`；`text` 最多 30 字，空字串的那筆不回；`box` 規則同上。看不到損傷時為 `[]`。
+- `space`、`space_label`、`description`、整張 `confidence`、`dropped`、白名單與詞彙表都和不帶參數時相同；一次最多 20 張的批次限制也相同。
+- `field_confidences`（頂層、`pages[]`、`structured_data`、`document_fields` 四處）只放有自評的品項，值同該品項的 `confidence`；模型沒給自評的品項不放進來。
+- `document_fields`：`furniture`、`appliance`、`damages` 與各頁 `structured_data` 相同；`needs_confirmation` 列出自評為 `null` 或低於 0.8 的品項 key（排序、不重複）；`extraction_confidence` 是有自評品項的平均（小數 4 位），一項都沒有自評時不回這個鍵。
+- `needs_review` 與 `review_item_id`（是否為 `null`）和不帶參數時相同：低信心判定與人工複核佇列仍用舊算法、存舊格式。
+- 模型呼叫失敗或回應無法解析時，`furniture`、`appliance`、`damages` 為 `[]`、`confidence` 為 `0.0`，**不會回錯誤**（同 §3.5）。
+- 品項正確率與框準度尚未用實際點交照片比對新舊版；目前驗證到的是格式與上列規則。
+
+
 ---
 
 ## 4. 錯誤格式
@@ -805,6 +845,7 @@ VLM 不可用或影像無法辨識時降級為 `{"defect_labels": [], "damaged_i
 | `FILE_TOO_LARGE` | 413 | 檔案 > 20 MB |
 | `PROCESSING_ERROR` | 500 | 處理過程例外，訊息不外洩細節 |
 | `INVALID_TRANSCRIPT_FORMAT` | 400 | `transcript_format` 帶了 `v2` 以外的值（含空字串）；`document_type` 不是謄本也一樣（§3.1.4） |
+| `INVALID_HANDOVER_FORMAT` | 400 | `handover_format` 帶了 `v2` 以外的值（含空字串）；單張與批次端點都是；`document_type` 不是點交照片也一樣（§3.5.1） |
 | `INVALID_CONTRACT_FORMAT` | 400 | `contract_format` 帶了 `v2` 以外的值（含空字串）；`document_type` 不是合約也一樣（§3.2.1） |
 | `NO_FILES` | 400 | 批次端點沒帶任何檔案 |
 | `TOO_MANY_FILES` | 400 | 批次端點超過 20 個檔案 |

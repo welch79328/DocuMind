@@ -509,6 +509,7 @@ class AnalyzeService:
         document_type: str,
         enable_llm: bool,
         few_shot: Optional[List[dict]] = None,
+        handover_format: Optional[str] = None,
     ) -> Tuple[List[dict], int]:
         """
         執行 OCR 處理
@@ -560,11 +561,16 @@ class AnalyzeService:
             total_pages = 1
             pages_to_process = [1]
 
-        processor = (
-            create_direct_read_processor(document_type)
-            if direct_read
-            else ProcessorFactory.get_processor(document_type)
-        )
+        if handover_format == "v2" and document_type == "handover_photo":
+            # 點交 v2:同一次模型呼叫同時產出舊形狀與 v2 形狀(見 handover_photo_processor)
+            from app.lib.multi_type_ocr.handover_photo_processor import HandoverPhotoProcessor
+            processor = HandoverPhotoProcessor(fmt="v2")
+        else:
+            processor = (
+                create_direct_read_processor(document_type)
+                if direct_read
+                else ProcessorFactory.get_processor(document_type)
+            )
 
         # 頁面併發,但 OCR 仍由 EngineManager 的閘門序列化。
         #
@@ -642,6 +648,8 @@ class AnalyzeService:
         question: Optional[str] = None,
         few_shot: Optional[List[dict]] = None,
         ocr_lines_out: Optional[dict] = None,
+        handover_format: Optional[str] = None,
+        handover_v2_out: Optional[dict] = None,
     ) -> dict:
         """
         執行完整的文件分析流程
@@ -650,6 +658,10 @@ class AnalyzeService:
 
         ocr_lines_out:呼叫端傳入的容器;有傳才把各頁 OCR 行框({頁碼: [{"text","box"}]})放進去
         (謄本照片位置用),沒傳就丟棄。頁結果與回應一律不留行框(私有鍵 _ocr_lines)。
+
+        handover_format="v2"(只對 handover_photo 有效):處理器另產 v2 形狀,放在頁私有鍵
+        _handover_v2;這裡取出,有傳 handover_v2_out 才交出({頁碼: v2 structured_data})。
+        回應本身仍是舊形狀——換成 v2 是端點在信心度攔截之後的事(apply_handover_format)。
         """
         import time
 
@@ -660,7 +672,8 @@ class AnalyzeService:
 
         # 2. OCR 處理（注入 few-shot 範例）
         pages, total_pages = await self._process_ocr(
-            file_contents, filename, document_type, enable_llm, few_shot
+            file_contents, filename, document_type, enable_llm, few_shot,
+            handover_format=handover_format,
         )
 
         # 2b. 取出各頁私有行框:頁結果不留;只在呼叫端傳入容器時交出(不存實例屬性)
@@ -668,6 +681,9 @@ class AnalyzeService:
             lines = page.pop("_ocr_lines", None)
             if lines and ocr_lines_out is not None:
                 ocr_lines_out[page.get("page_number")] = lines
+            handover_v2 = page.pop("_handover_v2", None)
+            if handover_v2 is not None and handover_v2_out is not None:
+                handover_v2_out[page.get("page_number")] = handover_v2
 
         # 3. AI 問答（可選）
         answer = None

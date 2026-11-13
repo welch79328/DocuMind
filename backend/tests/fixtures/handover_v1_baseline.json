@@ -1,0 +1,918 @@
+{
+ "_meta": {
+  "generated_at": "2026-11-13T07:23:23+00:00",
+  "generator": "backend/tests/fixtures/make_handover_v1_baseline.py",
+  "git_status_backend": "?? backend/tests/fixtures/make_handover_v1_baseline.py\n",
+  "sha": "df41f2d34749ef58fe153277a4d1cc789a09e183"
+ },
+ "cases": {
+  "empty_reply": {
+   "analyze": {
+    "answer": null,
+    "document_fields": {
+     "appliance": [],
+     "confidence": 0.0,
+     "description": "",
+     "dropped": [],
+     "field_confidences": {},
+     "furniture": [],
+     "space": null,
+     "space_label": ""
+    },
+    "document_type": "handover_photo",
+    "field_confidences": {},
+    "file_name": "room.png",
+    "file_url": "https://example.invalid/handover.png",
+    "needs_review": false,
+    "pages": [
+     {
+      "accuracy": null,
+      "field_confidences": {},
+      "llm_calls": [],
+      "llm_postprocessed": null,
+      "ocr_raw": null,
+      "overall_confidence": 0.0,
+      "page_number": 1,
+      "processing_steps": {
+       "1_understand": "完成"
+      },
+      "rule_postprocessed": null,
+      "structured_data": {
+       "appliance": [],
+       "confidence": 0.0,
+       "description": "",
+       "dropped": [],
+       "field_confidences": {},
+       "furniture": [],
+       "space": null,
+       "space_label": ""
+      }
+     }
+    ],
+    "review_item_id": null,
+    "stats": {
+     "estimated_cost": 0.0,
+     "llm_pages_used": 0,
+     "total_pages": 1,
+     "total_time_ms": 0
+    },
+    "total_pages": 1
+   },
+   "enqueued": null,
+   "understand": {
+    "appliance": [],
+    "confidence": 0.0,
+    "description": "",
+    "dropped": [],
+    "field_confidences": {},
+    "furniture": [],
+    "space": null,
+    "space_label": ""
+   }
+  },
+  "exception": {
+   "analyze": {
+    "answer": null,
+    "document_fields": {
+     "appliance": [],
+     "confidence": 0.0,
+     "description": "",
+     "dropped": [],
+     "field_confidences": {},
+     "furniture": [],
+     "space": null,
+     "space_label": ""
+    },
+    "document_type": "handover_photo",
+    "field_confidences": {},
+    "file_name": "room.png",
+    "file_url": "https://example.invalid/handover.png",
+    "needs_review": false,
+    "pages": [
+     {
+      "accuracy": null,
+      "field_confidences": {},
+      "llm_calls": [],
+      "llm_postprocessed": null,
+      "ocr_raw": null,
+      "overall_confidence": 0.0,
+      "page_number": 1,
+      "processing_steps": {
+       "1_understand": "完成"
+      },
+      "rule_postprocessed": null,
+      "structured_data": {
+       "appliance": [],
+       "confidence": 0.0,
+       "description": "",
+       "dropped": [],
+       "field_confidences": {},
+       "furniture": [],
+       "space": null,
+       "space_label": ""
+      }
+     }
+    ],
+    "review_item_id": null,
+    "stats": {
+     "estimated_cost": 0.0,
+     "llm_pages_used": 0,
+     "total_pages": 1,
+     "total_time_ms": 0
+    },
+    "total_pages": 1
+   },
+   "enqueued": null,
+   "understand": {
+    "appliance": [],
+    "confidence": 0.0,
+    "description": "",
+    "dropped": [],
+    "field_confidences": {},
+    "furniture": [],
+    "space": null,
+    "space_label": ""
+   }
+  },
+  "missing_item_confidence": {
+   "analyze": {
+    "answer": null,
+    "document_fields": {
+     "appliance": [],
+     "confidence": 0.3,
+     "description": "臥室",
+     "dropped": [],
+     "extraction_confidence": 0.3,
+     "field_confidences": {
+      "closet": 0.3,
+      "double_bed": 0.3
+     },
+     "furniture": [
+      {
+       "confidence": 0.3,
+       "key": "double_bed",
+       "label": "雙人床"
+      },
+      {
+       "confidence": 0.3,
+       "key": "closet",
+       "label": "衣櫃"
+      }
+     ],
+     "needs_confirmation": [
+      "closet",
+      "double_bed"
+     ],
+     "space": "room",
+     "space_label": "房間"
+    },
+    "document_type": "handover_photo",
+    "field_confidences": {
+     "closet": 0.3,
+     "double_bed": 0.3
+    },
+    "file_name": "room.png",
+    "file_url": "https://example.invalid/handover.png",
+    "needs_review": true,
+    "pages": [
+     {
+      "accuracy": null,
+      "field_confidences": {
+       "closet": 0.3,
+       "double_bed": 0.3
+      },
+      "llm_calls": [],
+      "llm_postprocessed": null,
+      "ocr_raw": null,
+      "overall_confidence": 0.3,
+      "page_number": 1,
+      "processing_steps": {
+       "1_understand": "完成"
+      },
+      "rule_postprocessed": null,
+      "structured_data": {
+       "appliance": [],
+       "confidence": 0.3,
+       "description": "臥室",
+       "dropped": [],
+       "field_confidences": {
+        "closet": 0.3,
+        "double_bed": 0.3
+       },
+       "furniture": [
+        {
+         "confidence": 0.3,
+         "key": "double_bed",
+         "label": "雙人床"
+        },
+        {
+         "confidence": 0.3,
+         "key": "closet",
+         "label": "衣櫃"
+        }
+       ],
+       "space": "room",
+       "space_label": "房間"
+      }
+     }
+    ],
+    "review_item_id": "00000000-0000-0000-0000-000000000001",
+    "stats": {
+     "estimated_cost": 0.0,
+     "llm_pages_used": 0,
+     "total_pages": 1,
+     "total_time_ms": 0
+    },
+    "total_pages": 1
+   },
+   "enqueued": {
+    "document_id": null,
+    "document_type": "handover_photo",
+    "overall_confidence": 0.3,
+    "result": {
+     "field_confidences": {
+      "closet": 0.3,
+      "double_bed": 0.3
+     },
+     "pages": [
+      {
+       "accuracy": null,
+       "field_confidences": {
+        "closet": 0.3,
+        "double_bed": 0.3
+       },
+       "llm_calls": [],
+       "llm_postprocessed": null,
+       "ocr_raw": null,
+       "overall_confidence": 0.3,
+       "page_number": 1,
+       "processing_steps": {
+        "1_understand": "完成"
+       },
+       "rule_postprocessed": null,
+       "structured_data": {
+        "appliance": [],
+        "confidence": 0.3,
+        "description": "臥室",
+        "dropped": [],
+        "field_confidences": {
+         "closet": 0.3,
+         "double_bed": 0.3
+        },
+        "furniture": [
+         {
+          "confidence": 0.3,
+          "key": "double_bed",
+          "label": "雙人床"
+         },
+         {
+          "confidence": 0.3,
+          "key": "closet",
+          "label": "衣櫃"
+         }
+        ],
+        "space": "room",
+        "space_label": "房間"
+       }
+      }
+     ]
+    }
+   },
+   "understand": {
+    "appliance": [],
+    "confidence": 0.3,
+    "description": "臥室",
+    "dropped": [],
+    "field_confidences": {
+     "closet": 0.3,
+     "double_bed": 0.3
+    },
+    "furniture": [
+     {
+      "confidence": 0.3,
+      "key": "double_bed",
+      "label": "雙人床"
+     },
+     {
+      "confidence": 0.3,
+      "key": "closet",
+      "label": "衣櫃"
+     }
+    ],
+    "space": "room",
+    "space_label": "房間"
+   }
+  },
+  "non_numeric_confidence": {
+   "analyze": {
+    "answer": null,
+    "document_fields": {
+     "appliance": [
+      {
+       "confidence": 1.0,
+       "key": "TV",
+       "label": "電視"
+      }
+     ],
+     "confidence": 0.8,
+     "description": "客廳",
+     "dropped": [
+      "客廳"
+     ],
+     "extraction_confidence": 0.9,
+     "field_confidences": {
+      "TV": 1.0,
+      "sofa": 0.8
+     },
+     "furniture": [
+      {
+       "confidence": 0.8,
+       "key": "sofa",
+       "label": "沙發"
+      }
+     ],
+     "needs_confirmation": [],
+     "space": null,
+     "space_label": ""
+    },
+    "document_type": "handover_photo",
+    "field_confidences": {
+     "TV": 1.0,
+     "sofa": 0.8
+    },
+    "file_name": "room.png",
+    "file_url": "https://example.invalid/handover.png",
+    "needs_review": false,
+    "pages": [
+     {
+      "accuracy": null,
+      "field_confidences": {
+       "TV": 1.0,
+       "sofa": 0.8
+      },
+      "llm_calls": [],
+      "llm_postprocessed": null,
+      "ocr_raw": null,
+      "overall_confidence": 0.8,
+      "page_number": 1,
+      "processing_steps": {
+       "1_understand": "完成"
+      },
+      "rule_postprocessed": null,
+      "structured_data": {
+       "appliance": [
+        {
+         "confidence": 1.0,
+         "key": "TV",
+         "label": "電視"
+        }
+       ],
+       "confidence": 0.8,
+       "description": "客廳",
+       "dropped": [
+        "客廳"
+       ],
+       "field_confidences": {
+        "TV": 1.0,
+        "sofa": 0.8
+       },
+       "furniture": [
+        {
+         "confidence": 0.8,
+         "key": "sofa",
+         "label": "沙發"
+        }
+       ],
+       "space": null,
+       "space_label": ""
+      }
+     }
+    ],
+    "review_item_id": null,
+    "stats": {
+     "estimated_cost": 0.0,
+     "llm_pages_used": 0,
+     "total_pages": 1,
+     "total_time_ms": 0
+    },
+    "total_pages": 1
+   },
+   "enqueued": null,
+   "understand": {
+    "appliance": [
+     {
+      "confidence": 1.0,
+      "key": "TV",
+      "label": "電視"
+     }
+    ],
+    "confidence": 0.8,
+    "description": "客廳",
+    "dropped": [
+     "客廳"
+    ],
+    "field_confidences": {
+     "TV": 1.0,
+     "sofa": 0.8
+    },
+    "furniture": [
+     {
+      "confidence": 0.8,
+      "key": "sofa",
+      "label": "沙發"
+     }
+    ],
+    "space": null,
+    "space_label": ""
+   }
+  },
+  "normal": {
+   "analyze": {
+    "answer": null,
+    "document_fields": {
+     "appliance": [
+      {
+       "confidence": 0.9,
+       "key": "air_conditioner",
+       "label": "冷氣"
+      }
+     ],
+     "confidence": 0.9,
+     "description": "臥室，雙人床靠牆",
+     "dropped": [],
+     "extraction_confidence": 0.8467,
+     "field_confidences": {
+      "air_conditioner": 0.9,
+      "closet": 0.71,
+      "double_bed": 0.93
+     },
+     "furniture": [
+      {
+       "confidence": 0.93,
+       "key": "double_bed",
+       "label": "雙人床"
+      },
+      {
+       "confidence": 0.71,
+       "key": "closet",
+       "label": "衣櫃"
+      }
+     ],
+     "needs_confirmation": [
+      "closet"
+     ],
+     "space": "room",
+     "space_label": "房間"
+    },
+    "document_type": "handover_photo",
+    "field_confidences": {
+     "air_conditioner": 0.9,
+     "closet": 0.71,
+     "double_bed": 0.93
+    },
+    "file_name": "room.png",
+    "file_url": "https://example.invalid/handover.png",
+    "needs_review": true,
+    "pages": [
+     {
+      "accuracy": null,
+      "field_confidences": {
+       "air_conditioner": 0.9,
+       "closet": 0.71,
+       "double_bed": 0.93
+      },
+      "llm_calls": [],
+      "llm_postprocessed": null,
+      "ocr_raw": null,
+      "overall_confidence": 0.9,
+      "page_number": 1,
+      "processing_steps": {
+       "1_understand": "完成"
+      },
+      "rule_postprocessed": null,
+      "structured_data": {
+       "appliance": [
+        {
+         "confidence": 0.9,
+         "key": "air_conditioner",
+         "label": "冷氣"
+        }
+       ],
+       "confidence": 0.9,
+       "description": "臥室，雙人床靠牆",
+       "dropped": [],
+       "field_confidences": {
+        "air_conditioner": 0.9,
+        "closet": 0.71,
+        "double_bed": 0.93
+       },
+       "furniture": [
+        {
+         "confidence": 0.93,
+         "key": "double_bed",
+         "label": "雙人床"
+        },
+        {
+         "confidence": 0.71,
+         "key": "closet",
+         "label": "衣櫃"
+        }
+       ],
+       "space": "room",
+       "space_label": "房間"
+      }
+     }
+    ],
+    "review_item_id": "00000000-0000-0000-0000-000000000001",
+    "stats": {
+     "estimated_cost": 0.0,
+     "llm_pages_used": 0,
+     "total_pages": 1,
+     "total_time_ms": 0
+    },
+    "total_pages": 1
+   },
+   "enqueued": {
+    "document_id": null,
+    "document_type": "handover_photo",
+    "overall_confidence": 0.71,
+    "result": {
+     "field_confidences": {
+      "air_conditioner": 0.9,
+      "closet": 0.71,
+      "double_bed": 0.93
+     },
+     "pages": [
+      {
+       "accuracy": null,
+       "field_confidences": {
+        "air_conditioner": 0.9,
+        "closet": 0.71,
+        "double_bed": 0.93
+       },
+       "llm_calls": [],
+       "llm_postprocessed": null,
+       "ocr_raw": null,
+       "overall_confidence": 0.9,
+       "page_number": 1,
+       "processing_steps": {
+        "1_understand": "完成"
+       },
+       "rule_postprocessed": null,
+       "structured_data": {
+        "appliance": [
+         {
+          "confidence": 0.9,
+          "key": "air_conditioner",
+          "label": "冷氣"
+         }
+        ],
+        "confidence": 0.9,
+        "description": "臥室，雙人床靠牆",
+        "dropped": [],
+        "field_confidences": {
+         "air_conditioner": 0.9,
+         "closet": 0.71,
+         "double_bed": 0.93
+        },
+        "furniture": [
+         {
+          "confidence": 0.93,
+          "key": "double_bed",
+          "label": "雙人床"
+         },
+         {
+          "confidence": 0.71,
+          "key": "closet",
+          "label": "衣櫃"
+         }
+        ],
+        "space": "room",
+        "space_label": "房間"
+       }
+      }
+     ]
+    }
+   },
+   "understand": {
+    "appliance": [
+     {
+      "confidence": 0.9,
+      "key": "air_conditioner",
+      "label": "冷氣"
+     }
+    ],
+    "confidence": 0.9,
+    "description": "臥室，雙人床靠牆",
+    "dropped": [],
+    "field_confidences": {
+     "air_conditioner": 0.9,
+     "closet": 0.71,
+     "double_bed": 0.93
+    },
+    "furniture": [
+     {
+      "confidence": 0.93,
+      "key": "double_bed",
+      "label": "雙人床"
+     },
+     {
+      "confidence": 0.71,
+      "key": "closet",
+      "label": "衣櫃"
+     }
+    ],
+    "space": "room",
+    "space_label": "房間"
+   }
+  },
+  "v2_shaped_reply": {
+   "analyze": {
+    "answer": null,
+    "document_fields": {
+     "appliance": [],
+     "confidence": 0.9,
+     "description": "臥室，雙人床靠牆，右側衣櫃",
+     "dropped": [],
+     "extraction_confidence": 0.82,
+     "field_confidences": {
+      "closet": 0.71,
+      "double_bed": 0.93
+     },
+     "furniture": [
+      {
+       "confidence": 0.93,
+       "key": "double_bed",
+       "label": "雙人床"
+      },
+      {
+       "confidence": 0.71,
+       "key": "closet",
+       "label": "衣櫃"
+      }
+     ],
+     "needs_confirmation": [
+      "closet"
+     ],
+     "space": "room",
+     "space_label": "房間"
+    },
+    "document_type": "handover_photo",
+    "field_confidences": {
+     "closet": 0.71,
+     "double_bed": 0.93
+    },
+    "file_name": "room.png",
+    "file_url": "https://example.invalid/handover.png",
+    "needs_review": true,
+    "pages": [
+     {
+      "accuracy": null,
+      "field_confidences": {
+       "closet": 0.71,
+       "double_bed": 0.93
+      },
+      "llm_calls": [],
+      "llm_postprocessed": null,
+      "ocr_raw": null,
+      "overall_confidence": 0.9,
+      "page_number": 1,
+      "processing_steps": {
+       "1_understand": "完成"
+      },
+      "rule_postprocessed": null,
+      "structured_data": {
+       "appliance": [],
+       "confidence": 0.9,
+       "description": "臥室，雙人床靠牆，右側衣櫃",
+       "dropped": [],
+       "field_confidences": {
+        "closet": 0.71,
+        "double_bed": 0.93
+       },
+       "furniture": [
+        {
+         "confidence": 0.93,
+         "key": "double_bed",
+         "label": "雙人床"
+        },
+        {
+         "confidence": 0.71,
+         "key": "closet",
+         "label": "衣櫃"
+        }
+       ],
+       "space": "room",
+       "space_label": "房間"
+      }
+     }
+    ],
+    "review_item_id": "00000000-0000-0000-0000-000000000001",
+    "stats": {
+     "estimated_cost": 0.0,
+     "llm_pages_used": 0,
+     "total_pages": 1,
+     "total_time_ms": 0
+    },
+    "total_pages": 1
+   },
+   "enqueued": {
+    "document_id": null,
+    "document_type": "handover_photo",
+    "overall_confidence": 0.71,
+    "result": {
+     "field_confidences": {
+      "closet": 0.71,
+      "double_bed": 0.93
+     },
+     "pages": [
+      {
+       "accuracy": null,
+       "field_confidences": {
+        "closet": 0.71,
+        "double_bed": 0.93
+       },
+       "llm_calls": [],
+       "llm_postprocessed": null,
+       "ocr_raw": null,
+       "overall_confidence": 0.9,
+       "page_number": 1,
+       "processing_steps": {
+        "1_understand": "完成"
+       },
+       "rule_postprocessed": null,
+       "structured_data": {
+        "appliance": [],
+        "confidence": 0.9,
+        "description": "臥室，雙人床靠牆，右側衣櫃",
+        "dropped": [],
+        "field_confidences": {
+         "closet": 0.71,
+         "double_bed": 0.93
+        },
+        "furniture": [
+         {
+          "confidence": 0.93,
+          "key": "double_bed",
+          "label": "雙人床"
+         },
+         {
+          "confidence": 0.71,
+          "key": "closet",
+          "label": "衣櫃"
+         }
+        ],
+        "space": "room",
+        "space_label": "房間"
+       }
+      }
+     ]
+    }
+   },
+   "understand": {
+    "appliance": [],
+    "confidence": 0.9,
+    "description": "臥室，雙人床靠牆，右側衣櫃",
+    "dropped": [],
+    "field_confidences": {
+     "closet": 0.71,
+     "double_bed": 0.93
+    },
+    "furniture": [
+     {
+      "confidence": 0.93,
+      "key": "double_bed",
+      "label": "雙人床"
+     },
+     {
+      "confidence": 0.71,
+      "key": "closet",
+      "label": "衣櫃"
+     }
+    ],
+    "space": "room",
+    "space_label": "房間"
+   }
+  },
+  "wrong_array_and_unknown": {
+   "analyze": {
+    "answer": null,
+    "document_fields": {
+     "appliance": [
+      {
+       "confidence": 0.85,
+       "key": "refrigerator",
+       "label": "冰箱"
+      },
+      {
+       "confidence": 0.85,
+       "key": "washing_machine",
+       "label": "洗衣機"
+      }
+     ],
+     "confidence": 0.85,
+     "description": "廚房",
+     "dropped": [
+      "魔法掃帚"
+     ],
+     "extraction_confidence": 0.85,
+     "field_confidences": {
+      "refrigerator": 0.85,
+      "washing_machine": 0.85
+     },
+     "furniture": [],
+     "needs_confirmation": [],
+     "space": "kitchen",
+     "space_label": "廚房"
+    },
+    "document_type": "handover_photo",
+    "field_confidences": {
+     "refrigerator": 0.85,
+     "washing_machine": 0.85
+    },
+    "file_name": "room.png",
+    "file_url": "https://example.invalid/handover.png",
+    "needs_review": false,
+    "pages": [
+     {
+      "accuracy": null,
+      "field_confidences": {
+       "refrigerator": 0.85,
+       "washing_machine": 0.85
+      },
+      "llm_calls": [],
+      "llm_postprocessed": null,
+      "ocr_raw": null,
+      "overall_confidence": 0.85,
+      "page_number": 1,
+      "processing_steps": {
+       "1_understand": "完成"
+      },
+      "rule_postprocessed": null,
+      "structured_data": {
+       "appliance": [
+        {
+         "confidence": 0.85,
+         "key": "refrigerator",
+         "label": "冰箱"
+        },
+        {
+         "confidence": 0.85,
+         "key": "washing_machine",
+         "label": "洗衣機"
+        }
+       ],
+       "confidence": 0.85,
+       "description": "廚房",
+       "dropped": [
+        "魔法掃帚"
+       ],
+       "field_confidences": {
+        "refrigerator": 0.85,
+        "washing_machine": 0.85
+       },
+       "furniture": [],
+       "space": "kitchen",
+       "space_label": "廚房"
+      }
+     }
+    ],
+    "review_item_id": null,
+    "stats": {
+     "estimated_cost": 0.0,
+     "llm_pages_used": 0,
+     "total_pages": 1,
+     "total_time_ms": 0
+    },
+    "total_pages": 1
+   },
+   "enqueued": null,
+   "understand": {
+    "appliance": [
+     {
+      "confidence": 0.85,
+      "key": "refrigerator",
+      "label": "冰箱"
+     },
+     {
+      "confidence": 0.85,
+      "key": "washing_machine",
+      "label": "洗衣機"
+     }
+    ],
+    "confidence": 0.85,
+    "description": "廚房",
+    "dropped": [
+     "魔法掃帚"
+    ],
+    "field_confidences": {
+     "refrigerator": 0.85,
+     "washing_machine": 0.85
+    },
+    "furniture": [],
+    "space": "kitchen",
+    "space_label": "廚房"
+   }
+  }
+ }
+}
