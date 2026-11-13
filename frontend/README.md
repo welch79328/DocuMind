@@ -14,7 +14,7 @@ npm install
 npm run dev
 ```
 
-Access: http://localhost:3000
+Access: http://localhost:3000 (Vite proxies `/api` to `http://localhost:8000`, see `vite.config.ts`)
 
 ### Build for Production
 
@@ -42,14 +42,13 @@ npm run preview
 
 ```
 frontend/
-├── public/              # Static assets
 ├── src/
 │   ├── assets/          # CSS, images
 │   ├── components/      # Vue components
 │   ├── views/           # Page components
+│   ├── composables/     # Composition functions
 │   ├── router/          # Vue Router config
-│   ├── stores/          # Pinia stores
-│   ├── services/        # API services
+│   ├── services/        # API services (axios, baseURL `/api`)
 │   ├── types/           # TypeScript types
 │   ├── App.vue          # Root component
 │   └── main.ts          # Entry point
@@ -60,15 +59,6 @@ frontend/
 ```
 
 ## 🔧 Configuration
-
-### Environment Variables
-
-Create `.env.local`:
-
-```bash
-VITE_API_URL=http://localhost:8000
-VITE_APP_TITLE=AI Document Intelligence
-```
 
 ### Vite Config
 
@@ -85,17 +75,25 @@ See `vite.config.ts` for:
 docker build -t ai-doc-frontend .
 ```
 
-### Run Container
+### Run
 
-```bash
-docker run -p 80:80 ai-doc-frontend
-```
+The image's nginx proxies `/api/` to `http://backend:8000`, so run it with the repo-root
+`docker-compose.yml` (served through the `nginx` service on http://localhost:8085).
 
 ## 📝 Pages
 
 - **Home** (`/`) - Landing page
 - **Upload** (`/upload`) - Document upload
 - **Document** (`/document/:id`) - Document details & AI results
+- **OCR Test** (`/ocr-test`) - OCR result comparison and field confirmation (see `OCR_VALIDATION_UI_GUIDE.md`)
+- **Review Queue** (`/review`) - Human review queue
+- **Review Correct** (`/review/:id`) - Correct one review item
+
+## 🧪 Tests
+
+```bash
+npm test   # vitest run (src/**/*.spec.ts)
+```
 
 ## 🎨 Styling
 

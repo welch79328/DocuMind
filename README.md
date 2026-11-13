@@ -1,6 +1,6 @@
 # DocuMind - AI Document Intelligence
 
-> 台灣不動產文件（謄本、合約、帳單、修繕／點交照片）的辨識與欄位抽取服務，以 API 供 JGB 等系統串接
+> 台灣不動產文件（謄本、合約、帳單、收據、修繕／點交照片）的辨識與欄位抽取服務，以 API 供 JGB 等系統串接
 
 [![GitHub](https://img.shields.io/badge/GitHub-DocuMind-blue?logo=github)](https://github.com/welch79328/DocuMind)
 [![Python](https://img.shields.io/badge/Python-3.11+-green?logo=python)](https://www.python.org/)
@@ -10,7 +10,8 @@
 ## 📖 專案簡介
 
 上傳 PDF 或圖片，回傳結構化欄位。電子 PDF（如網路申領的電子謄本）直接讀文字層、不經 OCR；
-掃描件與照片走本地 OCR（PaddleOCR + Tesseract），必要時由 LLM 校正；信心不足的欄位進人工複核佇列。
+謄本的掃描件與照片走本地 OCR，必要時由 LLM 校正；收據、帳單、合約的影像與掃描 PDF 在伺服器開啟「直讀」時整頁交視覺模型讀、不跑本地 OCR（線上已開啟）；
+修繕、點交照片由視覺模型做影像理解。信心不足的欄位進人工複核佇列。
 
 ### 支援的文件類型
 
@@ -19,6 +20,7 @@
 | `transcript` | 建物／土地謄本（謄本上印的每一項都解析，另有固定輸出格式 `transcript_records`） |
 | `contract` | 合約（含租約） |
 | `bill` | 帳單（水電、管理費等） |
+| `receipt` | 收據、發票（伺服器設定 `DIRECT_READ_DOCUMENT_TYPES` 列入 `receipt` 時才開放） |
 | `repair_photo` | 修繕現場照片（影像理解） |
 | `handover_photo` | 點交現場照片（影像理解） |
 
@@ -38,8 +40,7 @@
 | [API 對接規格](./docs/api/INTEGRATION.md) | 給外部系統的串接文件（端點、欄位、錯誤碼、實測數據） |
 | [謄本現況](./docs/planning/transcript-status.md) | 謄本解析現況、決策、待辦 |
 | [技術棧](./docs/planning/03-TECH-STACK.md) | 技術棧現況 |
-| [部署](./docs/DEPLOYMENT.md) | 部署指南；§0.5 為線上機實況 |
-| [前端設計](./docs/frontend/01-FRONTEND-DESIGN.md) | 頁面設計、元件規格 |
+| [部署](./docs/DEPLOYMENT.md) | 部署指南；§0.5 為線上機實況，§8 為關鍵環境變數 |
 
 ---
 
@@ -64,9 +65,9 @@
 
 ### AI 服務
 
-- **OCR**: PaddleOCR（ONNX Runtime）+ Tesseract，本地執行；含文字層的 PDF 不經 OCR
-- **LLM**: OpenAI（模型分工見 `docs/planning/03-TECH-STACK.md`）
-- **儲存**: 預設本機（`STORAGE_TYPE=local`）
+- **OCR**: PaddleOCR（ONNX Runtime），本地執行；引擎清單由 `OCR_ENGINES` 設定，程式預設 `["paddleocr", "tesseract"]`，線上為 `["paddleocr"]`（見 `docs/DEPLOYMENT.md` §0.5）；含文字層的 PDF 不經 OCR
+- **LLM**: 謄本走 OpenAI；帳單、收據、合約、修繕照片、點交照片線上走 Bedrock Qwen3 VL（flex），由分流表 `LLM_PROVIDER_BY_DOCUMENT_TYPE` 設定，程式預設 OpenAI（模型分工見 `docs/planning/03-TECH-STACK.md`）
+- **儲存**: `STORAGE_TYPE`，程式預設 `local`；docker-compose 在 `.env` 沒設時帶 `s3`
 
 ---
 
@@ -86,20 +87,20 @@ git clone <repo-url>
 cd DocuMind
 
 # 2. 設定環境變數
-cp .env.docker.example .env
-# 編輯 .env，填入你的 API Keys
+cp .env.example .env
+# 編輯 .env，填入你的 API Keys（鍵的說明見 docs/DEPLOYMENT.md §8）
 
-# 3. 啟動所有服務（包含資料庫）
+# 3. 建置、啟動所有服務並執行資料庫遷移
 make init
 
-# 或手動啟動
+# 或手動啟動（backend 容器啟動時會自動執行 alembic upgrade head）
 docker-compose up -d
 ```
 
-**訪問應用：**
-- 🎨 **前端**: http://localhost:3000
-- 🔗 **API 文檔**: http://localhost:8003/api/docs
-- 📊 **後端 API**: http://localhost:8003
+**訪問應用**（compose 對外只開 nginx 與 PostgreSQL）：
+- 🎨 **前端**: http://localhost:8085
+- 🔗 **API 文檔**: http://localhost:8085/api/docs
+- 📊 **後端 API**: http://localhost:8085/api
 - 🗄️ **PostgreSQL**: localhost:5433
 
 **常用命令：**
@@ -120,7 +121,7 @@ make clean       # 清理所有容器和數據
 ### 選項 B: 本地開發環境
 
 **環境需求：**
-- Python 3.11+
+- Python 3.11（requirements 需要 3.11，系統若為較舊的 Python 請另裝）
 - Node.js 18+ (前端)
 - PostgreSQL 14+
 - Git
@@ -140,7 +141,7 @@ cd DocuMind
 cd backend
 
 # 創建虛擬環境
-python -m venv venv
+python3.11 -m venv venv
 
 # 啟動虛擬環境
 source venv/bin/activate  # macOS/Linux
@@ -149,12 +150,11 @@ source venv/bin/activate  # macOS/Linux
 # 安裝依賴
 pip install -r requirements.txt
 
-# 設定環境變數
-cp .env.example .env
-# 編輯 .env，填入必要的 API Keys
+# 設定環境變數（在 backend/ 下執行時讀的是 backend/.env）
+cp ../.env.example .env
+# 編輯 .env，填入必要的 API Keys；DATABASE_URL 預設 localhost:5432/ai_doc_demo
 
-# 初始化資料庫
-alembic revision --autogenerate -m "Initial migration"
+# 建立資料表（遷移檔已在 alembic/versions/）
 alembic upgrade head
 
 # 啟動後端
@@ -167,55 +167,52 @@ uvicorn app.main:app --reload --port 8000
 cd frontend
 npm install
 
-# 啟動前端
+# 啟動前端（Vite 把 /api 轉給 http://localhost:8000）
 npm run dev
 ```
 
 #### 4. 訪問應用
 
 - **前端**: http://localhost:3000
-- **後端 API**: http://localhost:8003/api
-- **API 文檔**: http://localhost:8003/api/docs
+- **後端 API**: http://localhost:8000/api
+- **API 文檔**: http://localhost:8000/api/docs
 
 ---
 
 ## 📋 環境變數
 
-### 快速設定（推薦）
+### 快速設定
 
-**Docker 部署只需一個檔案：**
+**Docker 部署讀根目錄的 `.env`**（`docker-compose.yml` 以 `env_file` 整份帶進 backend 容器）：
 
 ```bash
 # 1. 複製範例檔案
 cp .env.example .env
 
-# 2. 編輯設定（最小配置）
+# 2. 編輯設定
 nano .env
 
-# 只需填入以下內容即可啟動：
-STORAGE_TYPE=local          # 本地儲存（無需 S3）
-OCR_SERVICE=pytesseract     # 免費 OCR
-OPENAI_API_KEY=             # 留空（無法使用 AI 功能）
+# 本地儲存（docker-compose 在 .env 沒設 STORAGE_TYPE 時帶 s3）
+STORAGE_TYPE=local
 
-# 3. 啟動服務
+# LLM：程式預設所有類型都走 OpenAI
+OPENAI_API_KEY=
+
+# 3. 啟動服務（改過 .env 後也用這行重建容器）
 docker-compose up -d
 ```
 
-**完整功能需要 OpenAI API Key：**
-```bash
-OPENAI_API_KEY=sk-proj-xxxxxxxx  # 取得：https://platform.openai.com/api-keys
-```
-
-**詳細說明請參考：[ENV_GUIDE.md](./ENV_GUIDE.md)**
+依文件類型改走 Bedrock（`LLM_PROVIDER_BY_DOCUMENT_TYPE`、`BEDROCK_API_KEY`）、開啟直讀（`DIRECT_READ_DOCUMENT_TYPES`）、OCR 引擎（`OCR_ENGINES`）等鍵的說明，見 [docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md) §8；所有鍵與程式預設值在 `backend/app/config.py`。
 
 ---
 
 ### 環境變數檔案說明
 
-| 檔案 | 用途 | 是否必需 |
-|------|------|---------|
-| `.env` | Docker 部署的唯一配置檔 | ✅ 必需 |
-| `.env.example` | 範例檔案 | 📄 參考 |
+| 檔案 | 用途 |
+|------|------|
+| `.env` | Docker 部署的設定檔（根目錄） |
+| `backend/.env` | 在 `backend/` 下直接跑 uvicorn 時讀的設定檔 |
+| `.env.example` | 範例檔案 |
 
 ---
 
@@ -227,6 +224,9 @@ DocuMind/
 │   ├── src/
 │   │   ├── views/           # 頁面組件
 │   │   ├── components/      # Vue 元件
+│   │   ├── composables/     # 組合式函式
+│   │   ├── services/        # API 呼叫（axios）
+│   │   ├── types/           # TypeScript 型別
 │   │   ├── router/          # 路由設定
 │   │   ├── assets/          # 靜態資源
 │   │   └── main.ts          # 應用入口
@@ -244,6 +244,7 @@ DocuMind/
 │   ├── alembic/             # 資料庫遷移
 │   └── requirements.txt
 │
+├── nginx/                    # 反向代理設定（對外 8085）
 ├── docs/                     # 技術文件（導航見 docs/README.md）
 │
 └── README.md                # 本文件

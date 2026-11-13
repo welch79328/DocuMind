@@ -28,7 +28,7 @@
 | [api/transcript_records.schema.json](./api/transcript_records.schema.json) | 謄本固定輸出格式 `transcript_records` 的 JSON Schema（不帶參數的舊形狀，已棄用；INTEGRATION §3.1.3） |
 | [api/transcript_records_v2.schema.json](./api/transcript_records_v2.schema.json) | 謄本帶參數格式 `transcript_format=v2` 的 JSON Schema（每個值 `{value, position}`；INTEGRATION §3.1.4） |
 
-### 2. 謄本
+### 2. 謄本現況與各類文件實測紀錄
 
 | 文件 | 說明 |
 |------|------|
@@ -43,8 +43,11 @@
 | [testing/transcript-v2-20261109.md](./testing/transcript-v2-20261109.md) | 紀錄：謄本帶參數格式 `transcript_format=v2` 本機實測（照片補值、電子與照片位置、複核佇列；INTEGRATION §3.1.4 引用） |
 | [testing/transcript-v2-online-20261111.md](./testing/transcript-v2-online-20261111.md) | 紀錄：謄本帶參數格式正式機部署與線上確認（C14） |
 | [testing/transcript-v2-jgb-gaps-20261111.md](./testing/transcript-v2-jgb-gaps-20261111.md) | 紀錄：謄本帶參數格式補 JGB 回報的 4 項缺口（段小段、單值補層次與所有權人、空紀錄組 1 張、車位） |
+| [testing/contract-v2-positions-20261113.md](./testing/contract-v2-positions-20261113.md) | 紀錄：合約帶參數格式 `contract_format=v2` 電子 PDF 租賃六欄值位置（INTEGRATION §3.2.1） |
+| [testing/handover-v2-accuracy-20261113.md](./testing/handover-v2-accuracy-20261113.md) | 紀錄：點交照片 `handover_format=v2` 新舊品項準確率比較（本機，18 張 × 新舊 × 3 次） |
+| [planning/followups.md](./planning/followups.md) | 之後再做清單：盤查發現、尚未排入的改動 |
 
-各版的計畫與驗收清單在 `.kiro/specs/transcript-*/acceptance.md`。
+各版的計畫與驗收清單在 `.kiro/specs/<feature>/`（plan.md、acceptance.md）。
 
 ### 3. 技術與部署
 
@@ -52,9 +55,8 @@
 |------|------|
 | [planning/03-TECH-STACK.md](./planning/03-TECH-STACK.md) | 技術棧現況：前後端、LLM 模型分工、OCR 路徑 |
 | [DEPLOYMENT.md](./DEPLOYMENT.md) | 部署指南與建議規格；§0.5 為線上機實況 |
-| [DEV_WORKFLOW.md](./DEV_WORKFLOW.md) | 本機與線上的分工（PaddleOCR 本機跑不起來） |
+| [DEV_WORKFLOW.md](./DEV_WORKFLOW.md) | 本機與線上的分工（OCR 品質與速度的驗收只算線上） |
 | [ANNOTATION_GUIDE.md](./ANNOTATION_GUIDE.md) | 標註資料存放與版控規範 |
-| [frontend/01-FRONTEND-DESIGN.md](./frontend/01-FRONTEND-DESIGN.md) | 前端（Vue 3 + Vite）頁面與元件 |
 
 ### 4. 對外說明
 
@@ -62,4 +64,4 @@
 |------|------|
 | [OCR_FLOW_FOR_MARKETING.md](./OCR_FLOW_FOR_MARKETING.md) | 行銷、業務用的辨識流程說明；PDF 版由 [tools/](./tools/README.md) 產生 |
 
-設計意圖以 `.kiro/specs/<feature>/` 的 design.md、research.md 為準；程式碼只代表目前做到哪。
+設計意圖以 `.kiro/specs/<feature>/` 的 design.md、research.md 或 plan.md、acceptance.md 為準；程式碼只代表目前做到哪。

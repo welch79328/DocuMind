@@ -3,8 +3,8 @@
 > 目錄名稱刻意不用 `build/`——根目錄 `.gitignore` 的 `build/` 規則會
 > 連同 `docs/build/` 一起排除,腳本會靜默地進不了版控。
 
-`OCR系統-圖片文字辨識流程說明.pdf` 由 `build_marketing_pdf.py` 產生。
-**實測數據出來後（任務 3.3 基準測試、14.1 效能驗收），請更新腳本內的數字表並重新產生。**
+行銷版 PDF `OCR系統-圖片文字辨識流程說明.pdf` 不放進 repo；要對外發時照下面步驟用 `build_marketing_pdf.py` 當場產生，產出在 `docs/`。
+腳本內的數字表依 `docs/testing/` 的實測紀錄更新（索引見 `docs/README.md`），有新的實測紀錄就更新數字並重新產生。
 
 ## 需求
 
@@ -42,4 +42,4 @@ python3 build_marketing_pdf.py
 
 ## 內容來源
 
-與 `docs/OCR_FLOW_FOR_MARKETING.md` 同步維護。兩者若有出入，以本腳本（PDF）為交付版本，但請一併更新 markdown，避免兩份文件對「哪些數字可以對外講」給出矛盾指引。
+與 `docs/OCR_FLOW_FOR_MARKETING.md` 同步維護：改一份就同步改另一份，避免兩份文件對「哪些數字可以對外講」給出矛盾指引。

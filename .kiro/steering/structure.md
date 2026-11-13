@@ -8,6 +8,7 @@ DocuMind/
 ├── frontend/             # Vue 3 前端
 ├── data/                 # 測試資料（合約範例，gitignored）
 ├── docs/                 # 技術文件
+├── nginx/                # 反向代理設定
 ├── .kiro/                # Kiro 規格驅動開發
 ├── docker-compose.yml    # Docker 編排
 ├── Makefile              # 開發工具腳本
@@ -17,9 +18,9 @@ DocuMind/
 
 ### 根目錄檔案說明
 
-- **`docker-compose.yml`**: 定義 backend, frontend, postgres 三個服務
+- **`docker-compose.yml`**: 定義 backend、frontend、postgres、nginx 四個服務
 - **`Makefile`**: 提供快捷命令（`make up`, `make logs`, `make migrate`）
-- **`.env`**: 統一環境配置（Docker 與本地共用）
+- **`.env`**: Docker 部署的環境配置（在 `backend/` 下直接跑 uvicorn 時讀 `backend/.env`）
 - **`data/`**: 存放測試資料，不納入版控
   - `data/contracts/`: 11 份合約 PDF 範例
 
@@ -34,63 +35,38 @@ backend/
 │   ├── config.py           # Pydantic Settings 配置
 │   ├── database.py         # SQLAlchemy 連線與 Session
 │   │
-│   ├── api/                # API 路由層（按版本組織）
-│   │   └── v1/
-│   │       ├── __init__.py
-│   │       ├── documents.py    # 文件管理 API
-│   │       ├── chat.py         # 智能對話 API
-│   │       └── ocr_test.py     # OCR 測試 API
+│   ├── api/v1/             # API 路由層
+│   │   ├── analyze.py          # /analyze、/analyze/batch、/usage（主要串接端點）
+│   │   ├── classify.py         # 文件類型建議
+│   │   ├── review.py           # 人工複核佇列
+│   │   ├── samples.py          # 校正樣本
+│   │   ├── evaluation.py       # 評估與基準測試
+│   │   ├── ocr_test.py         # OCR 測試頁後端
+│   │   ├── documents.py        # 舊文件管理 API（不列在 API 文件）
+│   │   └── chat.py             # 舊對話 API（不列在 API 文件）
 │   │
-│   ├── models/             # SQLAlchemy 資料模型（對應資料表）
-│   │   ├── document.py         # Document 表
-│   │   ├── ocr_result.py       # DocumentOcrResult 表
-│   │   ├── ai_result.py        # DocumentAiResult 表
-│   │   ├── chat_log.py         # ChatLog 表
-│   │   └── created_record.py   # CreatedRecord 表
+│   ├── models/             # SQLAlchemy 資料模型（見「資料庫結構」）
+│   ├── schemas/            # Pydantic Schemas（analyze、document、ai_result、chat）
+│   ├── services/           # 業務邏輯層（analyze_service.py 為主流程）
 │   │
-│   ├── schemas/            # Pydantic Schemas（資料驗證與序列化）
-│   │   ├── document.py         # DocumentResponse, DocumentListResponse
-│   │   ├── ai_result.py        # AIResultResponse
-│   │   └── chat.py             # ChatRequest, ChatResponse
-│   │
-│   ├── services/           # 業務邏輯層（Service Layer）
-│   │   ├── document_service.py # 文件處理業務邏輯
-│   │   └── chat_service.py     # 對話業務邏輯
-│   │
-│   ├── lib/                # 函式庫層（Library Layer）
-│   │   ├── ocr_enhanced/       # OCR 增強處理套件（模組化）
-│   │   │   ├── __init__.py
-│   │   │   ├── config.py           # 預處理、引擎、後處理配置
-│   │   │   ├── types.py            # 共用型別定義
-│   │   │   ├── preprocessor.py     # 圖像預處理（去浮水印、二值化）
-│   │   │   ├── engine_manager.py   # OCR 引擎管理（多引擎融合）
-│   │   │   ├── postprocessor.py    # 規則後處理（錯別字、格式）
-│   │   │   ├── llm_postprocessor.py # LLM 後處理（LLM 文字校正）
-│   │   │   ├── quality_assessor.py # 品質評估與重試決策
-│   │   │   ├── typo_dict.py        # 錯別字對照表
-│   │   │   └── image_utils.py      # 圖像工具函數
-│   │   │
-│   │   ├── ocr_service.py      # 基礎 OCR 服務（Tesseract, PaddleOCR, Textract）
+│   ├── lib/                # 函式庫層
+│   │   ├── multi_type_ocr/     # 各文件類型處理器（ProcessorFactory、OCR／影像理解／直讀）
+│   │   ├── llm_service/        # LLM Provider（OpenAI、Anthropic、本地 Qwen、Bedrock）與依文件類型分流
+│   │   ├── ocr_enhanced/       # OCR 處理套件（預處理、引擎、規則與 LLM 後處理）
+│   │   ├── pdf_text_layer.py   # PDF 文字層讀取
+│   │   ├── document_types.py   # 文件類型列舉
+│   │   ├── ocr_service.py      # 舊 /documents 路徑的 OCR（OCR_SERVICE）
 │   │   ├── ai_service.py       # AI 服務（分類、提取、摘要）
 │   │   ├── storage_service.py  # 檔案儲存服務（本地 / S3）
-│   │   └── s3_service.py       # S3 整合（已棄用，改用 storage_service）
+│   │   └── s3_service.py       # S3 上傳下載（storage_service 的 S3 實作）
 │   │
 │   └── prompts/            # LLM Prompt 模板
-│       ├── classification.py   # 文件分類 Prompt
-│       ├── extraction.py       # 欄位提取 Prompt
-│       ├── summary.py          # 摘要生成 Prompt
-│       └── qa.py               # 問答 Prompt
 │
-├── alembic/                # 資料庫遷移
-│   └── versions/           # 遷移腳本
-│
-├── data/                   # 測試資料（建物謄本範例）
-│   ├── 建物謄本.jpg
-│   └── 建物土地謄本-杭州南路一段.pdf
-│
-├── tests/                  # 單元測試（gitignored）
-├── tests_all/              # 整合測試（gitignored）
-├── scripts/                # 工具腳本（gitignored）
+├── alembic/versions/       # 資料庫遷移腳本
+├── data/                   # 範例文件（謄本範例、transcript_samples/）
+├── tests/                  # pytest（unit/、integration/）
+├── tests_all/              # OCR 增強套件與基準測試
+├── scripts/                # 工具腳本
 ├── requirements.txt        # Python 依賴
 └── Dockerfile              # 後端 Docker 映像
 ```
@@ -99,9 +75,9 @@ backend/
 
 | 層級 | 目錄 | 職責 | 範例 |
 |------|------|------|------|
-| **API 層** | `api/v1/` | HTTP 請求處理、參數驗證、路由 | `ocr_test.py` 處理 `/api/v1/ocr/test` |
-| **Service 層** | `services/` | 業務邏輯、流程編排、錯誤處理 | `document_service.py` 協調 OCR + AI 流程 |
-| **Library 層** | `lib/` | 可重用函式庫、外部服務整合 | `ocr_enhanced/` 提供 OCR 處理 pipeline |
+| **API 層** | `api/v1/` | HTTP 請求處理、參數驗證、路由 | `analyze.py` 處理 `/api/v1/analyze` |
+| **Service 層** | `services/` | 業務邏輯、流程編排、錯誤處理 | `analyze_service.py` 協調 OCR／直讀、欄位抽取與複核 |
+| **Library 層** | `lib/` | 可重用函式庫、外部服務整合 | `multi_type_ocr/` 依文件類型處理 |
 | **Data 層** | `models/` | 資料模型、資料庫操作 | `document.py` 定義 Document 資料表 |
 
 ### 命名規範
@@ -127,40 +103,37 @@ backend/
 frontend/
 ├── src/
 │   ├── main.ts              # Vue 應用入口
-│   ├── App.vue              # 根元件
+│   ├── App.vue              # 根元件（導航列）
 │   │
 │   ├── views/               # 頁面元件（路由對應）
 │   │   ├── HomeView.vue         # 首頁
 │   │   ├── UploadView.vue       # 文件上傳頁
 │   │   ├── DocumentView.vue     # 文件結果頁
-│   │   └── OcrTestView.vue      # OCR 測試驗證頁
+│   │   ├── OcrTestView.vue      # OCR 測試驗證頁
+│   │   ├── ReviewQueueView.vue  # 複核佇列
+│   │   └── ReviewCorrectView.vue # 複核校正
 │   │
-│   ├── components/          # 可重用元件（目前未使用）
-│   │
+│   ├── components/          # 可重用元件（FieldConfirmation.vue）
+│   ├── composables/         # 組合式函式（useFieldConfirmation.ts）
 │   ├── services/            # API 服務層
-│   │   └── api.ts               # HTTP 客戶端（axios）
-│   │
+│   │   └── api.ts               # HTTP 客戶端（axios，baseURL `/api`）
 │   ├── router/              # Vue Router 配置
 │   │   └── index.ts             # 路由定義
-│   │
-│   ├── types/               # TypeScript 類型定義
-│   │   └── document.ts          # Document 相關型別
-│   │
-│   └── assets/              # 靜態資源
-│       └── (CSS, images)
+│   ├── types/               # TypeScript 類型定義（document、review、confirmation）
+│   └── assets/              # 靜態資源（main.css）
 │
-├── public/                  # 公開靜態資源
 ├── index.html               # HTML 模板
 ├── package.json             # npm 依賴
-├── vite.config.ts           # Vite 配置
+├── vite.config.ts           # Vite 配置（含 vitest 設定）
 ├── tailwind.config.js       # Tailwind CSS 配置
 ├── tsconfig.json            # TypeScript 配置
+├── nginx.conf               # 映像內 Nginx 設定
 └── Dockerfile               # 前端 Docker 映像（Nginx）
 ```
 
 ### 路由組織
 
-**路由模式**: Hash Mode (`createWebHashHistory`)
+**路由模式**: HTML5 History Mode (`createWebHistory`)
 
 **路由定義**:
 ```typescript
@@ -168,7 +141,9 @@ frontend/
   path: '/',              // 首頁
   path: '/upload',        // 上傳頁
   path: '/document/:id',  // 文件結果頁
-  path: '/ocr-test'       // OCR 測試頁
+  path: '/ocr-test',      // OCR 測試頁
+  path: '/review',        // 複核佇列
+  path: '/review/:id'     // 複核校正
 }
 ```
 
@@ -208,7 +183,12 @@ ocr_enhanced/
 ├── quality_assessor.py      # QualityAssessor - 品質評估
 │
 ├── typo_dict.py             # 錯別字對照表（台灣地政用語）
-└── image_utils.py           # 圖像工具函數
+├── image_utils.py           # 圖像工具函數
+├── memory_guard.py          # 可用記憶體偵測（並行守衛）
+├── dual_modal_corrector.py  # 雙模態校正（LLM_DUAL_MODAL_ENABLED）
+├── document_classifier.py   # 文件類型建議
+├── field_extractor.py       # 謄本欄位正則抽取
+└── pp_structure.py          # PP-Structure 版面解析（預設關）
 ```
 
 ### 處理流程
@@ -222,10 +202,9 @@ TranscriptPreprocessor (預處理)
     ├─ 去噪
     └─ 解析度提升
     ↓
-EngineManager (OCR 引擎)
-    ├─ Tesseract
-    ├─ PaddleOCR
-    └─ 多引擎融合
+EngineManager (OCR 引擎，清單取自 OCR_ENGINES)
+    ├─ PaddleOCR（ONNX Runtime）
+    └─ Tesseract
     ↓
 TranscriptPostprocessor (後處理)
     ├─ 規則修正（錯別字、格式）
@@ -236,14 +215,9 @@ TranscriptPostprocessor (後處理)
 
 ### 擴展性設計
 
-**新增文件類型處理器**（未來）:
-1. 在 `ocr_enhanced/processors/` 新增處理器
-   ```python
-   class ContractProcessor:
-       def preprocess(self, image): ...
-       def postprocess(self, text): ...
-   ```
-2. 註冊到配置或工廠
+**新增文件類型處理器**:
+1. 在 `multi_type_ocr/` 繼承 `OcrDocumentProcessor`、`ImageUnderstandingProcessor` 或 `DirectReadProcessor`
+2. 以 `ProcessorFactory.register_processor()` 註冊
 
 **新增 OCR 引擎**:
 1. 在 `engine_manager.py` 新增引擎函數
@@ -256,8 +230,10 @@ TranscriptPostprocessor (後處理)
 
 ### 資料表組織
 
+模型在 `backend/app/models/`，遷移在 `backend/alembic/versions/`。
+
 ```
-documents           # 文件基本資訊
+documents             # 文件基本資訊
     ├── id (PK)
     ├── file_name, file_url, mime_type, file_size
     ├── status, error_message
@@ -266,7 +242,7 @@ documents           # 文件基本資訊
 document_ocr_results  # OCR 辨識結果
     ├── id (PK)
     ├── document_id (FK → documents)
-    ├── raw_text, page_count
+    ├── raw_text, page_count, ocr_confidence
     ├── ocr_service, processing_time
     └── created_at
 
@@ -274,51 +250,38 @@ document_ai_results   # AI 處理結果
     ├── id (PK)
     ├── document_id (FK → documents)
     ├── doc_type, confidence
-    ├── summary, extracted_data (JSON)
+    ├── summary, risks (JSONB), extracted_data (JSONB)
     ├── ai_model, processing_time
     └── created_at
 
-chat_logs            # 對話記錄
+document_chat_logs    # 對話記錄
     ├── id (PK)
     ├── document_id (FK → documents)
-    ├── question, answer
+    ├── question, answer, ai_model, response_time
     └── created_at
 
-created_records      # 建立的系統記錄
+created_records       # 建立的系統記錄
     ├── id (PK)
-    ├── document_id (FK → documents)
-    ├── record_type, record_data (JSON)
+    ├── source_document_id (FK → documents)
+    ├── record_type, payload (JSONB)
     └── created_at
+
+api_usage_logs        # API 用量記錄（ApiUsageLog）
+review_queue_items    # 人工複核佇列（ReviewQueueItem）
+correction_samples    # 校正樣本（CorrectionSample）
+evaluation_records    # 評估紀錄（EvaluationRecord）
 ```
 
 ### 關聯關係
 
-- `Document` 1:1 `DocumentOcrResult`
-- `Document` 1:1 `DocumentAiResult`
-- `Document` 1:N `ChatLog`
+- `Document` 1:N `DocumentOcrResult`
+- `Document` 1:N `DocumentAiResult`
+- `Document` 1:N `DocumentChatLog`
 - `Document` 1:N `CreatedRecord`
 
 ## 文檔結構 (docs/)
 
-### 目錄組織
-
-```
-docs/
-├── README.md                # 文件導航
-├── platform/                # 租管問答平台規格（平台層，非 DocuMind）
-├── api/
-│   ├── INTEGRATION.md                     # 對外串接規格
-│   └── transcript_records.schema.json     # 謄本固定輸出格式 Schema
-├── planning/
-│   ├── 03-TECH-STACK.md                   # 技術棧現況
-│   └── transcript-status.md               # 謄本解析現況、決策、待辦
-├── testing/
-│   └── transcript-online-acceptance.md    # 謄本驗收
-├── frontend/
-│   └── 01-FRONTEND-DESIGN.md
-├── DEPLOYMENT.md / DEV_WORKFLOW.md / ANNOTATION_GUIDE.md
-└── OCR_FLOW_FOR_MARKETING.md              # 行銷版流程說明（PDF 由 tools/ 產生）
-```
+`docs/` 的目錄與每份文件的用途見 `docs/STRUCTURE.md`，導航見 `docs/README.md`。
 
 ## Kiro 規格結構 (.kiro/)
 
@@ -331,24 +294,12 @@ docs/
 │   ├── tech.md                 # 技術棧與開發規範
 │   └── structure.md            # 專案結構（本文件）
 │
-├── specs/                   # 功能級規格文檔
-│   ├── document-ocr-enhancement/     # 謄本 OCR 增強
-│   │   ├── spec.json
-│   │   ├── requirements.md
-│   │   ├── design.md
-│   │   └── tasks.md
-│   └── multi-document-type-ocr/      # 多文件類型 OCR
-│       ├── spec.json
-│       └── requirements.md
+├── specs/                   # 功能級規格文檔，每個功能一個目錄
+│   └── <feature>/              # spec.json、requirements.md、design.md、tasks.md 等
 │
 └── settings/                # Kiro 系統設定
-    ├── rules/                  # 規範與原則
-    │   └── ears-format.md         # EARS 需求格式
-    └── templates/              # 模板檔案
-        └── specs/
-            ├── init.json
-            ├── requirements.md
-            └── ...
+    ├── rules/                  # 規範與原則（ears-format.md 等）
+    └── templates/specs/        # 規格模板
 ```
 
 ### Specs 與 Steering 的關係
@@ -393,15 +344,16 @@ import type { Document } from '@/types/document'
   ```python
   from app.config import settings
 
-  if settings.OCR_SERVICE == "tesseract":
+  if "paddleocr" in settings.OCR_ENGINES:
       ...
   ```
 
 ### 前端配置
 
 **環境變數** (透過 Vite):
-- `import.meta.env.VITE_API_URL`（未來可能使用）
-- 目前使用硬編碼 API URL（`/api/v1/`）
+- `services/api.ts` 的 axios baseURL 為 `import.meta.env.VITE_API_URL || '/api'`，請求路徑寫 `/v1/...`
+- `OcrTestView.vue` 直接以 `fetch('/api/v1/ocr/test?...')` 呼叫
+- 本機開發由 Vite 把 `/api` 轉給 `http://localhost:8000`（`vite.config.ts`）
 
 ## 測試組織
 
@@ -409,25 +361,28 @@ import type { Document } from '@/types/document'
 
 ```
 backend/
-├── tests/                   # 單元測試（gitignored）
-│   ├── test_preprocessor.py
-│   ├── test_engine_manager.py
-│   └── ...
+├── tests/                   # pytest（納入版控）
+│   ├── unit/                    # 單元測試（test_analyze_*.py 等）
+│   ├── integration/             # 整合測試
+│   └── conftest.py
 │
-└── tests_all/               # 整合測試（gitignored）
-    ├── test_ocr_pipeline.py
-    └── test_api_endpoints.py
+└── tests_all/               # OCR 增強套件與基準測試（納入版控）
 ```
 
 **執行**:
 ```bash
-pytest tests/           # 單元測試
-pytest tests_all/       # 整合測試
+cd backend
+pytest tests/
 ```
 
 ### 前端測試
 
-目前未實作測試框架（未來可使用 Vitest + Testing Library）
+vitest（`vite.config.ts` 的 `test` 區塊，jsdom），測試檔為 `src/**/*.spec.ts`：
+
+```bash
+cd frontend
+npm test
+```
 
 ## 版本控制與 .gitignore
 
@@ -443,7 +398,6 @@ pytest tests_all/       # 整合測試
 **測試資料**:
 - `/data/` (根目錄，合約範例)
 - `/tests/` (根目錄)
-- `backend/data/temp_*.png`
 
 **保留項目**:
 - `backend/data/` (範例謄本，文檔引用)
@@ -455,32 +409,36 @@ pytest tests_all/       # 整合測試
 
 ```yaml
 services:
+  postgres:
+    ports: 5432 (內部), 5433 (外部映射)
+    volume: postgres_data
+
   backend:
-    ports: 8000 (內部)
+    ports: 8000 (內部，不對外)
     depends_on: postgres
 
   frontend:
-    ports: 3000 (外部)
-    nginx 代理 /api/* → backend:8000
+    Vue 建置後的靜態檔，由映像內 Nginx 提供（內部 80，不對外）
 
-  postgres:
-    ports: 5432 (內部), 5433 (外部映射)
-    volume: pgdata
+  nginx:
+    ports: 8085 (外部) → 80
+    /api/* → backend:8000，其餘 → frontend
 ```
 
 ### 檔案對應
 
-- **後端代碼**: `./backend` → `/app` (容器內)
-- **前端代碼**: `./frontend` → `/app` (容器內)
-- **上傳檔案**: 本地 `./uploads` 或雲端 S3/R2
+- **後端代碼**: `./backend` → `/app` (容器內，`uvicorn --reload`)
+- **前端代碼**: 建置進映像，不掛載
+- **上傳檔案**: 本地 `./uploads` → `/app/uploads` 或雲端 S3/R2
+- **標註資料**: `./data` → `/app/data`（唯讀）
 
 ## 總結：檔案放置原則
 
 | 類型 | 位置 | 範例 |
 |------|------|------|
-| API 路由 | `backend/app/api/v1/` | `ocr_test.py` |
-| 業務邏輯 | `backend/app/services/` | `document_service.py` |
-| 可重用函式庫 | `backend/app/lib/` | `ocr_enhanced/`, `storage_service.py` |
+| API 路由 | `backend/app/api/v1/` | `analyze.py` |
+| 業務邏輯 | `backend/app/services/` | `analyze_service.py` |
+| 可重用函式庫 | `backend/app/lib/` | `multi_type_ocr/`, `ocr_enhanced/`, `storage_service.py` |
 | 資料模型 | `backend/app/models/` | `document.py` |
 | LLM Prompt | `backend/app/prompts/` | `extraction.py` |
 | 前端頁面 | `frontend/src/views/` | `OcrTestView.vue` |

@@ -98,9 +98,11 @@ backend/tests_all/fixtures/
 標註完成後,以 `AnnotationImporter` 匯入為保留評估集(`CorrectionSample.purpose='holdout'`):
 
 ```bash
-curl -X POST http://localhost:8000/api/v1/samples/transcript/import \
+# docker compose 部署走 nginx 8085;直接跑 uvicorn 時是 8000
+# file_path 是後端行程看到的路徑:容器工作目錄 /app 就是 backend/
+curl -X POST http://localhost:8085/api/v1/samples/transcript/import \
   -H 'Content-Type: application/json' \
-  -d '{"file_path": "backend/tests_all/fixtures/ground_truth.json", "purpose": "holdout"}'
+  -d '{"file_path": "tests_all/fixtures/ground_truth.json", "purpose": "holdout"}'
 ```
 
 回應含 `imported` / `skipped` / `skipped_refs`,未標註項目會出現在 `skipped_refs`。

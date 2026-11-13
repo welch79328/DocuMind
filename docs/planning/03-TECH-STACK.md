@@ -7,11 +7,11 @@
 
 | 層 | 用的是 |
 |---|---|
-| 前端 | Vue 3 + Vite、TypeScript、Tailwind CSS、Vue Router、Pinia（見 [`frontend/01-FRONTEND-DESIGN.md`](../frontend/01-FRONTEND-DESIGN.md)） |
+| 前端 | Vue 3 + Vite、TypeScript、Tailwind CSS、Vue Router、Pinia；頁面 `/`、`/upload`、`/document/:id`、`/ocr-test`、`/review`、`/review/:id`（`frontend/src/router/index.ts`） |
 | 後端 | Python + FastAPI、SQLAlchemy + Alembic、PostgreSQL |
-| OCR | PaddleOCR（ONNX Runtime 執行器）+ Tesseract，本地執行；含文字層的 PDF 不經 OCR；收據、帳單、合約的影像與掃描 PDF 由視覺模型直讀、不經 OCR（線上已開啟；設定 `DIRECT_READ_DOCUMENT_TYPES`，程式預設不列，§3） |
+| OCR | PaddleOCR（ONNX Runtime 執行器），本地執行；程式預設另開 Tesseract，線上只開 PaddleOCR（[`DEPLOYMENT.md`](../DEPLOYMENT.md) §0.5）；含文字層的 PDF 不經 OCR；收據、帳單、合約的影像與掃描 PDF 由視覺模型直讀、不經 OCR（線上已開啟；設定 `DIRECT_READ_DOCUMENT_TYPES`，程式預設不列，§3） |
 | LLM | 謄本：OpenAI（§2）；帳單、修繕照片、點交照片、合約、收據：線上走 Bedrock 東京 Qwen3 VL 235B（flex），由分流表設定，程式預設 OpenAI |
-| 檔案儲存 | 預設本機（`STORAGE_TYPE=local`）；S3 相容儲存已實作，線上設定有誤、上傳目前全數失敗（見 [`transcript-status.md`](./transcript-status.md) §5 `file_url`） |
+| 檔案儲存 | `app/config.py` 預設本機（`STORAGE_TYPE=local`），`docker-compose.yml` 沒設時用 `s3`；S3 相容儲存已實作，線上設定有誤、上傳目前全數失敗（見 [`transcript-status.md`](./transcript-status.md) §5 `file_url`） |
 | 部署 | AWS EC2 單機，Docker Compose 四個容器：`frontend`、`backend`、`postgres`、`nginx` |
 
 ## 2. LLM（2026-10-28 查證）
@@ -36,13 +36,17 @@
 
 Anthropic 與自架 `local_qwen` 兩個 Provider 已實作，線上未啟用。
 
-## 3. OCR（2026-09-10 查證）
+## 3. OCR（2026-11-13 查證）
 
 | 路徑 | 實際引擎 |
 |---|---|
-| `/api/v1/analyze`（現行） | **PaddleOCR 3.7.0**（ONNX Runtime 執行器）+ Tesseract |
-| `/api/v1/documents`（已停用） | `pytesseract` 單獨 |
+| `/api/v1/analyze`（現行） | **PaddleOCR 3.7.0**（ONNX Runtime 執行器）；程式預設 `OCR_ENGINES` 另含 Tesseract，線上只開 PaddleOCR |
+| `/api/v1/documents`（舊路徑，不列 OpenAPI；前端 `/upload`、`/document/:id` 頁仍呼叫它） | `pytesseract` 單獨 |
 | AWS Textract | **未使用** |
+
+多引擎逐欄比對（`OCR_CONSENSUS_ENABLED`）與雙模態校正（`LLM_DUAL_MODAL_ENABLED`）已實作、預設關閉；
+比對至少要兩個引擎，線上只開 PaddleOCR，沒有比對訊號（`app/config_conflicts.py`）。
+預設融合方式 `OCR_FUSION_METHOD="best"` 是取信心度最高的一份，不做逐欄比對。
 
 **Textract 的預設值 2026-08-24 已被刻意改掉**：原預設會讓任何沒設
 `OCR_SERVICE` 的部署一開機就呼叫 AWS Textract——計費，且文件內容送出到 AWS。

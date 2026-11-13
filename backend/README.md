@@ -6,11 +6,13 @@ FastAPI backend for AI-powered document processing.
 
 ### 1. Install Dependencies
 
+Python 3.11 is required (the Docker image uses `python:3.11-slim`).
+
 ```bash
 cd backend
 
 # Create virtual environment
-python -m venv venv
+python3.11 -m venv venv
 
 # Activate virtual environment
 # macOS/Linux
@@ -39,27 +41,29 @@ createdb ai_doc_demo
 
 ### 3. Configure Environment
 
+Settings are read from `backend/.env` when the server runs from `backend/`
+(`backend/app/config.py`, `env_file = ".env"`).
+
 ```bash
-# Copy example env file
-cp .env.example .env
+# Copy the example env file from the repo root
+cp ../.env.example .env
 
 # Edit .env with your API keys
 nano .env
 ```
 
-Required environment variables:
-- `DATABASE_URL`
-- `OPENAI_API_KEY`
-- `S3_BUCKET`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`
-- `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` (for Textract)
+Environment variables:
+- `DATABASE_URL` (default `postgresql://postgres:postgres@localhost:5432/ai_doc_demo`)
+- `OPENAI_API_KEY` — all LLM calls go to OpenAI by default
+- `BEDROCK_API_KEY` — only when `LLM_PROVIDER_BY_DOCUMENT_TYPE` routes a document type to `bedrock`
+- `STORAGE_TYPE` defaults to `local`; S3 keys are only needed with `STORAGE_TYPE=s3`
+
+All keys and their defaults are in `app/config.py`; the deployment-relevant ones are explained in `docs/DEPLOYMENT.md` §8.
 
 ### 4. Run Migrations
 
 ```bash
-# Initialize Alembic (only first time)
-alembic revision --autogenerate -m "Initial migration"
-
-# Run migrations
+# Migration scripts are already in alembic/versions/
 alembic upgrade head
 ```
 
@@ -82,40 +86,29 @@ Once the server is running, visit:
 - **Swagger UI**: http://localhost:8000/api/docs
 - **ReDoc**: http://localhost:8000/api/redoc
 
+Endpoints, fields and error codes for integrators: `docs/api/INTEGRATION.md`.
+
 ## 🏗️ Project Structure
 
 ```
 backend/
 ├── app/
-│   ├── main.py              # FastAPI app entry point
-│   ├── config.py            # Configuration
+│   ├── main.py              # FastAPI app entry point, router registration
+│   ├── config.py            # Configuration (pydantic-settings)
 │   ├── database.py          # Database setup
+│   ├── api/v1/              # API routes (analyze, review, samples, evaluation, classify, ...)
 │   ├── models/              # SQLAlchemy models
-│   │   ├── document.py
-│   │   ├── ocr_result.py
-│   │   ├── ai_result.py
-│   │   └── ...
 │   ├── schemas/             # Pydantic schemas
-│   │   ├── document.py
+│   ├── services/            # Business logic (analyze_service.py, ...)
+│   ├── lib/
+│   │   ├── multi_type_ocr/  # Per-document-type processors (ProcessorFactory)
+│   │   ├── ocr_enhanced/    # OCR pipeline (preprocess, engines, post-processing)
+│   │   ├── llm_service/     # LLM providers and per-document-type routing
 │   │   └── ...
-│   ├── api/                 # API routes
-│   │   └── v1/
-│   │       ├── documents.py
-│   │       └── chat.py
-│   ├── services/            # Business logic
-│   │   ├── document_service.py
-│   │   └── chat_service.py
-│   ├── lib/                 # External integrations
-│   │   ├── s3_service.py
-│   │   ├── ocr_service.py
-│   │   └── ai_service.py
 │   └── prompts/             # AI prompts
-│       ├── classification.py
-│       ├── extraction.py
-│       └── ...
 ├── alembic/                 # Database migrations
+├── tests/                   # pytest
 ├── requirements.txt
-├── .env.example
 └── README.md
 ```
 
@@ -146,47 +139,20 @@ black app/
 
 ## 🚢 Deployment
 
-### Railway
-
-```bash
-# Install Railway CLI
-npm install -g @railway/cli
-
-# Login
-railway login
-
-# Deploy
-railway up
-```
-
-### Docker
-
-```bash
-# Build image
-docker build -t ai-doc-backend .
-
-# Run container
-docker run -p 8000:8000 --env-file .env ai-doc-backend
-```
+Deployed with the repo-root `docker-compose.yml` (frontend, backend, postgres, nginx).
+See `docs/DEPLOYMENT.md`.
 
 ## 📖 API Endpoints
 
-### Documents
+Routers registered in `app/main.py`:
 
-- `POST /api/v1/documents/upload` - Upload document
-- `POST /api/v1/documents/{id}/process` - Process document
-- `GET /api/v1/documents/{id}` - Get document
-- `GET /api/v1/documents/{id}/ai-result` - Get AI result
-- `GET /api/v1/documents` - List documents
-- `DELETE /api/v1/documents/{id}` - Delete document
-
-### Chat
-
-- `POST /api/v1/chat/{document_id}` - Ask question about document
-
-## 🔑 Environment Variables
-
-See `.env.example` for all available configuration options.
+- `POST /api/v1/analyze`, `POST /api/v1/analyze/batch`, `GET /api/v1/usage` — document analysis (main integration endpoint)
+- `POST /api/v1/classify` — document type suggestion
+- `/api/v1/review/*` — human review queue
+- `/api/v1/samples/*` — correction samples
+- `/api/v1/evaluation/*` — evaluation and baseline
+- `POST /api/v1/ocr/test` — OCR test page backend (hidden from API docs)
+- `/api/v1/documents/*`, `/api/v1/chat/*` — legacy document and chat endpoints (hidden from API docs)
 
 ## 📝 License
 

@@ -8,7 +8,7 @@ MERMAID = (HERE / "mermaid.min.js").read_text(encoding="utf-8")
 DIAGRAM_1 = """
 flowchart TD
     A["上傳文件<br/>PDF / JPG / PNG"] --> B{"依文件類型<br/>自動分流"}
-    B --> C["四類文件<br/>各自最適流程"]
+    B --> C["六類文件<br/>各自最適流程"]
     C --> D["辨識文字<br/>並抓出關鍵欄位"]
     D --> E{"每個欄位<br/>系統有把握嗎"}
     E -->|"有把握"| F["直接可用<br/>不打擾使用者"]
@@ -29,25 +29,27 @@ DIAGRAM_2 = """
 flowchart LR
     subgraph T["建物土地謄本"]
         direction TB
-        T1["先去除浮水印<br/>謄本蓋滿防偽底紋"] --> T2["兩套辨識引擎<br/>並用比對"] --> T3["修正常見錯字<br/>與地政格式"]
+        T1{"有現成文字嗎<br/>網路申領的電子謄本"} -->|"有"| T2["直接讀取<br/>跳過辨識"]
+        T1 -->|"掃描或照片"| T3["先去除浮水印<br/>謄本蓋滿防偽底紋"] --> T4["辨識文字"] --> T5["修正常見錯字<br/>與地政格式"]
     end
-    subgraph B["帳單"]
+    subgraph D["帳單、合約"]
         direction TB
-        B1["影像去雜訊"] --> B2["辨識文字"] --> B3["抓票證式欄位<br/>支援民國年"]
+        D1{"有現成文字嗎<br/>電子檔"} -->|"有"| D2["直接讀取<br/>跳過辨識"]
+        D1 -->|"照片或掃描"| D3["AI 讀圖模型<br/>整頁直接讀欄位"]
     end
-    subgraph C["合約"]
+    subgraph R["收據、發票"]
         direction TB
-        C1{"PDF 本身<br/>就有文字嗎"} -->|"有"| C2["直接讀取<br/>完全跳過辨識"]
-        C1 -->|"沒有 純掃描件"| C3["走完整辨識流程"]
+        R1["不論電子檔或照片"] --> R2["AI 讀圖模型<br/>整頁直接讀金額與日期"]
     end
-    subgraph R["修繕照片"]
+    subgraph P["修繕、點交照片"]
         direction TB
-        R1["不做文字辨識"] --> R2["直接看懂照片內容<br/>判斷瑕疵類型"]
+        P1["不做文字辨識"] --> P2["直接看懂照片內容<br/>判斷瑕疵或清點品項"]
     end
-    T ~~~ B
-    B ~~~ C
-    C ~~~ R
-    style C2 fill:#eef7f1,stroke:#2f6f4f,stroke-width:2px
+    T ~~~ D
+    D ~~~ R
+    R ~~~ P
+    style T2 fill:#eef7f1,stroke:#2f6f4f,stroke-width:2px
+    style D2 fill:#eef7f1,stroke:#2f6f4f,stroke-width:2px
 """
 
 DIAGRAM_3 = """
@@ -55,7 +57,7 @@ flowchart TD
     A["辨識完成<br/>每個欄位各自打一個信心分數"] --> B{"該欄位<br/>夠有把握嗎"}
     B -->|"是"| C["直接可用<br/>不打擾使用者"]
     B -->|"否"| D["結果仍立即交付<br/>但把該欄位標示出來"]
-    D --> E["使用者當場確認或修正<br/>可展開看各引擎的不同判讀"]
+    D --> E["使用者當場確認或修正"]
     E --> F["修正內容存為標準答案"]
     F --> G["下次遇到同類型 同版型的文件<br/>系統會參考這些標準答案"]
     G --> H["辨識準確度<br/>隨使用量提升"]
@@ -74,11 +76,12 @@ BODY = f"""
   沒把握的地方主動交給人確認 → 人的修正回存系統，下次更準。</p>
   <div class="cover-meta">
     <div><strong>對象</strong>行銷、業務、提案人員</div>
-    <div><strong>版本</strong>2026-08-05</div>
+    <div><strong>版本</strong>2026-11-13</div>
   </div>
   <div class="cover-note">
     本文不含技術細節，可直接取用於簡報與提案。<br>
-    文中所有效益數字皆標示為 <span class="tag tag-est">預估</span>，
+    文中數字分 <span class="tag tag-est">預估</span>（目標或推算）與
+    <span class="tag tag-fact">實測</span>（小樣本量測，附日期與樣本數），
     使用規範見末頁〈對外說明的注意事項〉。
   </div>
 </header>
@@ -86,8 +89,9 @@ BODY = f"""
 <section>
   <h2>1 ｜ 核心差異</h2>
   <p>市面上的文字辨識產品比的是「辨識得多準」。DocuMind 的關鍵差異是
-  <strong>系統知道自己什麼時候不準，並且會主動說出來</strong>——不確定的欄位交由人確認，
+  <strong>系統會評估自己哪裡可能不準，並且會主動說出來</strong>——不確定的欄位交由人確認，
   而不是硬猜一個看起來合理的答案。</p>
+  <p class="caption">限制：掃描件、照片上被讀錯的字，可能帶著高分數混過去，不一定會被標出來（見第 6 節）。</p>
 
   <div class="cards">
     <div class="card">
@@ -100,7 +104,7 @@ BODY = f"""
       <div class="card-no">02</div>
       <h3>人的修正不會白費</h3>
       <p>每次人工修正都存成標準答案。下次遇到同類型、同版型文件會拿來參考。
-      <strong>用得越多越準，不需重新訓練模型、不產生額外費用。</strong></p>
+      <strong>用得越多越準，不需重新訓練模型、不產生額外費用。</strong>（提升幅度尚未量測。）</p>
     </div>
     <div class="card">
       <div class="card-no">03</div>
@@ -117,21 +121,23 @@ BODY = f"""
       <tr><th style="width:22%">文件類型</th><th style="width:44%">系統自動抓出的欄位</th><th>適用場景</th></tr>
     </thead>
     <tbody>
-      <tr><td><strong>建物土地謄本</strong></td><td>地號、建號、面積、權利範圍、所有權人</td><td>不動產估價、產權查核</td></tr>
+      <tr><td><strong>建物土地謄本</strong></td><td>電子謄本上印的每一項：地號、建號、門牌、面積、權利範圍、所有權人、他項權利…，並判讀有無他項權利、限制登記、信託</td><td>不動產估價、產權查核</td></tr>
       <tr><td><strong>帳單</strong></td><td>金額、日期、戶號</td><td>水電費、管理費核銷</td></tr>
-      <tr><td><strong>合約</strong></td><td>合約編號、簽訂／生效日期、甲方、乙方、金額、幣別</td><td>合約管理、租賃建檔</td></tr>
-      <tr><td><strong>修繕照片</strong></td><td>瑕疵標籤（漏水、壁癌、龜裂、設備損壞）、狀況描述</td><td>物件修繕評估、保險理賠</td></tr>
+      <tr><td><strong>收據、發票</strong></td><td>金額（整張總計）、日期</td><td>費用核銷、記帳</td></tr>
+      <tr><td><strong>合約</strong></td><td>合約編號、簽訂／生效日期、甲方、乙方、金額、幣別；租約另抓租期起訖、月租金、押金、租賃地址、承租人</td><td>合約管理、租賃建檔</td></tr>
+      <tr><td><strong>修繕照片</strong></td><td>瑕疵標籤（漏水、壁癌、龜裂、設備損壞）、受損物件、狀況描述</td><td>物件修繕評估、保險理賠</td></tr>
+      <tr><td><strong>點交照片</strong></td><td>空間（客廳、臥室…）、照片裡的家具與家電、狀況描述；品項只回點交清單詞彙表裡有的</td><td>租屋點交清點</td></tr>
     </tbody>
   </table>
   <p class="note"><strong>上傳規格</strong>：PDF、JPG、PNG，單檔 20 MB 以內。
-  多頁 PDF 會逐頁處理。修繕照片僅接受影像，不接受 PDF。</p>
+  多頁 PDF 會逐頁處理。修繕、點交照片僅接受影像，不接受 PDF。</p>
 
   <h3 class="sub-h">另外兩項可以講的能力</h3>
   <table class="compact"><tbody>
     <tr><td style="width:30%"><strong>文件內容問答</strong></td>
         <td>上傳時可一併提問（例如「合約金額是多少？」），系統依辨識結果回答，不必自己翻文件找。</td></tr>
     <tr><td><strong>文件類型自動建議</strong></td>
-        <td>系統會判讀並建議文件類型，減少選錯的機會；最終仍以使用者指定為準。</td></tr>
+        <td>系統會判讀並建議文件類型，減少選錯的機會；最終仍以使用者指定為準。目前能建議謄本、合約、收據，帳單不會被建議。</td></tr>
   </tbody></table>
 </section>
 
@@ -142,19 +148,20 @@ BODY = f"""
 </section>
 
 <section>
-  <h2>4 ｜ 四類文件各走各的路</h2>
+  <h2>4 ｜ 六類文件各走各的路</h2>
   <p>一般 OCR 產品是「一套流程通吃所有文件」。DocuMind 針對每一類文件用不同做法，
   因為它們的難點完全不同。</p>
   <div class="mermaid">{DIAGRAM_2}</div>
 
-  <h3 class="sub-h">三個可以對外講的設計亮點</h3>
+  <h3 class="sub-h">四個可以對外講的設計亮點</h3>
   <ol class="highlights">
-    <li><strong>謄本先去浮水印</strong>——謄本印滿防偽底紋，直接丟給一般 OCR 會把底紋讀成亂碼。</li>
-    <li><strong>謄本與帳單並用兩套辨識引擎</strong>——互相比對可降低單一引擎誤判的風險。</li>
-    <li><strong>合約會先看有沒有現成文字</strong>——電子簽章或數位產製的合約 PDF 本身就帶文字，
-    系統直接讀取、跳過辨識，<strong>又快又不花辨識成本</strong>。只有掃描件才走完整流程。</li>
-    <li><strong>修繕照片不走文字辨識</strong>——照片上本來就沒字，走的是「看懂影像內容」，
-    直接判斷是漏水還是壁癌。</li>
+    <li><strong>電子檔直接讀現成文字</strong>——網路申領的電子謄本、數位產製的帳單與合約 PDF 本身就帶文字，
+    系統直接讀取、跳過辨識，<strong>又快又不花辨識成本</strong>（電子謄本整份不到 0.1 秒，實測見第 7 節）。收據不走這條，一律交 AI 讀圖。</li>
+    <li><strong>掃描的謄本先去浮水印</strong>——謄本印滿防偽底紋，直接丟給一般 OCR 會把底紋讀成亂碼。</li>
+    <li><strong>帳單、合約、收據的照片與掃描件交 AI 讀圖</strong>——這類文件版面五花八門，
+    由看得懂版面的 AI 讀圖模型整頁直接讀出欄位，不先辨識文字再找欄位。</li>
+    <li><strong>修繕、點交照片不走文字辨識</strong>——照片上本來就沒字，走的是「看懂影像內容」，
+    直接判斷是漏水還是壁癌、房間裡有哪些家具家電。點交品項只回清單上有的，寧可漏報、不憑空多報。</li>
   </ol>
 </section>
 
@@ -165,44 +172,52 @@ BODY = f"""
 </section>
 
 <section>
-  <h2>6 ｜ 交叉比對：揪出「看起來合理但其實錯了」</h2>
-  <p>這是本產品與通用 AI 最根本的差別，值得單獨講。</p>
+  <h2>6 ｜ 揪出「看起來合理但其實錯了」</h2>
+  <p>這是本產品與通用 AI 最根本的差別，值得單獨講，也要講清楚做到哪裡。</p>
   <p>傳統 OCR 讀錯會產生亂碼，肉眼一看就知道有問題。<strong>生成式 AI 讀錯則會產生
   語法通順、格式正確、但數字是錯的內容</strong>——拼字檢查抓不到，人也看不出來。
   這種錯誤一旦流入估價或合約建檔，代價很高。</p>
-  <p>DocuMind 的作法是<strong>讓兩套獨立的辨識引擎各自讀同一份文件，再逐個欄位比對</strong>：</p>
   <table class="compact"><tbody>
-    <tr><td style="width:34%"><strong>兩套引擎讀出同一個答案</strong></td>
-        <td>該欄位維持高信心，直接可用</td></tr>
-    <tr><td><strong>兩套引擎讀出不同答案</strong></td>
-        <td>該欄位信心度被壓低並標示出來，使用者可展開看兩邊分別讀到什麼，當場判斷</td></tr>
+    <tr><td style="width:26%"><strong>現在做到的：格式檢查</strong></td>
+        <td>檢查每個欄位的值像不像該有的樣子，例如面積、金額欄位出現地號的形狀、日期讀不成日期、編號欄位裡沒有數字。
+        不像的就壓低信心並標示出來，交給人確認。這個訊號<strong>不依賴 AI 自己說它有多確定</strong>。</td></tr>
+    <tr><td><strong>還擋不住的</strong></td>
+        <td>字被讀成另一個看起來合理的字（例如「土」讀成「上」、金額 23 讀成 25），格式檢查抓不到，可能帶著高分數混過去。
+        2026-10-20 實測：5 份真實電子謄本轉成模擬掃描與拍照圖（17 頁），讀錯的 23 欄中有 16 欄沒被標出來。</td></tr>
+    <tr><td><strong>兩套引擎交叉比對</strong></td>
+        <td>功能已做好，<strong>目前線上沒有開</strong>（線上只跑一套辨識引擎），不可對外說成現有能力。</td></tr>
   </tbody></table>
-  <p class="caption">關鍵在於：這個訊號<strong>不依賴 AI 自己說它有多確定</strong>。
-  模型對自己的判斷過度自信是常見問題，而「兩套引擎是否得出一致結果」是外部、可驗證的證據。
-  比對時會先做格式正規化，例如 <span class="dim">153.00</span> 與
-  <span class="dim">153</span>、民國與西元紀年會視為相同，避免把格式差異誤報為不一致。</p>
 </section>
 
 <section>
   <h2>7 ｜ 效益與規格數字</h2>
   <div class="callout callout-warn">
-    <strong>下表數字目前皆為預估值。</strong>準確率基準測試需要先由專業人員完成標註資料集，
-    目前正在進行中。實測數據產出後將更新本表。
+    <strong>準確率還沒有大樣本的基準測試。</strong>下表的實測數字都是小樣本，
+    引用時要連同日期與樣本數一起講，不可說成統計結果。
   </div>
   <table>
     <thead>
-      <tr><th style="width:32%">項目</th><th style="width:20%">數字</th><th style="width:14%">狀態</th><th>依據</th></tr>
+      <tr><th style="width:26%">項目</th><th style="width:18%">數字</th><th style="width:12%">狀態</th><th>依據</th></tr>
     </thead>
     <tbody>
-      <tr><td>關鍵欄位準確率<br><span class="dim">地號、建號、面積、金額</span></td>
-          <td class="num">95%</td><td><span class="tag tag-est">預估</span></td>
-          <td>產品設定目標，基準測試尚未執行</td></tr>
-      <tr><td>整體辨識準確率</td><td class="num">85%</td><td><span class="tag tag-est">預估</span></td>
-          <td>產品設定目標，基準測試尚未執行</td></tr>
-      <tr><td>單頁處理時間</td><td class="num">30 秒內</td><td><span class="tag tag-est">預估</span></td>
-          <td>設計目標，不含選用的 AI 加強校正；效能驗收尚未執行</td></tr>
-      <tr><td>月營運成本</td><td class="num">$15 以下</td><td><span class="tag tag-est">預估</span></td>
-          <td>成本試算，實際依用量與部署方式而定</td></tr>
+      <tr><td>電子謄本欄位正確率</td><td class="num">3 份全對</td><td><span class="tag tag-fact">實測</span></td>
+          <td>2026-10-14～15 線上，5 份真實電子謄本：逐欄對照的 3 份全對；5 份共 640 個原文值 0 不符</td></tr>
+      <tr><td>掃描、拍照謄本<br><span class="dim">25 個主要欄位</span></td><td class="num">約 97%</td><td><span class="tag tag-fact">實測</span></td>
+          <td>2026-10-20 線上，5 份電子謄本轉成模擬掃描與拍照圖（17 頁）；較難的手機斜拍照片另批實測只有 58%（2026-11-09，非線上）</td></tr>
+      <tr><td>收據金額＋日期</td><td class="num">41／44 欄</td><td><span class="tag tag-fact">實測</span></td>
+          <td>2026-10-29 線上，22 張公開授權的台灣收據，3 次結果相同</td></tr>
+      <tr><td>帳單金額、日期、戶號</td><td class="num">14／15 欄</td><td><span class="tag tag-fact">實測</span></td>
+          <td>2026-10-29 線上，5 張帳單</td></tr>
+      <tr><td>合約欄位<br><span class="dim">照片與掃描件</span></td><td class="num">81%</td><td><span class="tag tag-fact">實測</span></td>
+          <td>2026-10-29 線上，5 份合約（90／111 欄），盲判</td></tr>
+      <tr><td>點交照片品項</td><td class="num">找到 76%</td><td><span class="tag tag-fact">實測</span></td>
+          <td>2026-11-13 本機，18 張照片各 3 次，盲判標準答案；回報的品項 70% 確實在照片上</td></tr>
+      <tr><td>處理時間：電子謄本</td><td class="num">整份 0.04–0.07 秒</td><td><span class="tag tag-fact">實測</span></td>
+          <td>2026-10-15 線上，5 份，伺服器端計時</td></tr>
+      <tr><td>處理時間：掃描、拍照謄本</td><td class="num">每頁 15–24 秒</td><td><span class="tag tag-fact">實測</span></td>
+          <td>2026-09-21 線上；多頁照頁數累加</td></tr>
+      <tr><td>月營運成本</td><td class="num">需個案試算</td><td><span class="tag tag-est">未試算</span></td>
+          <td>主機費加 AI 模型按量計費，依用量與部署方式而定；請找工程團隊試算</td></tr>
       <tr><td>單檔上限</td><td class="num">20 MB</td><td><span class="tag tag-fact">已確認</span></td>
           <td>系統實際限制</td></tr>
       <tr><td>支援格式</td><td class="num">PDF / JPG / PNG</td><td><span class="tag tag-fact">已確認</span></td>
@@ -217,18 +232,19 @@ BODY = f"""
   <h2>8 ｜ 常見問題</h2>
   <dl class="faq">
     <dt>跟直接用 ChatGPT 讀文件差在哪？</dt>
-    <dd>兩點。第一，通用 AI 讀錯時會產生<strong>看起來很合理但數字是錯的</strong>結果，
-    一般人看不出來；DocuMind 用多重檢查揪出這種狀況並主動示警。
-    第二，資料可以完全留在客戶自己的機器，不外送第三方。</dd>
+    <dd>第一，通用 AI 讀錯時會產生<strong>看起來很合理但數字是錯的</strong>結果，
+    一般人看不出來；DocuMind 對每個欄位評分並做格式檢查，把沒把握或格式不對的欄位標出來（擋不住全部，見第 6 節）。
+    第二，每類文件用各自的做法，電子檔直接讀現成文字，不靠 AI 猜。</dd>
 
     <dt>資料會外流嗎？</dt>
-    <dd>架構上可設定為<strong>完全本地運行</strong>，文件內容不傳送到任何外部服務。
-    辨識引擎本身就在本機執行，AI 校正層也可切換為本地模型。
-    <span class="inline-warn">兩點要注意：一、修繕照片走的是影像理解，全本地運行需要另外部署本地視覺模型，不是把雲端關掉就會動。二、正式的全本地運行驗收測試尚未完成，若客戶要寫進合約，請先找工程團隊確認。</span></dd>
+    <dd><strong>目前的線上服務會把文件內容送到外部 AI 服務</strong>：需要 AI 校正或補欄位的謄本頁、以及使用者的提問送 OpenAI；
+    帳單、合約、收據、修繕與點交照片送 AWS Bedrock（東京區域）。
+    架構上可改為本地運行：辨識引擎本身就在本機執行，AI 層也可切換為本地模型（已實作，尚未啟用）。
+    <span class="inline-warn">兩點要注意：一、修繕、點交照片、收據，以及帳單、合約的照片與掃描件，靠的是 AI 讀圖，全本地運行需要另外部署本地視覺模型，不是把雲端關掉就會動。二、正式的全本地運行驗收測試尚未完成，若客戶要寫進合約，請先找工程團隊確認。</span></dd>
 
     <dt>辨識要多久？</dt>
-    <dd>預估單頁 30 秒內完成（不含選用的 AI 加強校正）。
-    <span class="inline-warn">對外請描述為「數十秒級」，不要給保證秒數。</span></dd>
+    <dd>看文件有沒有現成文字：網路申領的電子謄本整份不到 0.1 秒；掃描或拍照的謄本每頁約 15–24 秒，多頁照頁數累加（實測見第 7 節）。
+    <span class="inline-warn">對外請描述為「電子檔幾乎即時、掃描件每頁數十秒內」，不要給保證秒數。</span></dd>
 
     <dt>一定要人工複核嗎？</dt>
     <dd><strong>不需要專門的複核人力。</strong>設計上由使用者當場確認低信心欄位——他是文件當事人，最知道正確答案。結果一律立即回傳，高信心欄位完全不需要操作。若使用者當下不想處理，可留待複核佇列稍後處理，那是備援而非主要路徑。
@@ -244,8 +260,8 @@ BODY = f"""
   <h2>9 ｜ 對外說明的注意事項</h2>
 
   <div class="callout callout-danger">
-    <strong>所有效益數字目前均為預估值，尚未完成實測驗證。</strong>
-    對外引用時<u>必須</u>加註「預估」二字，不可呈現為已驗證數據。
+    <strong>預估值</strong>對外引用時<u>必須</u>加註「預估」二字；
+    <strong>實測值</strong>必須連同日期與樣本數一起講，不可說成統計結果或保證值。
   </div>
 
   <div class="do-dont">
@@ -254,17 +270,20 @@ BODY = f"""
       <ul>
         <li>系統會針對每個欄位評估把握程度，沒把握的主動交由人工確認</li>
         <li>人工修正會回饋到系統，使用越久越準確</li>
-        <li>支援完全本地部署，資料不外送<br><span class="dim">修繕照片需另外部署本地視覺模型</span></li>
-        <li>預估關鍵欄位準確率可達 95%（目標值，實測進行中）</li>
+        <li>架構上支援本地部署<br><span class="dim">照片與 AI 讀圖的部分需另外部署本地視覺模型</span></li>
+        <li>2026-10-29 實測 22 張收據，金額與日期 44 欄讀對 41 欄（小樣本）</li>
+        <li>電子檔直接讀現成文字，不經辨識</li>
       </ul>
     </div>
     <div class="dont">
       <h4>不可以這樣講</h4>
       <ul>
-        <li>準確率<u>達</u> 95%</li>
+        <li>系統會抓出所有錯誤</li>
         <li>比 ChatGPT 準 X%</li>
-        <li>保證單頁 30 秒完成</li>
-        <li>任何未加註「預估」的百分比或秒數</li>
+        <li>資料不會離開客戶的機器<br><span class="dim">目前線上服務會送外部 AI</span></li>
+        <li>準確率<u>達</u> 95%、保證單頁幾秒完成</li>
+        <li>兩套辨識引擎交叉比對<br><span class="dim">線上沒有開</span></li>
+        <li>任何沒標「預估」、或沒附日期與樣本數的百分比或秒數</li>
       </ul>
     </div>
   </div>
@@ -273,7 +292,7 @@ BODY = f"""
   <table class="compact">
     <tbody>
       <tr><td style="width:34%">實際辨識效果截圖</td><td>請工程團隊提供 demo 環境操作畫面</td></tr>
-      <tr><td>準確率實測數據</td><td>待基準測試完成後提供</td></tr>
+      <tr><td>準確率與速度實測紀錄</td><td><span class="dim">docs/testing/</span>（各份紀錄的索引在 <span class="dim">docs/README.md</span>）</td></tr>
       <tr><td>部署方式與成本</td><td>參見《部署指南》<span class="dim">docs/DEPLOYMENT.md</span></td></tr>
       <tr><td>客製化文件類型可行性</td><td>請工程團隊評估，架構上支援擴充</td></tr>
     </tbody>

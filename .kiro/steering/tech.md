@@ -9,7 +9,8 @@
 ```
 前端 (Vue 3) ←→ Nginx ←→ 後端 (FastAPI) ←→ PostgreSQL
                                 ↓
-                        AI/OCR 服務 (OpenAI, Tesseract)
+                OCR（PaddleOCR / Tesseract，本地）
+                LLM（OpenAI；Bedrock Qwen3 VL，依文件類型分流）
 ```
 
 ## 技術棧
@@ -27,11 +28,12 @@
 - **Alembic**: 資料庫遷移工具
 
 **AI & OCR 服務**:
-- **OpenAI GPT-4o / GPT-4o-mini**: LLM 服務
-- **Anthropic Claude 3.5 Sonnet**: 備選 LLM
-- **Tesseract OCR**: 免費 OCR 引擎（繁體中文 `chi_tra`）
-- **PaddleOCR**: 針對中文優化的 OCR
-- **AWS Textract**: 雲端 OCR 服務（選用）
+- **OpenAI**: 謄本的 LLM 校正與補欄位；程式預設所有類型都走 OpenAI（模型見 `docs/planning/03-TECH-STACK.md`）
+- **AWS Bedrock Qwen3 VL**（`qwen.qwen3-vl-235b-a22b`，東京）: 帳單、收據、合約、修繕照片、點交照片，由分流表 `LLM_PROVIDER_BY_DOCUMENT_TYPE` 設定（線上已分流）
+- **Anthropic / 本地 Qwen（vLLM）**: 可選 Provider（`LLM_PROVIDER`）
+- **PaddleOCR**（ONNX Runtime）: 主要 OCR 引擎（線上 `OCR_ENGINES=["paddleocr"]`）
+- **Tesseract OCR**: 繁體中文 `chi_tra`，程式預設與 PaddleOCR 並列於 `OCR_ENGINES`
+- **AWS Textract**: 只在舊的 `/api/v1/documents` 路徑以 `OCR_SERVICE=textract` 顯式啟用
 - **PyMuPDF (fitz)**: PDF 處理
 
 **儲存**:
@@ -65,8 +67,7 @@
 - **Nginx**: 反向代理與靜態資源伺服
 
 **部署平台**:
-- **Railway / Render**: 後端與資料庫（MVP）
-- **Vercel**: 前端靜態資源（備選）
+- **AWS EC2 單機 Docker Compose**: frontend、backend、postgres、nginx 四個容器（見 `docs/DEPLOYMENT.md` §0.5）
 - **本地 Docker**: 開發與測試
 
 ## 架構設計原則
@@ -85,8 +86,8 @@ Data Layer (SQLAlchemy Models)
 ```
 
 **關鍵設計模式**:
-- **策略模式**: 文件類型處理器（`ocr_enhanced/` 套件）
-- **工廠模式**: OCR 引擎管理器
+- **策略模式**: 文件類型處理器（`multi_type_ocr/` 套件）
+- **工廠模式**: `ProcessorFactory`（依文件類型取處理器）、OCR 引擎管理器
 - **依賴注入**: FastAPI Depends 機制
 
 **目錄組織**:
@@ -100,6 +101,8 @@ backend/app/
 ├── schemas/             # Pydantic 資料驗證 Schema
 ├── services/            # 業務邏輯層
 ├── lib/                 # 函式庫層
+│   ├── multi_type_ocr/  # 各文件類型處理器（ProcessorFactory）
+│   ├── llm_service/     # LLM Provider 與依文件類型分流
 │   ├── ocr_enhanced/    # OCR 增強處理套件
 │   ├── ocr_service.py   # 基礎 OCR 服務
 │   ├── ai_service.py    # AI 服務（分類、提取、摘要）
@@ -115,7 +118,8 @@ frontend/src/
 ├── main.ts              # 應用入口
 ├── App.vue              # 根元件
 ├── views/               # 頁面元件（路由對應）
-├── components/          # 可重用元件（暫未使用）
+├── components/          # 可重用元件
+├── composables/         # 組合式函式
 ├── services/            # API 服務層
 ├── router/              # 路由配置
 ├── types/               # TypeScript 類型定義
@@ -151,9 +155,8 @@ frontend/src/
 ### 可擴展性設計
 
 **新增文件類型處理器**:
-1. 繼承 `DocumentProcessor` 基類（未來實作）
-2. 實作 `preprocess()`, `postprocess()` 方法
-3. 在配置中註冊新類型
+1. 在 `multi_type_ocr/` 繼承 `OcrDocumentProcessor`、`ImageUnderstandingProcessor` 或 `DirectReadProcessor`（基類 `DocumentProcessor`，見 `processor.py`）
+2. 註冊到 `ProcessorFactory`
 
 **新增 OCR 引擎**:
 1. 在 `engine_manager.py` 新增引擎函數
@@ -243,25 +246,30 @@ const uploadDocument = async (file: File): Promise<DocumentResponse> => {
 **配置來源**: `.env` 檔案（使用 `pydantic-settings`）
 
 **關鍵配置**:
-- `OCR_SERVICE`: 選擇 OCR 引擎（`tesseract` / `paddleocr` / `textract`）
+- `OCR_ENGINES`: OCR 引擎清單（程式預設 `["paddleocr", "tesseract"]`）
+- `LLM_PROVIDER_BY_DOCUMENT_TYPE`: 依文件類型分流 LLM 供應商（預設空表 = 走 `LLM_PROVIDER`）
+- `DIRECT_READ_DOCUMENT_TYPES`: 直讀的文件類型（`receipt` / `bill` / `contract`，預設空）
+- `BEDROCK_API_KEY`: 分流到 `bedrock` 時需要
+- `OCR_SERVICE`: 舊 `/api/v1/documents` 路徑的 OCR（`pytesseract` / `paddleocr` / `textract`）
 - `STORAGE_TYPE`: 儲存方式（`local` / `s3`）
 - `OPENAI_API_KEY`: LLM 服務金鑰（可選，未設定則跳過 LLM 修正）
 
 ### Docker 設定
 
 **服務組成**:
-- `backend`: Python FastAPI (Port 8000)
-- `frontend`: Vue 3 + Nginx (Port 3000)
-- `postgres`: PostgreSQL 14 (Port 5432)
+- `backend`: Python FastAPI（容器內 8000，不對外）
+- `frontend`: Vue 3 靜態檔 + Nginx（容器內 80，不對外）
+- `postgres`: PostgreSQL 14（對外 5433）
+- `nginx`: 反向代理（對外 8085）
 
 **網路**:
-- 前端透過 Nginx 代理請求到後端（`/api/*` → `http://backend:8000/api/*`）
+- `nginx` 把 `/api/*` 轉給 `http://backend:8000/api/*`，其餘轉給 `frontend`
 
 ## 測試策略
 
 ### 單元測試
 
-**工具**: pytest + pytest-asyncio
+**工具**: 後端 pytest + pytest-asyncio；前端 vitest（`npm test`，`src/**/*.spec.ts`）
 
 **覆蓋範圍**:
 - OCR 增強套件各模組
@@ -300,7 +308,7 @@ const uploadDocument = async (file: File): Promise<DocumentResponse> => {
 ### MVP 階段實作
 
 - ✅ 檔案類型驗證（MIME type）
-- ✅ 檔案大小限制（10MB）
+- ✅ 檔案大小限制（`/api/v1/analyze` 20MB）
 - ✅ SQL Injection 防護（SQLAlchemy ORM）
 - ✅ CORS 配置（限定前端來源）
 
@@ -316,14 +324,14 @@ const uploadDocument = async (file: File): Promise<DocumentResponse> => {
 ### OCR 成本
 
 - **免費方案**: Tesseract / PaddleOCR（本地運算）
-- **付費方案**: AWS Textract（~$1.5/1000 頁）
-- **智能選擇**: 根據文件複雜度動態選擇引擎
+- **付費方案**: AWS Textract（~$1.5/1000 頁，只在舊 `/api/v1/documents` 路徑）
+- **依類型直讀**: 列在 `DIRECT_READ_DOCUMENT_TYPES` 的類型，影像與掃描 PDF 不跑本地 OCR，整頁交視覺模型讀
 
 ### LLM 成本
 
-- **智能策略**: OCR 信心度 < 85% 才使用 LLM
-- **模型選擇**: 簡單任務用 GPT-4o-mini，複雜任務用 GPT-4o
-- **LLM 文字校正成本**: $0.02-0.03/頁
+- **智能策略**: OCR 路徑在 OCR 信心度 < 85% 才使用 LLM 校正；直讀類與照片類一律呼叫視覺模型
+- **模型與單價**: 見 `docs/planning/03-TECH-STACK.md`
+- **每頁成本**: 見 `docs/api/INTEGRATION.md` §2.1（`enable_llm` 列）
 
 ### 儲存成本
 
@@ -347,7 +355,6 @@ const uploadDocument = async (file: File): Promise<DocumentResponse> => {
 
 ### 已知技術債
 
-- 前端缺少可重用元件（目前直接寫在 View 中）
 - 缺少完整的錯誤處理與日誌系統
 - 測試覆蓋率不足（目標 80%）
 - API 版本化不完整（僅有 v1）
