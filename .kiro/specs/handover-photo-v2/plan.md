@@ -192,3 +192,6 @@
 ## 9. 核可後變更（2026-11-13）
 
 - 第 6 步停點觸發：線上 HEAD＝`fd9f6d9`（合約 v2 線已部署），不是預期的 `df41f2d`。業主裁定 R-src-9「等合約線收完再部署」：等合約線部署後檢查與文件 commit 上 main 後，本線接到該 commit；第 6 步預期 SHA 改為該 commit；`INTEGRATION.md` 版號改 2.12.0；其餘照本計畫。本機已先把改動接到 `fd9f6d9`（`analyze.py` Form 參數、錯誤表、第 9 步分支與 `ADDED_REQUEST_PARAMS` 兩邊都保留），全套單元測試 2001 過、2 項只在 worktree 失敗（`test_annotation_storage_policy` 的 `.gitignore` 位置，改前 `df41f2d` 同樣失敗）。
+- 部署：C1 `4a5242e`、C2 `de06eac` 於 15:50 push、線上 `git pull --ff-only`；A9、A10 通過（`E/runs/deploy_a9.txt`、`E/runs/online/keyshape.txt`）。
+- 收案驗證：verifier 第 1 次 REFUTED（A0–A10 全過，唯一理由是 R15、R18 沒有清單項，P2 涵蓋缺口）→ 業主 R-src-10 核可 `acceptance-amend-1.md` 補 A11、A12 → fresh verifier 只驗 A11、A12：CONFIRMED。verifier 用量 193,390 + 86,490 tokens。
+- 偏離（R18）：多跑 2 條唯讀 `docker logs`（`E/runs/ssh_commands.md` #7、#9）；#9 的錯誤訊息間接帶出 S3 endpoint 設定值（註解文字，非憑證）。

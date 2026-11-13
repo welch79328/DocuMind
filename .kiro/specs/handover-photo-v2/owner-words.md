@@ -98,3 +98,8 @@
 ## R-src-9：業主選項回覆（第 6 步停點：線上 HEAD 是 fd9f6d9，不是 df41f2d）
 
 - 「等合約線收完再部署 (Recommended)」——選項說明原文：「等合約線的部署後檢查和文件 commit 都上 main，再把本線接到那個 commit；第 6 步的預期 SHA 改成那個 commit，其餘照計畫（線上 3 次送件、回滾只退本線 C1）。INTEGRATION 版號改成 2.12.0。這個選項比你核可的「預期 df41f2d」寬。」
+
+## R-src-10：業主選項回覆（收案 verifier REFUTED：R15、R18 沒有清單項）
+
+- 「補 A11、A12 後重驗這兩條 (Recommended)」——選項說明原文：「另存 acceptance-amend-1.md，加 A11（R15：給 JGB 的說明有工時）、A12（R18：ssh 指令逐條對照計畫，2 條超出列為偏離），只派新的 verifier 重驗這兩條，A0–A10 不重跑。這個選項比你核可的清單寬（多 2 項）。」
+- verifier 讀法題 R4「"0.85" 這類數字字串」：「維持，當成數值 (Recommended)」——選項說明原文：「"0.85" 回 0.85；只有讀不成數字的才回 null。不改程式。」
