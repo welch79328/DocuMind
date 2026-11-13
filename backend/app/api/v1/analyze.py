@@ -315,6 +315,10 @@ async def analyze_document(
         default=None,
         description="謄本回應格式（選填）。不帶＝現行格式；`v2`＝transcript_records 補值並把每個值包成 {value, position}，不回舊的單值欄位／清單。僅 document_type=transcript 有效，其他類型忽略"
     ),
+    contract_format: Optional[str] = Form(
+        default=None,
+        description="合約回應格式（選填）。不帶＝現行格式；`v2`＝document_fields.rental_terms 的 date_start、date_end、monthly_rent、deposit、rental_address、tenant_name 各包成 {value, position}；只有電子 PDF（文字層）給位置，照片與掃描檔 position 為 null。僅 document_type=contract 有效，其他類型忽略"
+    ),
     db: Session = Depends(get_db),
 ):
     """
@@ -364,6 +368,7 @@ async def analyze_document(
     | UNSUPPORTED_FILE_TYPE | 400 | 不支援的檔案格式 |
     | UNSUPPORTED_DOCUMENT_TYPE | 400 | 不支援的文件類型 |
     | INVALID_TRANSCRIPT_FORMAT | 400 | transcript_format 不是 v2（或不帶） |
+    | INVALID_CONTRACT_FORMAT | 400 | contract_format 不是 v2（或不帶） |
     | FILE_TOO_LARGE | 413 | 檔案超過 20MB |
     | PROCESSING_ERROR | 500 | 處理過程發生錯誤 |
     """
@@ -374,6 +379,14 @@ async def analyze_document(
                 content={
                     "detail": f"不支援的 transcript_format：{transcript_format}。支援的值：v2",
                     "error_code": "INVALID_TRANSCRIPT_FORMAT",
+                },
+            )
+        if contract_format not in (None, "v2"):
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "detail": f"不支援的 contract_format：{contract_format}。支援的值：v2",
+                    "error_code": "INVALID_CONTRACT_FORMAT",
                 },
             )
 
@@ -407,6 +420,10 @@ async def analyze_document(
         if transcript_format == "v2" and resolved_document_type == "transcript":
             from app.lib.multi_type_ocr.transcript_records import apply_transcript_format
             return apply_transcript_format(result, contents, ocr_lines=ocr_lines)
+        # 9. 合約 v2 格式:同樣在信心度攔截之後(複核佇列存未轉換的回應)
+        if contract_format == "v2" and resolved_document_type == "contract":
+            from app.lib.multi_type_ocr.contract_positions import apply_contract_format
+            return apply_contract_format(result, contents)
         return result
 
     except AnalyzeError as e:

@@ -15,7 +15,7 @@
 
 import re
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Tuple
 from app.lib.multi_type_ocr.contract_patterns import PATTERNS
 from app.lib.multi_type_ocr.field_extraction_base import llm_value_as_text
 from app.lib.multi_type_ocr.text_normalize import normalize_for_matching, normalize_pattern
@@ -226,7 +226,20 @@ class ContractFieldExtractor:
         Returns:
             提取到的欄位字典（未提取到的欄位值為 None）
         """
-        results = {}
+        return {
+            name: (hit[0] if hit else None)
+            for name, hit in self._match_fields(text).items()
+        }
+
+    def _match_fields(self, text: str) -> Dict[str, Optional[Tuple[str, Tuple[int, int]]]]:
+        """
+        正規表達式比對,回傳每個欄位的 (值, 值在正規化文字上的 (起, 迄)) 或 None。
+
+        位置取自抽出值的這一次比對,不事後拿值搜全文(同一字串可能出現多次,
+        例:押金與租金同額)。合約 v2 位置(contract_positions)用它把值框回原文。
+        單一捕獲組:group(1) 去頭尾空白後的範圍;多捕獲組(民國年日期):第一組起點到最後一組終點。
+        """
+        results: Dict[str, Optional[Tuple[str, Tuple[int, int]]]] = {}
         # 文字與樣式走同一套正規化(謄本、帳單共用,見 text_normalize):全形數字與標點、
         # 帶框字歸一後才比對,值也因此是正規化後的形式(2026-10-13;原本合約不做正規化,
         # 全形「２５，０００元」的全形逗號會讓金額讀不到)。
@@ -234,7 +247,7 @@ class ContractFieldExtractor:
 
         # 遍歷所有欄位模式
         for field_name, patterns in PATTERNS.items():
-            field_value = None
+            hit = None
 
             # 嘗試每個模式，找到第一個匹配即停止
             for pattern in patterns:
@@ -244,16 +257,22 @@ class ContractFieldExtractor:
                         # 提取匹配的文字
                         if match.lastindex and match.lastindex > 1:
                             # 多個捕獲組（例如民國年日期）- 組合所有組
-                            field_value = " ".join(match.groups())
+                            value = " ".join(match.groups())
+                            span = (match.start(1), match.end(match.lastindex))
                         else:
                             # 單個捕獲組
-                            field_value = match.group(1).strip()
+                            raw = match.group(1)
+                            value = raw.strip()
+                            lead = len(raw) - len(raw.lstrip())
+                            start = match.start(1) + lead
+                            span = (start, start + len(value))
+                        hit = (value, span)
                         break  # 找到第一個匹配即停止
                 except (re.error, IndexError):
                     # 正則表達式錯誤或索引錯誤，繼續嘗試下一個模式
                     continue
 
-            results[field_name] = field_value
+            results[field_name] = hit
 
         return results
 
