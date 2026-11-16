@@ -1,6 +1,6 @@
 # 謄本照片改由 Qwen3 VL 讀字——本機實測紀錄（2026-11-16）
 
-謄本的照片和沒有文字層的 PDF，伺服器設 `OCR_ENGINES=["qwen"]` 後，每頁送 AWS Bedrock（東京）`qwen.qwen3-vl-235b-a22b` 抄出每段文字和框，取代本機 PaddleOCR；後面的抽欄規則不變。本檔記錄本機的量測結果，正式機的量測部署後補在 §5。計畫與驗收清單在 `.kiro/specs/transcript-qwen-read/`。
+謄本的照片和沒有文字層的 PDF，伺服器設 `OCR_ENGINES=["qwen"]` 後，每頁送 AWS Bedrock（東京）`qwen.qwen3-vl-235b-a22b` 抄出每段文字和框，取代本機 PaddleOCR；後面的抽欄規則不變。本檔前四節是本機的量測結果，正式機的量測在 §5。計畫與驗收清單在 `.kiro/specs/transcript-qwen-read/`。
 
 廣度：3 組資料、24 頁（G1 遮罩樣本 6 頁、G2 模擬照片 15 頁，含掃描、俯拍、斜拍各 5 頁、G3 電子謄本轉掃描 3 頁）× 改後 3 次，沒有改前對照（業主 2026-11-16「不用量測前」）。G1 的標準答案在 repo 裡；G2、G3 的標準答案是同一頁 PDF 走文字層路徑的結果。G3 是主持人做的，只能當中間證據。受測物是 `f38ab59` 加上本線未 commit 的工作樹，在本機跑，`enable_llm=false`。業主已裁定接受目前品質（「本地 OCR 不啟用 接收目前品質」）。
 
@@ -45,11 +45,17 @@ G3 3 頁 × 3 次，有值的 137 格全部有 `position`。用文字層的 span
 
 讓 Bedrock 呼叫失敗或回 0 段時，該頁文字是空的，信心度 0.0，回應 `needs_review: true`，也不會呼叫 PaddleOCR。這個機制項由 `backend/tests/unit/test_qwen_ocr_engine.py` 驗證。
 
-## 5. 速度（本機）與正式機
+## 5. 速度與記憶體：正式機 12 頁 111.6 秒，容器記憶體 368 MiB
 
+正式機 `a6e2ca5`，`OCR_ENGINES=["qwen"]`，2026-11-16 13:34–13:40，一次送一份。業主看了覺得「太多份」，所以原本排的 24 頁 × 3 輪沒有跑完：24 頁只送了 7 份（G1 6 頁加 D1p1），另外送了 1 份 12 頁的組合件（G2 9 頁加 G3 3 頁，沒有文字層的 PDF）。
+
+- 讀字確實走模型：7 份加組合件 12 頁，每頁的 `llm_calls` 都是 `stage: "ocr_read"`、bedrock、`qwen.qwen3-vl-235b-a22b`，沒有一頁是空的。
+- 12 頁組合件整份 111.6 秒，在 jgb2 等待上限 480 秒以內。
+- 單頁 13.1–29.1 秒。正式機以前用 PaddleOCR 是每頁 18.2–25.4 秒（11/11，3 張）。
+- 記憶體：重建後閒置 159.5 MiB，7 頁後 232.9 MiB，組合件後 367.9 MiB。改前用 PaddleOCR 時，預載完是 563.3 MiB，送 4 頁後 1.915 GiB。
+- 這 7 份的 25 欄是 62/72（86.1%），讀錯又沒進 `needs_confirmation` 的有 4 欄。只有 1 次，只當參考。
 - 本機每頁 15–139 秒，24 頁一輪 233–411 秒。最慢的那一輪有幾頁 flex 等級逾時，改用標準等級重送了一次。
-- 正式機：部署後補。
 
 ## 出處
 
-- 量測腳本與原始輸出（含個資，不入 repo）：`~/jgb-archive/qwen-all-no-local-ocr-20261116/`，包括 `scripts/s1_run.py`、`s1_replay.py`、`s1_grade.py`、`a6_boxes.py`、`textlayer_run.py`，以及 `runs/s1/grade25.json`、`runs/s1/grade25-fix.json`、`scripts/a5_fulltext.py`、`runs/a5-fulltext.json`、`runs/a6-boxes.json`、`runs/textlayer-diff.txt`。
+- 量測腳本與原始輸出（含個資，不入 repo）：`~/jgb-archive/qwen-all-no-local-ocr-20261116/`，包括 `scripts/s1_run.py`、`s1_replay.py`、`s1_grade.py`、`a6_boxes.py`、`textlayer_run.py`，以及 `runs/s1/grade25.json`、`runs/s1/grade25-fix.json`、`scripts/a5_fulltext.py`、`runs/a5-fulltext.json`、`runs/a6-boxes.json`、`runs/textlayer-diff.txt`，以及正式機的 `scripts/send.py`、`runs/after1/`、`runs/after-combo/`。

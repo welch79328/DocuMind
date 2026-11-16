@@ -49,3 +49,11 @@ R1–R8 照 `plan.md` §2，業主確認於 2026-11-16「核可，全照建議�
 - 謄本影像不退回本機 PaddleOCR（R2、R6 照舊）。
 - 背景：S1 第 1 輪（本機、工作樹、Bedrock）25 欄 J 81.1%、R 79.1%，證據 `~/jgb-archive/qwen-all-no-local-ocr-20261116/runs/s1/grade25.json`。
 - 出處：`~/jgb-archive/qwen-all-no-local-ocr-20261116/reviews/owner-words-20261116.md` 末則。
+
+## 修訂 3（2026-11-16 業主「太多份」，選「只送 12 頁組合件」）
+
+上方凍結內容與修訂 1、2 不改寫，以本節為準：
+
+- S4 不跑「24 頁 × 3 輪」。正式機 24 頁只送了 7 份（`runs/after1/`，01–06 與 D1p1），停在 D1p2，之後再送 12 頁組合件 1 份（`runs/after-combo/`）。
+- A1、A2 用這 7 份加組合件判。A4 只報這 7 份的 25 欄，本機 3 輪的數字照舊（`docs/testing/transcript-qwen-read-20261116.md` §1）。A8 用組合件判。
+- 出處：`~/jgb-archive/qwen-all-no-local-ocr-20261116/reviews/owner-words-20261116.md` 末則。

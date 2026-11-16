@@ -351,7 +351,7 @@ c 系列非 burstable)等**系統穩定後**再討論。
 - **失敗不退回本機 OCR**:呼叫失敗(flex 逾時 90 秒後改 default 重送仍失敗)或回 0 段時,該頁文字空、信心度 0.0、`needs_review: true`。
 - **併發**:`QWEN_OCR_MAX_CONCURRENT`(預設 4)限制同時送出的頁數,行程層級、跨請求共用;不進 `OCR_MAX_CONCURRENT` 那道記憶體閘門。
 - **全文組法**:`QWEN_OCR_TEXT_LAYOUT`(預設 `join` 依閱讀順序接起;`rebuild` 依座標補縮排),依據是 25 欄 join 80.97%、rebuild 79.00%。
-- **耗時與費用**:本機實測每頁 15–139 秒;費用每頁約 $0.005(11/09 同一提示詞實測 $0.0052,`docs/testing/transcript-photo-fullparse-eval-20261109.md`)。
+- **耗時與費用**:正式機實測每頁 13.1–29.1 秒(7 份),12 頁沒有文字層的 PDF 整份 111.6 秒(2026-11-16);本機每頁 15–139 秒,遇到模型逾時要重送的那一頁最慢;費用每頁約 $0.005(11/09 同一提示詞實測 $0.0052,`docs/testing/transcript-photo-fullparse-eval-20261109.md`)。
 - 未設直讀的帳單、合約影像也會走 qwen 讀字(把它們從 `DIRECT_READ_DOCUMENT_TYPES` 拿掉時要注意)。
 - **退回本機 OCR**:`.env` 改 `OCR_ENGINES=["paddleocr"]`、`OCR_PRELOAD_MODEL=true`,重建 backend 容器(`docker compose up -d --force-recreate backend`)。
 
