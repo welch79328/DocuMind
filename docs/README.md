@@ -45,6 +45,7 @@
 | [testing/transcript-v2-jgb-gaps-20261111.md](./testing/transcript-v2-jgb-gaps-20261111.md) | 紀錄：謄本帶參數格式補 JGB 回報的 4 項缺口（段小段、單值補層次與所有權人、空紀錄組 1 張、車位） |
 | [testing/contract-v2-positions-20261113.md](./testing/contract-v2-positions-20261113.md) | 紀錄：合約帶參數格式 `contract_format=v2` 電子 PDF 租賃六欄值位置（INTEGRATION §3.2.1） |
 | [testing/handover-v2-accuracy-20261113.md](./testing/handover-v2-accuracy-20261113.md) | 紀錄：點交照片 `handover_format=v2` 新舊品項準確率比較（本機，18 張 × 新舊 × 3 次） |
+| [testing/transcript-qwen-read-20261116.md](./testing/transcript-qwen-read-20261116.md) | 紀錄：謄本照片改由 Qwen3 VL 讀字（不跑本機 OCR）的本機實測：25 欄、文字層 PDF 相同、v2 位置 |
 | [planning/followups.md](./planning/followups.md) | 之後再做清單：盤查發現、尚未排入的改動 |
 
 各版的計畫與驗收清單在 `.kiro/specs/<feature>/`（plan.md、acceptance.md）。

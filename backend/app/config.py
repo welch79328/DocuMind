@@ -4,7 +4,7 @@ Application configuration
 
 from pydantic import SecretStr, field_validator
 from pydantic_settings import BaseSettings
-from typing import Dict, List, Optional
+from typing import Dict, List, Literal, Optional
 
 
 # 「文件類型 → 供應商」分流表(LLM_PROVIDER_BY_DOCUMENT_TYPE)可以出現的鍵與值。
@@ -261,7 +261,20 @@ class Settings(BaseSettings):
     # 多出的約 12 秒是模型載入。模型本來就常駐,預載不改變穩態記憶體,
     # 只是讓容器一重啟就吃到模型那一份,而不是等第一個請求。
     OCR_PRELOAD_MODEL: bool = True
-    OCR_ENGINES: List[str] = ["paddleocr", "tesseract"]     # 使用的引擎列表
+    # 使用的引擎列表:paddleocr、tesseract、qwen(`.env` 以 JSON 設定,例如 OCR_ENGINES=["qwen"])。
+    # qwen = 整頁送 Bedrock Qwen3 VL 讀字(個資外送到東京 ap-northeast-1,
+    # 受 LLM_CLOUD_ENABLED 約束;false 時影像頁讀字一律回空結果,啟動時報設定衝突)。
+    # 只有 qwen 時不載入、不呼叫 PaddleOCR,謄本影像也不做浮水印移除等前處理。
+    OCR_ENGINES: List[str] = ["paddleocr", "tesseract"]
+    # qwen 讀字同時送 Bedrock 的頁數上限(行程層級,跨請求共用)。
+    # 與 OCR_MAX_CONCURRENT(PaddleOCR 的記憶體閘門)分開:qwen 在遠端算,不吃容器記憶體;
+    # 一份 12 頁的謄本要在 480 秒內回(plan R7,每頁中位 39.2 秒),所以要同時送。
+    QWEN_OCR_MAX_CONCURRENT: int = 4
+    # qwen 讀字的全文組法:rebuild = 依座標分行、依 x 補縮排;join = 依閱讀順序逐段換行接起。
+    # 行框(lines)兩種都一樣,只差全文 text。
+    # 預設 join:2026-11-16 S1 本機 24 頁 × 3 次,25 欄 join 3 次平均 80.97%、rebuild 79.00%
+    # (~/jgb-archive/qwen-all-no-local-ocr-20261116/runs/s1/grade25.json)。
+    QWEN_OCR_TEXT_LAYOUT: Literal["rebuild", "join"] = "join"
     OCR_QUALITY_THRESHOLD: float = 0.8                      # 信心度門檻(0-1),低於此值進入人工複核
     OCR_MAX_RETRIES: int = 3                                # 最大重試次數
     OCR_ENABLE_PP_STRUCTURE: bool = False                  # 謄本 PP-Structure 版面解析增強(預設關,PoC 後評估)

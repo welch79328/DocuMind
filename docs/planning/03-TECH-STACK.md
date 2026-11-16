@@ -9,7 +9,7 @@
 |---|---|
 | 前端 | Vue 3 + Vite、TypeScript、Tailwind CSS、Vue Router、Pinia；頁面 `/`、`/upload`、`/document/:id`、`/ocr-test`、`/review`、`/review/:id`（`frontend/src/router/index.ts`） |
 | 後端 | Python + FastAPI、SQLAlchemy + Alembic、PostgreSQL |
-| OCR | PaddleOCR（ONNX Runtime 執行器），本地執行；程式預設另開 Tesseract，線上只開 PaddleOCR（[`DEPLOYMENT.md`](../DEPLOYMENT.md) §0.5）；含文字層的 PDF 不經 OCR；收據、帳單、合約的影像與掃描 PDF 由視覺模型直讀、不經 OCR（線上已開啟；設定 `DIRECT_READ_DOCUMENT_TYPES`，程式預設不列，§3） |
+| OCR | PaddleOCR（ONNX Runtime 執行器），本地執行；程式預設另開 Tesseract；線上 `OCR_ENGINES=["qwen"]`，謄本影像改送 Bedrock Qwen3 VL 讀字、不跑本機 OCR（[`DEPLOYMENT.md`](../DEPLOYMENT.md) §0.5、§4）；含文字層的 PDF 不經 OCR；收據、帳單、合約的影像與掃描 PDF 由視覺模型直讀、不經 OCR（線上已開啟；設定 `DIRECT_READ_DOCUMENT_TYPES`，程式預設不列，§3） |
 | LLM | 謄本：OpenAI（§2）；帳單、修繕照片、點交照片、合約、收據：線上走 Bedrock 東京 Qwen3 VL 235B（flex），由分流表設定，程式預設 OpenAI |
 | 檔案儲存 | `app/config.py` 預設本機（`STORAGE_TYPE=local`），`docker-compose.yml` 沒設時用 `s3`；S3 相容儲存已實作，線上設定有誤、上傳目前全數失敗（見 [`transcript-status.md`](./transcript-status.md) §5 `file_url`） |
 | 部署 | AWS EC2 單機，Docker Compose 四個容器：`frontend`、`backend`、`postgres`、`nginx` |
@@ -40,12 +40,12 @@ Anthropic 與自架 `local_qwen` 兩個 Provider 已實作，線上未啟用。
 
 | 路徑 | 實際引擎 |
 |---|---|
-| `/api/v1/analyze`（現行） | **PaddleOCR 3.7.0**（ONNX Runtime 執行器）；程式預設 `OCR_ENGINES` 另含 Tesseract，線上只開 PaddleOCR |
+| `/api/v1/analyze`（現行） | 線上 **qwen**（Bedrock Qwen3 VL 讀字，2026-11-16 起）；程式預設 **PaddleOCR 3.7.0**（ONNX Runtime 執行器）加 Tesseract |
 | `/api/v1/documents`（舊路徑，不列 OpenAPI；前端 `/upload`、`/document/:id` 頁仍呼叫它） | `pytesseract` 單獨 |
 | AWS Textract | **未使用** |
 
 多引擎逐欄比對（`OCR_CONSENSUS_ENABLED`）與雙模態校正（`LLM_DUAL_MODAL_ENABLED`）已實作、預設關閉；
-比對至少要兩個引擎，線上只開 PaddleOCR，沒有比對訊號（`app/config_conflicts.py`）。
+比對至少要兩個引擎，線上只開 qwen，沒有比對訊號（`app/config_conflicts.py`）。
 預設融合方式 `OCR_FUSION_METHOD="best"` 是取信心度最高的一份，不做逐欄比對。
 
 **Textract 的預設值 2026-08-24 已被刻意改掉**：原預設會讓任何沒設
@@ -65,5 +65,5 @@ Anthropic 與自架 `local_qwen` 兩個 Provider 已實作，線上未啟用。
 - 直讀一律呼叫模型，不看 `enable_llm`。
 - 欄位信心度由模型回「確定／不確定」加格式驗證決定（0.9／0.5／0.0），低於門檻進 `needs_confirmation` 與人工複核。
 - 沒列入的帳單、合約照舊走本機 OCR 再補欄位；切回舊流程只改 `.env` 並重建容器。
-- 謄本不在直讀範圍（模擬掃描評估：本機 OCR 加規則 97%，Qwen 只看圖 91%，[`docs/testing/bedrock-vlm-eval-20261023.md`](../testing/bedrock-vlm-eval-20261023.md) §3.3）。
+- 謄本不在直讀範圍（模擬掃描評估：本機 OCR 加規則 97%，Qwen 只看圖 91%，[`docs/testing/bedrock-vlm-eval-20261023.md`](../testing/bedrock-vlm-eval-20261023.md) §3.3）；謄本影像改由 Qwen 讀字、規則抽欄（`OCR_ENGINES=["qwen"]`，本機 25 欄約 86%，[`docs/testing/transcript-qwen-read-20261116.md`](../testing/transcript-qwen-read-20261116.md)）。
 - 欄位與回應鍵見 [`docs/api/INTEGRATION.md`](../api/INTEGRATION.md) §3.3、§3.3.1、§3.2。

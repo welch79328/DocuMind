@@ -575,6 +575,18 @@ OLD_BILL_KEYS = {
     "amount", "date", "account_no", "field_confidences", "needs_confirmation",
     "extraction_confidence", "llm_used_for_extraction",
 }
+ELECTRIC_KEYS = {"address", "period_start", "period_end", "kwh"}
+
+
+def _electric_bill_reply(**overrides):
+    fields = {
+        "amount": _field("3,456"), "date": _field("115/12/05"), "account_no": _field("99-01-2345-67-8"),
+        "address": _field("臺北市中正區AV測試路100號"),
+        "period_start": _field("115/09/15"), "period_end": _field("115/11/14"),
+        "kwh": _field("812"),
+    }
+    fields.update(overrides)
+    return json.dumps(fields, ensure_ascii=False)
 
 
 class TestBill:
@@ -583,10 +595,13 @@ class TestBill:
         _install(monkeypatch, _bill_reply())
         data = _post(_image_file(), "bill").json()
         structured = data["pages"][0]["structured_data"]
-        assert set(structured) == OLD_BILL_KEYS
+        # 2.13.0:舊鍵全保留,加電費 4 欄;模型沒回電費欄位(水費單)⇒ 值 null、不列待確認、不進複核
+        assert set(structured) == OLD_BILL_KEYS | ELECTRIC_KEYS
         assert structured["amount"] == "1,280" and structured["account_no"] == "01-2345-6789"
         assert structured["llm_used_for_extraction"] is True
+        assert all(structured[k] is None for k in ELECTRIC_KEYS)
         assert set(structured["field_confidences"]) == {"amount", "date", "account_no"}
+        assert structured["needs_confirmation"] == []
         assert data["needs_review"] is False
 
     def test_bill_missing_account_no_goes_to_needs_confirmation(self, monkeypatch):
@@ -596,6 +611,71 @@ class TestBill:
         data = _post(_image_file(), "bill").json()
         assert data["pages"][0]["structured_data"]["needs_confirmation"] == ["account_no"]
         assert data["needs_review"] is True
+
+    def test_bill_electric_fields_read_and_normalized(self, monkeypatch):
+        _enable(monkeypatch, "bill")
+        _install(monkeypatch, _electric_bill_reply())
+        data = _post(_image_file(), "bill").json()
+        structured = data["pages"][0]["structured_data"]
+        assert structured["address"] == "臺北市中正區AV測試路100號"
+        assert structured["period_start"] == "2026-09-15"
+        assert structured["period_end"] == "2026-11-14"
+        assert structured["kwh"] == "812"
+        assert structured["needs_confirmation"] == []
+        assert data["document_fields"]["period_end"] == "2026-11-14"
+        assert data["needs_review"] is False
+
+    def test_bill_uncertain_electric_field_keeps_value_and_flags(self, monkeypatch):
+        """R7(AIChatbot Q1 選 Y):讀到但不確定 ⇒ 保留值、列待確認"""
+        _enable(monkeypatch, "bill")
+        _install(monkeypatch, _electric_bill_reply(address=_field("臺北市中正區AV測試路100號", False)))
+        data = _post(_image_file(), "bill").json()
+        structured = data["pages"][0]["structured_data"]
+        assert structured["address"] == "臺北市中正區AV測試路100號"
+        assert structured["needs_confirmation"] == ["address"]
+        assert data["document_fields"]["needs_confirmation"] == ["address"]
+        assert data["needs_review"] is True
+
+    def test_bill_invalid_electric_field_becomes_null_and_flags(self, monkeypatch):
+        """R6:格式驗證不過 ⇒ null、列待確認"""
+        _enable(monkeypatch, "bill")
+        _install(monkeypatch, _electric_bill_reply(
+            kwh=_field("八百"), address=_field("https://evil.example/x"),
+        ))
+        data = _post(_image_file(), "bill").json()
+        structured = data["pages"][0]["structured_data"]
+        assert structured["kwh"] is None and structured["address"] is None
+        assert sorted(structured["needs_confirmation"]) == ["address", "kwh"]
+        # 跨頁彙整重算後仍列待確認(_recompute_merged_status 依各頁 needs_confirmation)
+        assert data["document_fields"]["needs_confirmation"] == ["address", "kwh"]
+        assert data["document_fields"]["kwh"] is None
+        assert data["needs_review"] is True
+
+    def test_bill_multiple_periods_nulls_both_and_flags(self, monkeypatch):
+        """R10:兩段計費期間 ⇒ 起訖都 null、都列待確認"""
+        _enable(monkeypatch, "bill")
+        reply = json.loads(_electric_bill_reply(
+            period_start=_field(None), period_end=_field(None),
+        ))
+        reply["multiple_periods"] = True
+        _install(monkeypatch, json.dumps(reply, ensure_ascii=False))
+        structured = _post(_image_file(), "bill").json()["pages"][0]["structured_data"]
+        assert structured["period_start"] is None and structured["period_end"] is None
+        assert structured["needs_confirmation"] == ["period_start", "period_end"]
+        assert "multiple_periods" not in structured
+
+    def test_bill_model_failure_returns_all_six_null(self):
+        """R9:完全讀不出來 ⇒ 6 欄全 null"""
+        structured = BillDirectReadProcessor().empty_structured()
+        for key in ("amount", "account_no", *ELECTRIC_KEYS):
+            assert structured[key] is None
+        assert structured["llm_used_for_extraction"] is False
+
+    def test_bill_prompt_names_all_fields(self):
+        prompt = BillDirectReadProcessor().build_prompt()
+        for key in ("amount", "date", "account_no", *ELECTRIC_KEYS, "multiple_periods"):
+            assert f'"{key}"' in prompt
+        assert "用電地址" in prompt and "計費期間" in prompt and "電號" in prompt
 
 
 # --------------------------------------------------------------------------- #

@@ -105,7 +105,8 @@ def validate_engine_config(config: EngineConfig) -> None:
     # 把 textract 列為 valid 會讓它通過驗證卻不產生任何 task——**靜默地什麼都不做**。
     # 2026-08-25 移除。types.OCREngineName 另外還宣告了 paddleocr_vl / qwen_vl,
     # 那是 Phase 2 的規劃名稱,同樣未實作,不得列入此處。
-    valid_engines = ["paddleocr", "tesseract"]
+    # qwen(Bedrock Qwen3 VL 讀字)2026-11-16 加入,engine_manager 有分派(_run_qwen)。
+    valid_engines = ["paddleocr", "tesseract", "qwen"]
 
     # 驗證引擎列表不為空
     if not config.engines or len(config.engines) == 0:

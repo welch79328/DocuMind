@@ -401,3 +401,55 @@ class TestProcessTemplateMethod:
         # 確保兩種情況都正常執行
         assert processor.preprocess.call_count == 2
         assert processor.extract_text.call_count == 2
+
+
+class TestQwenEngine:
+    """OCR 引擎 qwen(transcript-qwen-read):行框進 _PAGE_OCR_LINES;只有 qwen 時不做前處理"""
+
+    LINES = [
+        {"text": "土地標示部", "box": [0.1, 0.1, 0.3, 0.14]},
+        {"text": "地號：0123-0000", "box": [0.1, 0.2, 0.26, 0.24]},
+    ]
+
+    @pytest.mark.asyncio
+    async def test_qwen_lines_are_kept_for_photo_positions(self):
+        processor = TranscriptProcessor()
+        text = "土地標示部\n地號：0123-0000"
+        processor.engine_manager.extract_text_multi_engine = AsyncMock(return_value=(
+            text, 0.9,
+            [{"engine": "qwen", "text": text, "confidence": 0.9,
+              "processing_time_ms": 1, "lines": self.LINES}],
+        ))
+        await processor.extract_text(Image.new('RGB', (100, 100), color='white'))
+        assert processor._take_page_ocr_lines() == self.LINES
+        assert processor._take_page_ocr_lines() is None   # 取一次就清
+
+    @pytest.mark.asyncio
+    async def test_qwen_lines_dropped_when_text_is_not_qwens(self):
+        processor = TranscriptProcessor()
+        processor.engine_manager.extract_text_multi_engine = AsyncMock(return_value=(
+            "別的引擎", 0.95,
+            [{"engine": "qwen", "text": "土地標示部", "confidence": 0.9,
+              "processing_time_ms": 1, "lines": self.LINES}],
+        ))
+        await processor.extract_text(Image.new('RGB', (100, 100), color='white'))
+        assert processor._take_page_ocr_lines() is None
+
+    @pytest.mark.asyncio
+    async def test_qwen_only_preprocess_returns_original_image(self):
+        processor = TranscriptProcessor()
+        processor.engine_manager.engines = ["qwen"]
+        processor.preprocessor.preprocess = AsyncMock(side_effect=AssertionError("不得前處理"))
+        image = Image.new('RGB', (120, 80), color='red')
+        assert await processor.preprocess(image) is image
+        processor.preprocessor.preprocess.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_mixed_engines_still_preprocess(self):
+        processor = TranscriptProcessor()
+        processor.engine_manager.engines = ["paddleocr", "qwen"]
+        processed = np.zeros((10, 10, 3), dtype=np.uint8)
+        processor.preprocessor.preprocess = AsyncMock(return_value=(processed, {}))
+        out = await processor.preprocess(Image.new('RGB', (10, 10)))
+        processor.preprocessor.preprocess.assert_called_once()
+        assert out.size == (10, 10)

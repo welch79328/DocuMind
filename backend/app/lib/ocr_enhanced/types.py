@@ -62,11 +62,11 @@ class EngineResult(TypedDict):
     單一 OCR 引擎結果
 
     Attributes:
-        engine: 引擎名稱 (paddleocr/tesseract/textract)
+        engine: 引擎名稱 (paddleocr/tesseract/qwen)
         text: 辨識文字
         confidence: 信心度 (0-1)
         processing_time_ms: 處理時間（毫秒）
-        lines: 行框(選填,僅 PaddleOCR):[{"text", "box": [x0,y0,x1,y1] 比例}];取不到為 None
+        lines: 行框(選填,PaddleOCR 與 qwen):[{"text", "box": [x0,y0,x1,y1] 比例}];取不到為 None
     """
     engine: str
     text: str
@@ -202,12 +202,13 @@ BinarizationMethod = Literal["gaussian", "mean", "sauvola"]
 
 # OCR 引擎名稱字面量
 # ⚠️ 此處宣告的是**名稱空間**,不是可用清單。
-# 實際跑得動的只有 paddleocr 與 tesseract(engine_manager 只分派這兩個);
+# 實際跑得動的只有 paddleocr、tesseract 與 qwen(engine_manager 只分派這三個;
+# qwen 是 Bedrock Qwen3 VL 讀字,2026-11-16 transcript-qwen-read 加入);
 # textract 屬舊路徑 lib/ocr_service.py 的 OCR_SERVICE,不走 EngineManager;
-# paddleocr_vl / qwen_vl 是 Phase 2 的規劃名稱,尚未實作。
+# paddleocr_vl / qwen_vl 是 Phase 2 的規劃名稱,尚未實作(qwen_vl 不是 qwen)。
 # 可用清單以 ocr_enhanced/config.py 的 valid_engines 為準。
 OCREngineName = Literal[
-    "paddleocr", "tesseract", "textract", "paddleocr_vl", "qwen_vl"
+    "paddleocr", "tesseract", "qwen", "textract", "paddleocr_vl", "qwen_vl"
 ]
 
 

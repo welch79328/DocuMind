@@ -70,7 +70,7 @@ DocuMind 是一個 **AI 驅動的文件智能處理系統**，專注於台灣不
 ### 成本效益
 
 - 智能 LLM 策略：OCR 路徑僅在 OCR 信心度 < 85% 時使用 LLM 校正；直讀類（收據、帳單、合約的影像與掃描 PDF）與照片類一律呼叫視覺模型
-- 本地 OCR 引擎（PaddleOCR、Tesseract），有文字層的 PDF 不經 OCR
+- 本地 OCR 引擎（PaddleOCR、Tesseract）可用；線上謄本影像改由 Qwen3 VL 讀字（`OCR_ENGINES=["qwen"]`），有文字層的 PDF 不經 OCR
 - 本地儲存或雲端儲存可選
 
 ## 成功指標

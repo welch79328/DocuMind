@@ -48,6 +48,17 @@ def check_setting_conflicts(settings: Any) -> List[str]:
             "並改用本地 Provider。"
         )
 
+    # OCR 引擎 qwen 要把頁面影像送 Bedrock;雲端關閉時個資閘門會擋下每一次呼叫,
+    # 影像頁讀字一律回空結果(不退回本機 OCR,plan R6)——設定者多半不是這個意思
+    engines = list(getattr(settings, "OCR_ENGINES", []) or [])
+    if "qwen" in engines and not getattr(settings, "LLM_CLOUD_ENABLED", False):
+        warnings.append(
+            f"OCR_ENGINES 含 qwen({engines})但 LLM_CLOUD_ENABLED=false;"
+            "qwen 讀字要把**頁面影像**送 Bedrock,雲端關閉時一律不外送,"
+            "謄本等影像頁的讀字會回空結果並進人工複核(不會退回 PaddleOCR)。"
+            "要用 qwen 請設 LLM_CLOUD_ENABLED=true;要地端請把 OCR_ENGINES 改回 paddleocr。"
+        )
+
     # 索取欄位信心度卻沒開雙模態:自評品質會比雙模態差(需求 2.2 的立論前提)
     if getattr(settings, "LLM_FIELD_CONFIDENCE_ENABLED", False) and not getattr(
         settings, "LLM_DUAL_MODAL_ENABLED", False

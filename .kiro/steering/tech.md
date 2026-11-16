@@ -31,7 +31,8 @@
 - **OpenAI**: 謄本的 LLM 校正與補欄位；程式預設所有類型都走 OpenAI（模型見 `docs/planning/03-TECH-STACK.md`）
 - **AWS Bedrock Qwen3 VL**（`qwen.qwen3-vl-235b-a22b`，東京）: 帳單、收據、合約、修繕照片、點交照片，由分流表 `LLM_PROVIDER_BY_DOCUMENT_TYPE` 設定（線上已分流）
 - **Anthropic / 本地 Qwen（vLLM）**: 可選 Provider（`LLM_PROVIDER`）
-- **PaddleOCR**（ONNX Runtime）: 主要 OCR 引擎（線上 `OCR_ENGINES=["paddleocr"]`）
+- **qwen 讀字**: 線上 `OCR_ENGINES=["qwen"]`，謄本影像送 Bedrock Qwen3 VL 抄字與框，不跑本機 OCR（`docs/DEPLOYMENT.md` §4）
+- **PaddleOCR**（ONNX Runtime）: 本機 OCR 引擎，程式預設開啟、線上未開
 - **Tesseract OCR**: 繁體中文 `chi_tra`，程式預設與 PaddleOCR 並列於 `OCR_ENGINES`
 - **AWS Textract**: 只在舊的 `/api/v1/documents` 路徑以 `OCR_SERVICE=textract` 顯式啟用
 - **PyMuPDF (fitz)**: PDF 處理

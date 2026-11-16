@@ -346,7 +346,11 @@ class ReceiptDirectReadProcessor(DirectReadProcessor):
 
 
 class BillDirectReadProcessor(DirectReadProcessor):
-    """帳單:回應鍵與舊版(OCR 流程)相同。"""
+    """帳單:既有 3 欄(amount、date、account_no)加電費 4 欄(address、period_start、period_end、kwh)。
+
+    電費 4 欄的正規化、驗證與待確認判定在 bill_electric_fields(與文字層規則共用)。
+    既有 3 欄的計分不變;電費 4 欄不算進 REQUIRED_FIELDS,水費、管理費單沒有這幾欄是正常的。
+    """
 
     DOCUMENT_TYPE = "bill"
     REQUIRED_FIELDS = ("amount", "date", "account_no")
@@ -354,28 +358,48 @@ class BillDirectReadProcessor(DirectReadProcessor):
     def build_prompt(self) -> str:
         return (
             "這是一張帳單(水費、電費、瓦斯費、管理費等)的影像。\n"
-            "請讀取三個欄位,並以 JSON 回傳,每個欄位都附上你是否確定:\n"
+            "請讀取下列欄位,並以 JSON 回傳,每個欄位都附上你是否確定:\n"
             '{"amount": {"value": "<本期應繳總金額,只寫數字>", "certain": true},\n'
             ' "date": {"value": "<繳費期限;沒有就用帳單日期,照單據印的寫法>", "certain": true},\n'
-            ' "account_no": {"value": "<戶號/用戶號/帳號>", "certain": true}}\n'
-            "規則:amount 取應繳總額,不是上期餘額或單項費用;"
-            "讀不到就把 value 填 null;看不清楚或不確定就把 certain 填 false。\n"
-            f"{_INJECTION_GUARD}\n"
+            ' "account_no": {"value": "<電號/戶號/用戶號/帳號>", "certain": true},\n'
+            ' "address": {"value": "<用電地址,照單上原文>", "certain": true},\n'
+            ' "period_start": {"value": "<計費期間起日,照單據印的寫法>", "certain": true},\n'
+            ' "period_end": {"value": "<計費期間迄日,照單據印的寫法>", "certain": true},\n'
+            ' "kwh": {"value": "<本期計費度數(總用電度數),只寫數字>", "certain": true},\n'
+            ' "multiple_periods": false}\n'
+            "規則:\n"
+            "- amount 取應繳總額,不是上期餘額或單項費用。\n"
+            "- address 是用電地址(用電場所);單上同時印了通訊地址、寄送地址時,只取用電地址。\n"
+            "- period_start、period_end 是「計費期間」的起訖日,不是繳費期限或抄表日;"
+            "民國年照原樣寫(如 115/09/15)。單上有兩段以上計費期間(跨期、補收)時,"
+            "兩欄的 value 都填 null,並把 multiple_periods 填 true。\n"
+            "- kwh 是本期的總計費度數,不是電表指針讀數,也不是分時段的度數。\n"
+            "- 單上沒有這個欄位(例如水費單沒有度數)或完全讀不出來,value 填 null;"
+            "讀得到但看不清楚或不確定,照讀到的寫,certain 填 false。\n"
+            f"- {_INJECTION_GUARD}\n"
             "只回傳 JSON。"
         )
 
     def to_structured(self, parsed: Dict[str, Any]) -> Dict[str, Any]:
+        from .bill_electric_fields import ELECTRIC_FIELDS, resolve_electric_fields
+
         values, confidences = self._score(
             parsed,
             {"amount": is_valid_amount, "date": is_valid_date, "account_no": None},
         )
         needs, overall = self._needs_and_overall(self.REQUIRED_FIELDS, confidences)
+
+        electric_values, electric_confidences, electric_needs = resolve_electric_fields(
+            {name: _read_field(parsed.get(name)) for name in ELECTRIC_FIELDS},
+            multiple_periods=parsed.get("multiple_periods") in (True, "true", "True"),
+        )
         return {
             "amount": values["amount"],
             "date": values["date"],
             "account_no": values["account_no"],
-            "field_confidences": confidences,
-            "needs_confirmation": needs,
+            **electric_values,
+            "field_confidences": {**confidences, **electric_confidences},
+            "needs_confirmation": needs + electric_needs,
             "extraction_confidence": overall,
             "llm_used_for_extraction": True,
         }

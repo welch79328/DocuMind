@@ -70,6 +70,117 @@ def _get_ocr_gate() -> "asyncio.Semaphore":
     return _ocr_gate
 
 
+# --------------------------------------------------------------------------- #
+# OCR 引擎 qwen:Bedrock Qwen3 VL 讀字(transcript-qwen-read,2026-11-16)
+# --------------------------------------------------------------------------- #
+
+# 逐字沿用 2026-11-09 評估 C2 版
+# (~/jgb-archive/transcript-photo-fullparse-eval-20261109/run_qwen_grounded.py PROMPT)。
+# 改了就不是評估量過的那個組合,改前要重量。
+QWEN_OCR_PROMPT = (
+    "這是一頁台灣不動產登記謄本的照片或掃描影像。請找出頁面上印的每一段文字（一個文字片段＝同一行中連續、沒有大空白隔開的字），"
+    "依閱讀順序逐段輸出，每段一行 JSON：{\"bbox_2d\": [x1, y1, x2, y2], \"text\": \"...\"}，座標用 0–1000 的相對座標（相對整張圖）。\n"
+    "- 同一行左右兩欄是兩段，各自輸出。\n- 文字照原文逐字抄，冒號、星號、括號、「(空白)」照抄，不補字、不改寫。\n"
+    "- 浮水印底紋、印章、QR code 不要輸出。\n只輸出 JSON 行，不要任何說明。"
+)
+QWEN_OCR_MAX_TOKENS = 8000
+
+# Qwen 讀字沒有分數。有讀到段落時固定回 0.9:這是 PaddleOCR 在謄本上通常回的值,
+# 讓下游 needs_review(信心度 < OCR_QUALITY_THRESHOLD)的判法不變。
+# 這不是「讀對的機率」——OCR 行分數本來就不能當信心度
+# (專案記憶 ocr-line-score-not-confidence:讀對讀錯分數重疊、字形換字照樣高分)。
+QWEN_OCR_CONFIDENCE = 0.9
+
+_qwen_gate: Optional["asyncio.Semaphore"] = None
+_qwen_gate_limit: int = -1
+_qwen_gate_loop: Optional["asyncio.AbstractEventLoop"] = None
+
+
+class QwenOcrError(Exception):
+    """qwen 讀字失敗。**訊息只有類別**,不含影像、模型回覆或 AWS 回應內文。
+
+    extract_text_multi_engine 會把失敗的例外字串印出來,所以從源頭就不帶內文。
+    """
+
+    def __init__(self, category: str):
+        self.category = category
+        super().__init__(f"qwen 讀字失敗:{category}")
+
+
+def _get_qwen_gate() -> "asyncio.Semaphore":
+    """qwen 讀字的併發上限(行程層級,跨請求共用;惰性建立)。
+
+    **跟 _get_ocr_gate 刻意分開。** OCR 閘門是 PaddleOCR 的記憶體閘門(上限 1);
+    qwen 在遠端算,本機只等 HTTP,不吃容器記憶體。共用那道閘門會讓一份 12 頁的謄本
+    逐頁排隊(每頁中位 39.2 秒),超過 JGB 等 DocuMind 的 480 秒(plan R7)。
+    這道閘門擋的是同時打 Bedrock 的請求數(預設 4,QWEN_OCR_MAX_CONCURRENT)。
+
+    上限改了、或換了事件迴圈(測試各自 asyncio.run)就重建,
+    避免 Semaphore 綁在已結束的迴圈上。
+    """
+    global _qwen_gate, _qwen_gate_limit, _qwen_gate_loop
+    from app.config import settings
+
+    limit = max(1, int(settings.QWEN_OCR_MAX_CONCURRENT))
+    loop = asyncio.get_running_loop()
+    if _qwen_gate is None or _qwen_gate_limit != limit or _qwen_gate_loop is not loop:
+        _qwen_gate = asyncio.Semaphore(limit)
+        _qwen_gate_limit = limit
+        _qwen_gate_loop = loop
+    return _qwen_gate
+
+
+def _encode_qwen_image(image: np.ndarray) -> str:
+    """BGR/灰階/BGRA 陣列 → RGB → 長邊 ≤2000、品質 92 的 JPEG → data URI。
+
+    JPEG 的縮圖與品質階梯重用直讀的 prepare_direct_read_image(只 import,不改那支檔),
+    中間用 BMP 交接:不壓縮、編碼最快,讀回來就是同一張 RGB。
+    """
+    import base64
+    import io
+
+    from PIL import Image
+
+    from app.lib.multi_type_ocr.direct_read_processor import prepare_direct_read_image
+
+    if image.ndim == 2:
+        rgb = cv2.cvtColor(image, cv2.COLOR_GRAY2RGB)
+    elif image.shape[2] == 4:
+        rgb = cv2.cvtColor(image, cv2.COLOR_BGRA2RGB)
+    elif image.shape[2] == 3:
+        rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    else:
+        raise QwenOcrError("invalid_image")
+
+    buffer = io.BytesIO()
+    Image.fromarray(rgb).save(buffer, format="BMP")
+    jpeg = prepare_direct_read_image(buffer.getvalue())
+    return "data:image/jpeg;base64," + base64.b64encode(jpeg).decode("ascii")
+
+
+def build_qwen_engine_result(
+    lines: list, layout: str, processing_time_ms: int
+) -> EngineResult:
+    """解析後的行框 → 引擎結果。0 段時 text=""、信心度 0.0;否則固定 QWEN_OCR_CONFIDENCE。"""
+    from .qwen_layout import build_full_text
+
+    if not lines:
+        return {
+            "engine": "qwen",
+            "text": "",
+            "confidence": 0.0,
+            "processing_time_ms": processing_time_ms,
+            "lines": [],
+        }
+    return {
+        "engine": "qwen",
+        "text": build_full_text(lines, layout),
+        "confidence": QWEN_OCR_CONFIDENCE,
+        "processing_time_ms": processing_time_ms,
+        "lines": lines,
+    }
+
+
 class EngineManager:
     """
     OCR 引擎管理器
@@ -175,64 +286,86 @@ class EngineManager:
         Returns:
             (融合後文字, 融合後信心度, 各引擎結果)
         """
-        # 準備任務列表
-        tasks = []
-
-        if "paddleocr" in self.engines:
-            tasks.append(self._run_paddleocr(image))
-
-        if "tesseract" in self.engines:
-            tasks.append(self._run_tesseract(image))
+        # 本機引擎(吃容器記憶體,受 OCR 閘門約束)
+        local_engines = [e for e in ("paddleocr", "tesseract") if e in self.engines]
+        use_qwen = "qwen" in self.engines
 
         # 並行執行所有引擎（使用 asyncio.gather）
         #
         # ⚠️ self.parallel 只是「意願」,不是「許可」。並行的峰值記憶體是兩引擎
         # 之和而非最大值,機器小就會 OOM——2026-08-24 在 3.7GB 的線上機器上實測
         # 觸發過(見 memory_guard 的說明)。故實際是否並行由記憶體當下的餘裕決定。
+        # (只算本機引擎:qwen 在遠端算,不佔這份記憶體。)
         from app.config import settings
         from .memory_guard import parallel_is_safe
 
         run_parallel = (
             self.parallel
-            and len(tasks) > 1
+            and len(local_engines) > 1
             and parallel_is_safe(settings.OCR_PARALLEL_MIN_AVAILABLE_MB)
         )
+
+        def _local_task(engine: str):
+            return self._run_paddleocr(image) if engine == "paddleocr" else self._run_tesseract(image)
 
         # ⚠️ 閘門在此,不在呼叫端。記憶體是被**引擎執行**吃掉的,不是被頁面迴圈;
         # 把閘門放這裡,無論是同一份文件的多頁併發、還是不同使用者的併發請求,
         # 都受同一個上限約束。放在 API 層只擋得住其中一種。
-        try:
+        async def _run_local() -> list:
+            if not local_engines:
+                return []
             async with _get_ocr_gate():
                 if run_parallel:
                     # 並行模式：同時執行
-                    results = await asyncio.gather(*tasks, return_exceptions=True)
+                    return list(await asyncio.gather(
+                        *(_local_task(e) for e in local_engines), return_exceptions=True
+                    ))
+                # 順序模式：逐個執行
+                out = []
+                for engine in local_engines:
+                    try:
+                        out.append(await _local_task(engine))
+                    except Exception as e:
+                        out.append(e)
+                return out
+
+        # qwen 不進 OCR 閘門(那是 PaddleOCR 的記憶體閘門),改受自己的併發上限約束。
+        # 引擎清單只有 qwen 時,整段完全不碰 OCR 閘門。
+        async def _run_qwen_gated():
+            try:
+                async with _get_qwen_gate():
+                    return await self._run_qwen(image)
+            except Exception as e:
+                return e
+
+        try:
+            if use_qwen and local_engines:
+                local_results, qwen_result = await asyncio.gather(_run_local(), _run_qwen_gated())
+                results = [*local_results, qwen_result]
+            elif use_qwen:
+                results = [await _run_qwen_gated()]
+            else:
+                results = await _run_local()
+
+            # 過濾失敗結果
+            valid_results: list[EngineResult] = []
+            for result in results:
+                if isinstance(result, Exception):
+                    # 記錄錯誤但繼續使用其他引擎結果
+                    # (qwen 的例外是 QwenOcrError,字串只有類別)
+                    print(f"引擎執行失敗: {result}")
                 else:
-                    # 順序模式：逐個執行
-                    results = []
-                    for task in tasks:
-                        try:
-                            result = await task
-                            results.append(result)
-                        except Exception as e:
-                            results.append(e)
+                    valid_results.append(result)
 
-                # 過濾失敗結果
-                valid_results: list[EngineResult] = []
-                for result in results:
-                    if isinstance(result, Exception):
-                        # 記錄錯誤但繼續使用其他引擎結果
-                        print(f"引擎執行失敗: {result}")
-                    else:
-                        valid_results.append(result)
+            if not valid_results:
+                # 所有引擎都失敗。qwen 失敗**不退回** PaddleOCR/tesseract(plan R6):
+                # 退回就又要把 PaddleOCR 載入容器。
+                return "", 0.0, []
 
-                if not valid_results:
-                    # 所有引擎都失敗
-                    return "", 0.0, []
+            # 融合結果
+            fused_text, fused_confidence = self._fuse_results(valid_results)
 
-                # 融合結果
-                fused_text, fused_confidence = self._fuse_results(valid_results)
-
-                return fused_text, fused_confidence, valid_results
+            return fused_text, fused_confidence, valid_results
 
         except Exception as e:
             print(f"多引擎處理失敗: {e}")
@@ -419,6 +552,59 @@ class EngineManager:
             "confidence": self._standardize_confidence("tesseract", confidence),
             "processing_time_ms": processing_time_ms
         }
+
+    async def _run_qwen(self, image: np.ndarray) -> EngineResult:
+        """
+        OCR 引擎 qwen:整頁送 Bedrock Qwen3 VL,逐段抄錄並附 0–1000 座標。
+
+        交出跟 PaddleOCR 一樣的引擎結果(text、confidence、lines 比例行框),
+        下游(25 欄、清單、全文解析、v2 照片 position)不必分辨是誰讀的。
+
+        - 個資閘門:走 create_provider("bedrock"),LLM_CLOUD_ENABLED=false 時在建立
+          Provider 就被擋下,影像不編碼、不外送。
+        - 失敗(Bedrock 錯誤、設定被擋、影像過大、逾時、解析出 0 段)一律拋
+          QwenOcrError(訊息只有類別),由 extract_text_multi_engine 濾掉 → 該頁
+          ("", 0.0, [])。**不退回** PaddleOCR/tesseract(plan R6)。
+        - log 只記類別,不記影像、模型回覆或 AWS 回應內文。
+        """
+        from app.config import settings
+        from app.lib.llm_service import providers
+        from app.lib.llm_service.call_log import STAGE_OCR_READ, classify_llm_error, llm_stage
+
+        from .qwen_layout import parse_qwen_lines
+
+        start_time = time.time()
+        try:
+            provider = providers.create_provider("bedrock")
+            image_data = await asyncio.to_thread(_encode_qwen_image, image)
+            with llm_stage(STAGE_OCR_READ):
+                response = await provider.call(
+                    QWEN_OCR_PROMPT,
+                    image_data=image_data,
+                    max_tokens=QWEN_OCR_MAX_TOKENS,
+                    temperature=0.0,
+                )
+            lines = parse_qwen_lines(response)
+            if not lines:
+                raise QwenOcrError("no_segments")
+            result = build_qwen_engine_result(
+                lines,
+                settings.QWEN_OCR_TEXT_LAYOUT,
+                int((time.time() - start_time) * 1000),
+            )
+        except QwenOcrError as exc:
+            category = exc.category
+        except providers.BedrockCallError as exc:
+            category = exc.category
+        except ValueError:
+            category = "cloud_disabled" if not settings.LLM_CLOUD_ENABLED else "invalid_request"
+        except Exception as exc:  # 逾時等:只看類別,不看訊息
+            category = classify_llm_error(exc)
+        else:
+            return result
+
+        logger.warning("qwen 讀字失敗,該頁降級為空結果:%s", category)
+        raise QwenOcrError(category) from None
 
     def fuse(self, results: list[EngineResult]) -> tuple[str, float]:
         """

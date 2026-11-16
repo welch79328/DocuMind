@@ -19,7 +19,7 @@ from .transcript_field_extractor import TranscriptFieldExtractor
 
 logger = logging.getLogger(__name__)
 
-# 該頁任務這一次 extract_text 取得的 PaddleOCR 行框(S3)。
+# 該頁任務這一次 extract_text 取得的 OCR 行框(S3;PaddleOCR 或 qwen)。
 # 放 ContextVar 而不是實例屬性:同一請求的各頁以 asyncio.gather 並發、共用一個處理器,
 # 每頁是獨立任務、各有自己的 context,不會互相覆蓋。
 _PAGE_OCR_LINES: ContextVar[Optional[List[Dict[str, Any]]]] = ContextVar(
@@ -97,6 +97,12 @@ class TranscriptProcessor(OcrDocumentProcessor):
         """
         logger.debug("開始預處理圖像")
 
+        # 引擎只有 qwen:送原圖,不做浮水印移除、二值化、解析度調整。
+        # 2026-11-09 評估 C2 量的就是原圖;那些前處理是為 PaddleOCR 調的。
+        # qwen 回的框是相對整張圖的比例座標,不受影響。
+        if set(self.engine_manager.engines) == {"qwen"}:
+            return image
+
         try:
             # 調用既有的 TranscriptPreprocessor
             processed_array, metadata = await self.preprocessor.preprocess(image)
@@ -151,9 +157,9 @@ class TranscriptProcessor(OcrDocumentProcessor):
             text, confidence, engine_results = \
                 await self.engine_manager.extract_text_multi_engine(image_array)
 
-            # 融合後文字＝PaddleOCR 那份 text 時,行框才算這頁的(Tesseract 等沒有行框)
+            # 融合後文字＝PaddleOCR 或 qwen 那份 text 時,行框才算這頁的(Tesseract 沒有行框)
             for er in engine_results or []:
-                if er.get("engine") == "paddleocr" and er.get("lines") and er.get("text") == text:
+                if er.get("engine") in ("paddleocr", "qwen") and er.get("lines") and er.get("text") == text:
                     _PAGE_OCR_LINES.set(er["lines"])
                     break
 

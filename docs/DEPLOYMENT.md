@@ -8,7 +8,7 @@
 ## 0. TL;DR — 一分鐘結論
 
 - **平台架構請用 x86_64**(Intel/AMD)。PaddleOCR 在 Docker linux/arm64 容器裡實測崩潰過(見 §7);Apple Silicon 的 macOS 原生 venv 跑得起來,只用於探查,不當驗收。
-- **LLM 可插拔**:雲端 OpenAI / AWS Bedrock / 地端 Qwen,另可依文件類型分流。線上:謄本走 OpenAI,帳單、收據、合約、修繕照片、點交照片走 Bedrock Qwen3 VL(flex)(見 §0.5、§3)。
+- **LLM 可插拔**:雲端 OpenAI / AWS Bedrock / 地端 Qwen,另可依文件類型分流。線上:謄本的抽取、校正走 OpenAI,謄本影像的讀字與帳單、收據、合約、修繕照片、點交照片走 Bedrock Qwen3 VL(flex)(見 §0.5、§3)。
 - **建議起步規格**:x86 2–4 vCPU / 8 GB RAM + PostgreSQL,LLM 走雲端 → 機器約 $61/月(t3.large,§3.1),API 費另計;線上實際月費見 §0.5。
 - **地端要 GPU**:7B 模型需 ~16 GB 顯存;2B 可 CPU(慢)。
 
@@ -26,12 +26,12 @@
 | 機型 | **t3.medium 級:2 vCPU / 3.7 GB 可用** | 機上 `nproc` / `free`;**機型名為推定,未經 Console 確認** |
 | 月費 | **約 $33–35**(推算) | §3.1 表 t3.medium `$30`(us-east-1)× 東京 +10–15% |
 | 走哪個選項 | **選項 B — 雲端 OpenAI** | `backend/app/config.py` `LLM_PROVIDER="openai"`,`.env` 未覆寫 |
-| 文件類型分流 | **線上帳單、修繕照片、點交照片、合約、收據都設為 `bedrock`**(Qwen3 VL 235B、flex);謄本仍走 OpenAI。程式預設空表 = 四類走 OpenAI、收據未分流 | 線上 `.env` 的 `LLM_PROVIDER_BY_DOCUMENT_TYPE`;`backend/app/config.py`(§3) |
+| 文件類型分流 | **線上帳單、修繕照片、點交照片、合約、收據都設為 `bedrock`**(Qwen3 VL 235B、flex);謄本的抽取、校正仍走 OpenAI(謄本影像的讀字由 `OCR_ENGINES=["qwen"]` 決定,不看這張表)。程式預設空表 = 四類走 OpenAI、收據未分流 | 線上 `.env` 的 `LLM_PROVIDER_BY_DOCUMENT_TYPE`;`backend/app/config.py`(§3) |
 | Qwen 直讀 | **線上收據、帳單、合約已開啟直讀**(2026-10-29 起):影像與掃描 PDF 不跑本機 OCR;文字層 PDF 照舊。程式預設不開 | 線上 `.env` 的 `DIRECT_READ_DOCUMENT_TYPES=["receipt","bill","contract"]`(§3「Qwen 直讀」) |
 | LLM 模型 | **`gpt-5.6-terra`**(主)/ `gpt-5.6-luna`(分類、摘要、問答) | `.env`,2026-09-03 更新 |
-| OCR 引擎(`ocr_enhanced` 路徑) | **`["paddleocr"]`** 單引擎 | `.env` 的 `OCR_ENGINES`,2026-09-03 定案 |
+| OCR 引擎(`ocr_enhanced` 路徑) | **`["qwen"]`**(2026-11-16 起):謄本影像頁送 Bedrock Qwen3 VL 讀字,不載入 PaddleOCR;`OCR_PRELOAD_MODEL=false`。之前是 `["paddleocr"]`(2026-09-03 定案) | `.env` 的 `OCR_ENGINES`、`OCR_PRELOAD_MODEL`(§4) |
 | OCR 引擎(`document_service` 路徑) | **`pytesseract` 單獨** | 兩台 `.env` 的 `OCR_SERVICE` |
-| PaddleOCR 執行器 | **ONNX Runtime**(非 paddle 執行器) | `engine_manager.py` `engine="onnxruntime"` |
+| PaddleOCR 執行器 | **ONNX Runtime**(非 paddle 執行器);線上未開 PaddleOCR | `engine_manager.py` `engine="onnxruntime"` |
 | GPU | **無,也不需要** | 選項 B 明訂「無需 GPU」 |
 | 容器數 | **四個**:`frontend`、`backend`、`postgres`、`nginx` | `docker compose ps` 實測 |
 
@@ -40,7 +40,7 @@
 | 路徑 | 入口 | 分派依據 | 目前實際跑什麼 |
 |---|---|---|---|
 | 舊 | `/api/v1/documents` → `services/document_service.py` → `lib/ocr_service.py` | `settings.OCR_SERVICE` | **`pytesseract` 單獨**(PaddleOCR 未參與) |
-| 新 | `lib/multi_type_ocr/*` → `lib/ocr_enhanced/engine_manager.py` | `settings.OCR_ENGINES` | `paddleocr` 單引擎(線上 `.env`;程式預設 `paddleocr` + `tesseract`) |
+| 新 | `lib/multi_type_ocr/*` → `lib/ocr_enhanced/engine_manager.py` | `settings.OCR_ENGINES` | `qwen` 單引擎(線上 `.env`;程式預設 `paddleocr` + `tesseract`) |
 
 本規格(`ocr-vlm-consensus`)的共識機制只作用在**新路徑**。
 談「OCR 引擎是什麼」時務必先講清楚是哪一條。
@@ -52,7 +52,7 @@ boto3 client 是接好的、AWS 金鑰在 `.env`,而 `.env` 不進版控,等於�
 
 **ONNX 不是第三個引擎。** 它是 PaddleOCR 內部的推論執行器,跑的是同一組
 PP-OCRv6_medium 權重,實測輸出與 paddle 執行器**逐項相同**(72 行、信心度 0.927),
-只是快 2.75 倍。共識比對(`OCR_CONSENSUS_ENABLED`,預設關閉)要兩個引擎才有比對訊號,來源是 PaddleOCR 與 Tesseract;線上只開 PaddleOCR,沒有比對訊號。
+只是快 2.75 倍。共識比對(`OCR_CONSENSUS_ENABLED`,預設關閉)要兩個引擎才有比對訊號,來源是 PaddleOCR 與 Tesseract;線上只開 qwen,沒有比對訊號。
 
 ### 與 §3 選項 B 建議規格的落差
 
@@ -68,7 +68,7 @@ PaddleOCR 改用 ONNX Runtime 後記憶體足跡小於 paddle 執行器,單份�
 
 ### 已量到的痛點:2 vCPU 讓兩個引擎搶不過來
 
-本節只在 `OCR_ENGINES` 列兩個引擎時適用;線上只開 PaddleOCR。
+本節只在 `OCR_ENGINES` 列兩個本機引擎時適用;線上只開 qwen。
 
 2026-08-24 同機實測:
 
@@ -139,7 +139,7 @@ load average (2 vCPU)            →  51.35
 
 **二、引擎選擇的依據換了。** 先前以「記憶體、速度、讀出字數」判斷而選 Tesseract。
 有了文字層當真值後,準確率差距(38.2% vs 14.5%)大到讓其他考量變次要,
-線上已切為 `["paddleocr"]`。
+當時線上切為 `["paddleocr"]`(2026-11-16 再改為 `["qwen"]`,見 §4)。
 
 **三、OCR 併發閘門上線。** `OCR_MAX_CONCURRENT=1`(行程層級 Semaphore,
 放在 `EngineManager` 而非 API 層,故同一文件的多頁併發與跨使用者併發受同一上限),
@@ -335,10 +335,25 @@ c 系列非 burstable)等**系統穩定後**再討論。
 
 | 引擎 | 平台 | 繁中 | 備註 |
 |---|---|---|---|
-| **PaddleOCR**(主力;線上唯一開啟的引擎) | **Linux x86_64**(線上);macOS arm64 原生 venv 可跑 | chinese_cht | Docker linux/arm64 2026-08-24 實測崩潰、3.7.0 未測(§7);中文辨識最強 |
+| **qwen**(線上唯一開啟的引擎,2026-11-16 起) | 不限(遠端 API) | — | 整頁送 Bedrock 東京 `qwen.qwen3-vl-235b-a22b` 抄字與框;不吃容器記憶體;要 `LLM_CLOUD_ENABLED=true` |
+| **PaddleOCR**(本機引擎;線上未開) | **Linux x86_64**;macOS arm64 原生 venv 可跑 | chinese_cht | Docker linux/arm64 2026-08-24 實測崩潰、3.7.0 未測(§7);每頁約 0.7 GiB、用完不還 |
 | **Tesseract**(備援;程式預設開啟,線上未開) | x86 + ARM64 皆可 | chi_tra | Docker linux/arm64 上的替代;已內建於映像 |
 
-設定:`OCR_ENGINES`(程式預設 `["paddleocr","tesseract"]`,預設融合 `OCR_FUSION_METHOD="best"` 取信心度最高的一份;線上 `["paddleocr"]`;Docker linux/arm64 上設 `["tesseract"]`)。
+設定:`OCR_ENGINES`(程式預設 `["paddleocr","tesseract"]`,預設融合 `OCR_FUSION_METHOD="best"` 取信心度最高的一份;線上 `["qwen"]`;Docker linux/arm64 上設 `["tesseract"]`)。
+
+### qwen 讀字(2026-11-16 起線上)
+
+`OCR_ENGINES=["qwen"]` 時,走 `ocr_enhanced` 路徑的影像頁(線上實際只有謄本的照片與掃描 PDF;收據、帳單、合約已走直讀)
+每頁送一次 Bedrock,模型抄出每段文字與框,取代本機 OCR;之後的規則抽取不變。實測見 `docs/testing/transcript-qwen-read-20261116.md`。
+
+- **個資外送**:謄本影像(含姓名、地址、統一編號)送 AWS Bedrock 東京 ap-northeast-1。`LLM_CLOUD_ENABLED=false` 時一律不送,影像頁回空結果並進人工複核,啟動時印設定衝突警告。
+- **不載入 PaddleOCR**:清單只有 qwen 時不預載、不呼叫,謄本影像也不做浮水印移除等前處理。同時設 `OCR_PRELOAD_MODEL=false`。
+- **失敗不退回本機 OCR**:呼叫失敗(flex 逾時 90 秒後改 default 重送仍失敗)或回 0 段時,該頁文字空、信心度 0.0、`needs_review: true`。
+- **併發**:`QWEN_OCR_MAX_CONCURRENT`(預設 4)限制同時送出的頁數,行程層級、跨請求共用;不進 `OCR_MAX_CONCURRENT` 那道記憶體閘門。
+- **全文組法**:`QWEN_OCR_TEXT_LAYOUT`(預設 `join` 依閱讀順序接起;`rebuild` 依座標補縮排),依據是 25 欄 join 80.97%、rebuild 79.00%。
+- **耗時與費用**:本機實測每頁 15–139 秒;費用每頁約 $0.005(11/09 同一提示詞實測 $0.0052,`docs/testing/transcript-photo-fullparse-eval-20261109.md`)。
+- 未設直讀的帳單、合約影像也會走 qwen 讀字(把它們從 `DIRECT_READ_DOCUMENT_TYPES` 拿掉時要注意)。
+- **退回本機 OCR**:`.env` 改 `OCR_ENGINES=["paddleocr"]`、`OCR_PRELOAD_MODEL=true`,重建 backend 容器(`docker compose up -d --force-recreate backend`)。
 
 ---
 
@@ -406,6 +421,7 @@ make migrate         # docker-compose exec backend alembic upgrade head
 
 ### 7.3 隱私
 - 含個資文件(謄本/身分證)如需「不得外送」,設 `LLM_CLOUD_ENABLED=false` 強制地端;EC2 自架 ≠ 交第三方 API。
+  `OCR_ENGINES` 含 `qwen` 時謄本影像本身會送 Bedrock;要地端讀字,同時把 `OCR_ENGINES` 改回 `["paddleocr"]`(§4)。
 
 ---
 
@@ -420,7 +436,9 @@ STORAGE_TYPE=local            # local / s3;compose 沒設時用 s3
 LOCAL_STORAGE_PATH=/app/uploads
 
 # OCR
-OCR_ENGINES=["paddleocr","tesseract"]   # 程式預設;線上設 ["paddleocr"];Docker linux/arm64 上改 ["tesseract"]
+OCR_ENGINES=["paddleocr","tesseract"]   # 程式預設;線上設 ["qwen"](§4);Docker linux/arm64 上改 ["tesseract"]
+OCR_PRELOAD_MODEL=true        # 程式預設;線上 OCR_ENGINES=["qwen"] 時設 false
+QWEN_OCR_MAX_CONCURRENT=4     # qwen 讀字同時送出的頁數上限
 OCR_PADDLEOCR_LANG=chinese_cht
 OCR_QUALITY_THRESHOLD=0.8     # 信心度攔截門檻(低於→人工複核)
 

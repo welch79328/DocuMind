@@ -65,7 +65,7 @@
 
 ### AI 服務
 
-- **OCR**: PaddleOCR（ONNX Runtime），本地執行；引擎清單由 `OCR_ENGINES` 設定，程式預設 `["paddleocr", "tesseract"]`，線上為 `["paddleocr"]`（見 `docs/DEPLOYMENT.md` §0.5）；含文字層的 PDF 不經 OCR
+- **OCR**: 引擎清單由 `OCR_ENGINES` 設定，程式預設 `["paddleocr", "tesseract"]`（PaddleOCR 以 ONNX Runtime 本地執行）；線上為 `["qwen"]`，謄本影像送 Bedrock Qwen3 VL 讀字、不跑本機 OCR（見 `docs/DEPLOYMENT.md` §0.5、§4）；含文字層的 PDF 不經 OCR
 - **LLM**: 謄本走 OpenAI；帳單、收據、合約、修繕照片、點交照片線上走 Bedrock Qwen3 VL（flex），由分流表 `LLM_PROVIDER_BY_DOCUMENT_TYPE` 設定，程式預設 OpenAI（模型分工見 `docs/planning/03-TECH-STACK.md`）
 - **儲存**: `STORAGE_TYPE`，程式預設 `local`；docker-compose 在 `.env` 沒設時帶 `s3`
 

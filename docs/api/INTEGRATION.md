@@ -1,6 +1,6 @@
 # DocuMind OCR 對接規格（給外部系統開發者）
 
-> 版本 2.12.1 ／ 2026-11-13（2.12.1：只改文件、回應不變——§2.5.3 第 1 點補寫：圖檔內容壞掉（副檔名正確但解不開）時那一筆仍是 `status: "ok"`，`structured_data`、`document_fields` 為 `null`，並會進複核佇列；2.12.0：`/analyze` 與 `/analyze/batch` 新增參數 `handover_format=v2`（只對點交照片）——`furniture`、`appliance` 每項改為 `{key, label, confidence, box, condition}`，`confidence` 是模型對該項的自評、沒給回 `null`，`box` 是 0～1 比例框，另有 `damages[]`；`field_confidences`、`needs_confirmation`、`extraction_confidence` 改依自評；`needs_review` 與複核佇列不變；不帶參數的回應不變（§3.5.1）；2.11.0：`/analyze` 新增參數 `contract_format=v2`（只對合約）——`document_fields.rental_terms` 的 `date_start`、`date_end`、`monthly_rent`、`deposit`、`rental_address`、`tenant_name` 各包成 `{value, position}`，電子 PDF 附值在原檔的位置，照片與掃描檔 `position` 為 `null`；不帶參數的回應不變（§3.2.1）；2.10.0：只影響帶參數 `transcript_format=v2`——照片讀不出結構時多補 `謄本.段`、`謄本.小段`（從全文以全國鄉鎮市區名稱切）、清單沒出來時用單值補第 1 筆 `標示部.層次` 與 `所有權部`、公設車位寫進 `共有部分[].其他登記事項`；`transcript_records` 是 `[]` 或不存在時依建號／地號組 1 張再補，不再回空；不帶參數的回應不變（§3.1.4）；2.9.0：`/analyze` 新增參數 `transcript_format=v2`（只對謄本）——`transcript_records` 每個值包成 `{value, position}`，附值在原檔的位置，照片的空格由 25 欄與清單補進，並拿掉 25 欄、6 種清單與 `transcripts`；不帶參數的回應不變；不帶參數的五種謄本舊格式公告棄用（§3.1.4、§3.1.5，新 schema `transcript_records_v2.schema.json`）；2.8.1：只改文件、回應不變——§3.1.3 的 jgb2 建物謄本表單對照表補「建議讀法」一欄：主建物層次 2–4、共有部分權利範圍與持分面積在清單 `floors`、`shared_parts` 就有，與 `transcript_records` 都有的值先讀清單；照片、掃描謄本的全文解析實測約 6%；§8 補 2026-11-09 另一批較難模擬照片的 25 欄本機實測 77%；2.8.0：欄位值一律是字串——模型補欄位時回的數字（如帳單 `amount` `714`、合約 `deposit` `50000`）改回字串 `"714"`、`"50000"`，見 §3；2.7.1：只改文件、回應不變——§3.5 點交照片範例改為實際格式（`furniture`、`appliance` 是物件陣列，8 個鍵與降級值寫明）；§3.2、§3.3 補金額欄位型別說明；2.7.0：`document_fields` 固定帶鍵——各頁 `structured_data` 有的鍵一律出現，各頁都是空值時回空值本身（`null`、`[]`、`""`），不再省略，見 §2；2.6.0：新增文件類型 `receipt`（收據、發票，回 `amount`、`date`），見 §3.3.1；修繕照片新增 `damaged_items`，見 §3.4；`/classify` 能回 `receipt`；帳單、合約的影像與掃描 PDF 可改由視覺模型直讀、不跑本機 OCR（伺服器設定 `DIRECT_READ_DOCUMENT_TYPES`，預設不列），直讀類與照片類一律呼叫模型、不看 `enable_llm`，見 §2.1、§6；2.5.0：每頁新增 `llm_calls`，列出這一頁每次 LLM 呼叫送到哪個供應商、模型、服務等級、成功或錯誤類別，見 §2.4；LLM 補欄位呼叫失敗時 `llm_used_for_extraction` 為 `false`；2.4.0：謄本新增固定輸出格式 `transcript_records`，每張謄本的鍵固定、沒印回 `null`／`[]`，附 JSON Schema，見 §3.1.3；2.3.0：謄本新增 `transcripts`，謄本上印的每一項都依原文標籤回傳，見 §3.1.2；2.2.0：謄本新增 `print_date`；原文印空白的欄位回 `null`；土地／建物專屬的必要欄位只在該部存在時要求，見 §3.1；2.1.2：合約欄位的值改為半形數字與標點、帶框字還原，見 §3.2；2.1.1：持分欄位的值統一為「分數」或「全部」，見 §3.1；2.1.0：謄本新增 6 個清單欄位與 `land_rights_scope`，並寫明各單值欄位的取值範圍）
+> 版本 2.13.1 ／ 2026-11-16（2.13.1：回應格式不變——謄本的照片與無文字層 PDF 改由視覺模型 Qwen3 VL 讀字（伺服器 `OCR_ENGINES=["qwen"]`），不再跑本機 OCR；讀不到字或模型呼叫失敗時該頁文字為空、`needs_review: true`，不退回本機 OCR；`pages[].llm_calls` 多一種 `stage: "ocr_read"`；`transcript_format=v2` 照片的 `position` 改用模型回的框，見 §3.1.4、§6、§7；2.13.0：`bill` 新增 4 個鍵 `address`（用電地址）、`period_start`、`period_end`（計費期間，`YYYY-MM-DD`）、`kwh`（本期計費度數），一律帶鍵、讀不到回 `null`；`account_no` 也認台電的「電號」；既有 3 欄不變，見 §3.3；2.12.1：只改文件、回應不變——§2.5.3 第 1 點補寫：圖檔內容壞掉（副檔名正確但解不開）時那一筆仍是 `status: "ok"`，`structured_data`、`document_fields` 為 `null`，並會進複核佇列；2.12.0：`/analyze` 與 `/analyze/batch` 新增參數 `handover_format=v2`（只對點交照片）——`furniture`、`appliance` 每項改為 `{key, label, confidence, box, condition}`，`confidence` 是模型對該項的自評、沒給回 `null`，`box` 是 0～1 比例框，另有 `damages[]`；`field_confidences`、`needs_confirmation`、`extraction_confidence` 改依自評；`needs_review` 與複核佇列不變；不帶參數的回應不變（§3.5.1）；2.11.0：`/analyze` 新增參數 `contract_format=v2`（只對合約）——`document_fields.rental_terms` 的 `date_start`、`date_end`、`monthly_rent`、`deposit`、`rental_address`、`tenant_name` 各包成 `{value, position}`，電子 PDF 附值在原檔的位置，照片與掃描檔 `position` 為 `null`；不帶參數的回應不變（§3.2.1）；2.10.0：只影響帶參數 `transcript_format=v2`——照片讀不出結構時多補 `謄本.段`、`謄本.小段`（從全文以全國鄉鎮市區名稱切）、清單沒出來時用單值補第 1 筆 `標示部.層次` 與 `所有權部`、公設車位寫進 `共有部分[].其他登記事項`；`transcript_records` 是 `[]` 或不存在時依建號／地號組 1 張再補，不再回空；不帶參數的回應不變（§3.1.4）；2.9.0：`/analyze` 新增參數 `transcript_format=v2`（只對謄本）——`transcript_records` 每個值包成 `{value, position}`，附值在原檔的位置，照片的空格由 25 欄與清單補進，並拿掉 25 欄、6 種清單與 `transcripts`；不帶參數的回應不變；不帶參數的五種謄本舊格式公告棄用（§3.1.4、§3.1.5，新 schema `transcript_records_v2.schema.json`）；2.8.1：只改文件、回應不變——§3.1.3 的 jgb2 建物謄本表單對照表補「建議讀法」一欄：主建物層次 2–4、共有部分權利範圍與持分面積在清單 `floors`、`shared_parts` 就有，與 `transcript_records` 都有的值先讀清單；照片、掃描謄本的全文解析實測約 6%；§8 補 2026-11-09 另一批較難模擬照片的 25 欄本機實測 77%；2.8.0：欄位值一律是字串——模型補欄位時回的數字（如帳單 `amount` `714`、合約 `deposit` `50000`）改回字串 `"714"`、`"50000"`，見 §3；2.7.1：只改文件、回應不變——§3.5 點交照片範例改為實際格式（`furniture`、`appliance` 是物件陣列，8 個鍵與降級值寫明）；§3.2、§3.3 補金額欄位型別說明；2.7.0：`document_fields` 固定帶鍵——各頁 `structured_data` 有的鍵一律出現，各頁都是空值時回空值本身（`null`、`[]`、`""`），不再省略，見 §2；2.6.0：新增文件類型 `receipt`（收據、發票，回 `amount`、`date`），見 §3.3.1；修繕照片新增 `damaged_items`，見 §3.4；`/classify` 能回 `receipt`；帳單、合約的影像與掃描 PDF 可改由視覺模型直讀、不跑本機 OCR（伺服器設定 `DIRECT_READ_DOCUMENT_TYPES`，預設不列），直讀類與照片類一律呼叫模型、不看 `enable_llm`，見 §2.1、§6；2.5.0：每頁新增 `llm_calls`，列出這一頁每次 LLM 呼叫送到哪個供應商、模型、服務等級、成功或錯誤類別，見 §2.4；LLM 補欄位呼叫失敗時 `llm_used_for_extraction` 為 `false`；2.4.0：謄本新增固定輸出格式 `transcript_records`，每張謄本的鍵固定、沒印回 `null`／`[]`，附 JSON Schema，見 §3.1.3；2.3.0：謄本新增 `transcripts`，謄本上印的每一項都依原文標籤回傳，見 §3.1.2；2.2.0：謄本新增 `print_date`；原文印空白的欄位回 `null`；土地／建物專屬的必要欄位只在該部存在時要求，見 §3.1；2.1.2：合約欄位的值改為半形數字與標點、帶框字還原，見 §3.2；2.1.1：持分欄位的值統一為「分數」或「全部」，見 §3.1；2.1.0：謄本新增 6 個清單欄位與 `land_rights_scope`，並寫明各單值欄位的取值範圍）
 > 本文件由 `docs/API_INTEGRATION.md` 與 `docs/api/02-INTEGRATION-API.md` 合併而成。
 > 標示「實測」的數字皆取自線上環境(`54.248.201.66`),日期各自註明。
 > 唯一需要串的端點是 `POST /api/v1/analyze`；其餘為輔助。
@@ -24,7 +24,7 @@
 
 ## 2. 主端點：`POST /api/v1/analyze`
 
-上傳 PDF 或圖片，一次完成文字辨識 → 結構化欄位抽取（可選 AI 問答）。謄本與文字層 PDF 走 OCR／文字層加規則抽取；收據、帳單、合約的影像與掃描 PDF 在伺服器開啟「直讀」時，整頁交視覺模型讀，不跑本機 OCR（見 §6）。
+上傳 PDF 或圖片，一次完成文字辨識 → 結構化欄位抽取（可選 AI 問答）。有文字層的 PDF 讀文字層加規則抽取；謄本的照片與掃描 PDF 交視覺模型讀字（伺服器 `OCR_ENGINES=["qwen"]` 時）再用規則抽取；收據、帳單、合約的影像與掃描 PDF 在伺服器開啟「直讀」時，整頁交視覺模型讀，不跑本機 OCR（見 §6）。
 
 ### 2.1 請求（multipart/form-data）
 
@@ -32,7 +32,7 @@
 |---|---|---|---|---|
 | `file` | file | ✅ | — | `.pdf` / `.jpg` / `.jpeg` / `.png`，上限 **20 MB** |
 | `document_type` | string | ✗ | `transcript` | 見 2.2 |
-| `enable_llm` | bool | ✗ | `true` | 只影響**謄本**、**有文字層的 PDF**，以及**沒開直讀的帳單、合約**：啟用 LLM 文字校正與補欄位（OCR 信心度 < 85% 才實際觸發，約 $0.02/頁）。**直讀類**（收據、帳單、合約的影像與掃描 PDF，伺服器開啟直讀時）與**照片類**（`repair_photo`、`handover_photo`）一律呼叫視覺模型，不論 `enable_llm` 為何（約 $0.001/頁） |
+| `enable_llm` | bool | ✗ | `true` | 只影響**謄本**、**有文字層的 PDF**，以及**沒開直讀的帳單、合約**：啟用 LLM 文字校正與補欄位（OCR 信心度 < 85% 才實際觸發，約 $0.02/頁；謄本照片由視覺模型讀字時該頁信心度固定 0.9，文字校正不會觸發）。**直讀類**（收據、帳單、合約的影像與掃描 PDF，伺服器開啟直讀時）與**照片類**（`repair_photo`、`handover_photo`）一律呼叫視覺模型，不論 `enable_llm` 為何（約 $0.001/頁） |
 | `question` | string | ✗ | `null` | 帶入時額外回傳 `answer`，基於本次 OCR 結果作答 |
 | `transcript_format` | string | ✗ | 不帶 | 只接受 `v2`：謄本改用帶位置的新格式（§3.1.4），新串接請帶。其他值回 `400 INVALID_TRANSCRIPT_FORMAT`（`document_type` 不是謄本也一樣）；`document_type` 不是 `transcript` 時帶 `v2` 不起作用 |
 | `contract_format` | string | ✗ | 不帶 | 只接受 `v2`：合約租賃六欄附值的位置（§3.2.1）。其他值回 `400 INVALID_CONTRACT_FORMAT`（`document_type` 不是合約也一樣）；`document_type` 不是 `contract` 時帶 `v2` 不起作用 |
@@ -156,7 +156,7 @@ curl -X POST "http://54.248.201.66:8085/api/v1/analyze" \
 
 | 欄位 | 說明 |
 |---|---|
-| `stage` | `correction`（OCR 文字校正）／`extraction`（欄位抽取）／`photo_understanding`（修繕、點交照片理解）／`direct_read`（收據、帳單、合約的整頁直讀，見 §6） |
+| `stage` | `correction`（OCR 文字校正）／`extraction`（欄位抽取）／`photo_understanding`（修繕、點交照片理解）／`direct_read`（收據、帳單、合約的整頁直讀，見 §6）／`ocr_read`（謄本照片由視覺模型讀字，見 §6） |
 | `provider` | `openai`／`bedrock`（另有 `anthropic`、`local_qwen`，目前未啟用）。收據、帳單、照片、合約依伺服器的分流設定，謄本一律 `openai` |
 | `model` | 實際送出的模型 ID，例如 `gpt-5.6-terra`、`qwen.qwen3-vl-235b-a22b` |
 | `requested_service_tier` | 送出時要求的服務等級；只有 `bedrock` 會帶（`flex` 或 `default`），其他為 `null` |
@@ -399,7 +399,7 @@ curl -X POST "http://54.248.201.66:8085/api/v1/analyze/batch" \
   原文印的「(空白)」**原樣保留**（與上面 25 欄回 `null` 不同）。
 - **限制**：
   - 只在 `document_type=transcript` 時出現；解析失敗時省略此鍵，其餘回應不受影響。
-  - **掃描／拍照謄本**也會出現此鍵，但 OCR 文字沒有可靠的排版：模擬照片 15 頁實測讀對率 6.2%（`docs/testing/transcript-photo-fullparse-eval-20261109.md`）。不帶參數時照片、掃描謄本請讀 25 個單值欄位與 §3.1.1 清單；新串接請帶 `transcript_format=v2`（§3.1.4），照片的值會補進 `transcript_records`。
+  - **掃描／拍照謄本**也會出現此鍵，但 OCR 文字沒有可靠的排版：模擬照片 15 頁實測讀對率：本機 OCR 6.2%（`docs/testing/transcript-photo-fullparse-eval-20261109.md`），視覺模型讀字 8.9%（`docs/testing/transcript-qwen-read-20261116.md` §1）。不帶參數時照片、掃描謄本請讀 25 個單值欄位與 §3.1.1 清單；新串接請帶 `transcript_format=v2`（§3.1.4），照片的值會補進 `transcript_records`。
   - **車位**：公設車位那一行「含停車位○號,權利範圍:…」整行保留為文字、尚未拆成欄位；「停車位共計:○位」照常拆。
   - 只依「編號」分張：不同地段但編號相同的兩張相連會被併成一張（目前樣本無此情形）。
 
@@ -482,7 +482,7 @@ curl -X POST "http://54.248.201.66:8085/api/v1/analyze/batch" \
 - 只在 `document_type=transcript` 時出現；建構失敗時只省略此鍵，`transcripts` 與其餘回應不受影響。
 - 多位所有權人、多筆抵押、附屬建物、管理者、限制登記、信託、第一類謄本：實測 5 份電子謄本皆無，只以合成樣本驗證。
 - 地上權、農育權、不動產役權、典權的專屬欄位尚未定鍵（官方無樣本），出現時放進 `其他欄位`。車位不另拆（同 §3.1.2）。
-- 掃描／拍照謄本也會出現此鍵，但 `transcripts` 靠行首縮排分層級，OCR 文字的縮排還原不穩：模擬照片 15 頁實測全文讀對率 6.2%（`docs/testing/transcript-photo-fullparse-eval-20261109.md`）。不帶參數時照片、掃描謄本請讀 25 個單值欄位與清單；新串接請帶 `transcript_format=v2`（§3.1.4）。
+- 掃描／拍照謄本也會出現此鍵，但 `transcripts` 靠行首縮排分層級，OCR 文字的縮排還原不穩：模擬照片 15 頁實測全文讀對率：本機 OCR 6.2%（`docs/testing/transcript-photo-fullparse-eval-20261109.md`），視覺模型讀字 8.9%（`docs/testing/transcript-qwen-read-20261116.md` §1）。不帶參數時照片、掃描謄本請讀 25 個單值欄位與清單；新串接請帶 `transcript_format=v2`（§3.1.4）。
 
 **jgb2 一般物件建物謄本表單（31 欄）對照**——只讀 25 個單值欄位時有 10 欄「需人工」；其中 8 欄在清單（§3.1.1）就有，另 2 欄謄本上沒有：
 | jgb2 表單欄位 | 只讀 25 欄 | 建議讀法 | `transcript_records` 對應（清單沒有時） | 帶 v2 讀法（§3.1.4） |
@@ -549,11 +549,12 @@ curl -X POST "http://54.248.201.66:8085/api/v1/analyze/batch" \
 - `page` 是第幾頁（從 1 起算）；`box` 是 `[x0, y0, x1, y1]`，以該頁寬、高的 0～1 比例表示，原點在左上；`unit` 固定是 `"ratio"`〔V2-17〕
 - 畫框時乘上該頁圖片的寬、高即得像素座標（PDF 用該頁渲染後的寬高）〔V2-17〕
 - **電子 PDF**（每一頁 `pages[].text_layer` 都是 `true`）：框到值本身的字〔V2-17〕；實測有位置的值 98.4% 框內文字與值相同〔實測：docs/testing/transcript-v2-20261109.md#4. 電子 PDF 位置框到值本身（C10）〕
-- **照片與無文字層 PDF**：框到值所在的那一整行 OCR 文字，不是值本身；補進的值（見下方補值）也照樣找行；框超出頁面時夾在 0～1〔V2-19〕
+- **照片與無文字層 PDF**：框到值所在的那一行讀字結果，不是值本身（伺服器用視覺模型讀字時是模型回的段落框，用本機 OCR 時是 OCR 行框）；補進的值（見下方補值）也照樣找行；框超出頁面時夾在 0～1〔V2-19〕
 - 同一個值的字出現在好幾行時挑一行給框，可能挑錯：先挑鍵名印在值前面、對上最多的行；清單裡第 k 次出現的同一個值取第 k 個符合的行；同一筆的其他欄位值也出現的行優先；只在該張謄本自己的頁裡找〔V2-20〕
 - 照片的 `謄本.頁數` 也照樣找行，可能框到任一含那個數字的行，位置不代表頁數印在哪〔V2-28〕
 - 只有部分頁有文字層的 PDF 不走電子定位；行框只從沒有文字層的頁找：值只印在有文字層的頁時 `position` 為 `null`，同樣的字也出現在無文字層頁時會框到那一行，不一定是值的出處〔V2-22〕
-- 實測照片行框包含值中心 96.1%（15 頁）、樣本外 93.8%，多頁純影像 PDF 100% 與 97.4%，頁碼 0 錯；已知會框到別行的例子見該紀錄〔實測：docs/testing/transcript-v2-20261109.md#5. 照片位置框到值所在的那一行（C11）〕
+- 實測照片行框包含值中心 96.1%（15 頁）、樣本外 93.8%，多頁純影像 PDF 100% 與 97.4%，頁碼 0 錯；已知會框到別行的例子見該紀錄〔實測：docs/testing/transcript-v2-20261109.md#5. 照片位置框到值所在的那一行（C11）〕；這是本機 OCR 的數字
+- 視覺模型讀字時（2026-11-16 本機，3 頁 × 3 次）：有值的 137 格全部有框，30 格框中心落在別列；模型回的 y 座標比實際拉長 5–10%，越往頁面下方越偏；模型有時把整頁回成一段，該頁每個值的框都是整頁〔實測：docs/testing/transcript-qwen-read-20261116.md#3. `transcript_format=v2` 的位置：每格都有框，22% 落在別列〕
 
 ##### `position` 為 `null` 的情形
 
@@ -707,12 +708,35 @@ curl -X POST "http://54.248.201.66:8085/api/v1/analyze/batch" \
 
 ### 3.3 `bill`
 
-`amount`（金額）、`date`（日期）、`account_no`（戶號）。
+6 個欄位的鍵一律出現，單上沒有或讀不到回 `null`；`date` 照舊保留。值一律是字串或 `null`。
 
-**直讀（影像與掃描 PDF，伺服器開啟 `bill` 直讀時）：** 回應鍵與舊版完全相同
+| 欄位 | 內容 | 格式 | 起始版本 |
+|---|---|---|---|
+| `address` | 用電地址，照單上原文；單上同時印了通訊地址時取用電地址 | 單行（換行併成一個空白）、≤ 80 字；不含網址、`@`、`:`／`：` | 2.13.0 |
+| `period_start` | 計費期間起日 | `YYYY-MM-DD`（民國年已換成西元） | 2.13.0 |
+| `period_end` | 計費期間迄日 | `YYYY-MM-DD`，≥ `period_start` | 2.13.0 |
+| `kwh` | 本期計費度數（總用電度數），不是電表指針讀數 | 數字字串，可帶千分位與小數，> 0，≤ 30 字；單位「度」已去掉 | 2.13.0 |
+| `amount` | 應繳總金額 | 照單上印的數字字串（例：`"3,456"`） | 既有 |
+| `date` | 繳費期限；沒有就用帳單日期 | 照單上印的寫法 | 既有 |
+| `account_no` | 電號／戶號／用戶號／帳號 | 照單上印的寫法 | 既有（2.13.0 起也認「電號」） |
+
+**`null` 與 `needs_confirmation`（電費 4 欄）：**
+
+- 單上沒有這一欄或完全讀不出來：值 `null`，**不列** `needs_confirmation`、不出現在 `field_confidences`。水費、管理費單本來就沒有度數與計費期間，列進去會讓每張都 `needs_review: true`。
+- 讀到但不確定：保留讀到的值，欄名列進 `needs_confirmation`。既有 3 欄也是這樣。
+- 讀到但格式驗證不過（日期解析不了、迄日早於起日、度數不是正數、地址超過 80 字或含網址、`@`、冒號）：值 `null`，欄名列進 `needs_confirmation`。
+- 計費期間只讀到一端：讀到的那端保留，兩欄都列 `needs_confirmation`。
+- 單上有兩段以上計費期間（跨期、補收）：`period_start`、`period_end` 都 `null`，都列 `needs_confirmation`。
+- 整份讀不出來時 6 欄全 `null`。**請用「6 欄全是 `null`」判斷讀不出來，不要用 `llm_used_for_extraction`**：有文字層的電子 PDF 由規則讀、不呼叫模型，這個欄位一定是 `false`，6 欄全讀對也一樣。
+
+`needs_confirmation` 用上表的英文欄名；頂層 `needs_review` 照 §2.4。
+
+**直讀（影像與掃描 PDF，伺服器開啟 `bill` 直讀時）：** 舊版的鍵全保留
 （`amount`、`date`、`account_no`、`field_confidences`、`needs_confirmation`、`extraction_confidence`、
-`llm_used_for_extraction`：直讀成功 `true`、呼叫失敗 `false`），值是模型讀圖的結果；`pages[].ocr_raw` 為 `null`，
+`llm_used_for_extraction`：直讀成功 `true`、呼叫失敗 `false`），加上電費 4 欄；值是模型讀圖的結果；`pages[].ocr_raw` 為 `null`，
 `pages[].llm_calls` 有 `stage: "direct_read"` 的紀錄。
+
+**有文字層的 PDF：** 依單上的標籤讀（`用電地址`、`計費期間`／`用電期間`、`本期計費度數`／`計費度數`／`本期用電度數`／`用電度數`、`電號`）。`enable_llm=true` 時模型只補既有 3 欄，不補電費 4 欄。
 
 ### 3.3.1 `receipt` — 收據、發票（直讀）
 
@@ -895,14 +919,21 @@ VLM 不可用或影像無法辨識時降級為 `{"defect_labels": [], "damaged_i
 `receipt`、`bill`、`contract`；**預設是空**）列入的類型，影像與沒有文字層的 PDF 不再跑本機 OCR，
 而是整頁（長邊 2000 像素、JPEG）交視覺模型讀欄位，供應商依伺服器的分流設定。
 有文字層的帳單、合約 PDF 維持下面的文字層路徑；收據的 PDF（有或沒有文字層）一律直讀。
-沒列入的帳單、合約照舊走本機 OCR 再補欄位。謄本不能直讀，維持本機 OCR。
+沒列入的帳單、合約照舊走本機 OCR 再補欄位。謄本不能直讀（直讀是模型直接回欄位），影像改由模型讀字，見下一段。
 直讀的回應 `pages[].ocr_raw` 為 `null`，`pages[].llm_calls` 的 `stage` 為 `direct_read`；
 不論 `enable_llm` 為何都會呼叫模型。
+
+**謄本照片：視覺模型讀字（不跑本機 OCR）。** 伺服器設 `OCR_ENGINES=["qwen"]` 時，謄本的照片與沒有文字層的 PDF
+每頁送 Qwen3 VL 抄出每段文字與框，取代本機 OCR；之後的規則抽取與回應格式不變。`pages[].llm_calls` 有一筆
+`stage: "ocr_read"`，`ocr_raw.confidence` 固定 `0.9`（不是讀對的機率）。模型讀不到字或呼叫失敗時，該頁文字為空、
+信心度 `0.0`、`needs_review: true`，**不退回本機 OCR**。有文字層的 PDF 不受影響（實測輸出逐字相同）。
+不論 `enable_llm` 為何都會呼叫模型。實測見 [`docs/testing/transcript-qwen-read-20261116.md`](../testing/transcript-qwen-read-20261116.md)。
 
 | 來源 | 文字層 | 4 頁耗時 | 字元錯誤率 |
 |---|---|---|---|
 | 網路申領電子謄本、Word 轉出的 PDF | ✅ | **0.6 秒** | **0.15%** |
 | 掃描件、手機拍照 | ❌ | 約 85 秒 | 14.5% |
+| 掃描件、手機拍照（謄本，視覺模型讀字） | ❌ | 每頁 15–139 秒（本機） | 未量（25 欄見 §7 第 4 點） |
 
 **系統自動分流，呼叫端不需要指定。** 含文字層時直接讀取產生該 PDF 的原始字串
 （不是辨識結果），略過 OCR；判定門檻 20 字，避免掃描件夾帶的少量浮水印文字造成誤判。
@@ -928,11 +959,13 @@ VLM 不可用或影像無法辨識時降級為 `{"defect_labels": [], "damaged_i
 **2. 掃描件很慢，而且是同步的。** 實測 4 頁掃描謄本約 **85 秒**（約 21 秒/頁）；
 走 OCR + LLM 的完整路徑實測約 151 秒。**同步呼叫請把 timeout 設到 300 秒以上**，
 或改為非同步流程。含文字層的 PDF 不受此限（0.6 秒）。
+謄本照片改由視覺模型讀字後，本機實測每頁 15–139 秒（24 頁 × 3 次，模型逾時重送那頁最慢）。
 
 **3. 併發已有閘門，但仍是逐一處理。** OCR 由行程層級的 Semaphore 序列化
 （`OCR_MAX_CONCURRENT=1`），第二個請求會**排隊**而不是把容器打掛
 （單頁 OCR 峰值實測 1141–1778 MB，容器可用約 1695 MB）。
 排隊期間呼叫端仍在等待，故高併發場景請自行控制送件節奏。
+謄本照片由視覺模型讀字時不載入本機 OCR，改由另一個閘門 `QWEN_OCR_MAX_CONCURRENT`（預設 4）限制同時送出的頁數。
 
 **4. 電子謄本的欄位可以直接採用；掃描／拍照件的欄位要當成待確認的草稿。**
 2026-10-14～15 以 5 份真實電子謄本（共 11 張）線上實測：
@@ -943,10 +976,11 @@ VLM 不可用或影像無法辨識時降級為 `{"defect_labels": [], "damaged_i
 （例如遮罩星號被吃掉、日期少數字、「土」讀成「上」、「加強」讀成簡體「加强」、整行沒讀到）；
 少數是 AI 補值（`enable_llm=true`）取到別處的值。
 **OCR 讀錯的值會帶著高信心度送出、不一定觸發 `needs_review`**（見 §8）。
+2026-11-16 起謄本照片改由視覺模型讀字（伺服器 `OCR_ENGINES=["qwen"]`）：本機 3 組資料 24 頁，25 欄兩次 86.2%、86.6%，讀錯又沒進 `needs_confirmation` 每次 19–20 欄；常見的錯是「建物坐落地號」讀成「建物坐落地址」（`land_number` 空掉）、漏讀「權利種類」那一行，讀錯的值同樣以固定信心度 0.9 送出（[`docs/testing/transcript-qwen-read-20261116.md`](../testing/transcript-qwen-read-20261116.md) §1）。以下 2026-10-20、2026-11-09 兩批是本機 OCR 時的數字。
 2026-10-20 曾把 5 份真實電子謄本（17 頁）轉成模擬掃描和模擬拍照的圖片送線上：25 欄正確率約 97%，
 錯的 23 欄中有 16 欄沒進 `needs_confirmation`（[`docs/testing/bedrock-vlm-eval-20261023.md`](../testing/bedrock-vlm-eval-20261023.md) §3.3）。
 2026-11-09 另一批較難的模擬照片（15 頁，含手機斜拍），本機 OCR、只用規則：25 欄 77%（掃描 98%、俯拍 83%、斜拍 58%），非線上（`docs/testing/transcript-photo-fullparse-eval-20261109.md` §9）。
-掃描件的 `transcripts`／`transcript_records` 讀不出結構（同批實測 6.2%），不帶參數時請以 25 個單值欄位與 §3.1.1 清單為準；新串接請帶 `transcript_format=v2`（§3.1.4），照片的值會補進 `transcript_records`。
+掃描件的 `transcripts`／`transcript_records` 讀不出結構（同批實測本機 OCR 6.2%、視覺模型讀字 8.9%），不帶參數時請以 25 個單值欄位與 §3.1.1 清單為準；新串接請帶 `transcript_format=v2`（§3.1.4），照片的值會補進 `transcript_records`。
 帶參數同樣適用本點：照片的值是待確認的草稿，`needs_confirmation` 抓不到 OCR 讀錯；帶參數另附 `position`，可在原圖上標出要人工確認的那一行（§3.1.4）。
 實測明細見 [`docs/testing/transcript-online-acceptance.md`](../testing/transcript-online-acceptance.md) §3。
 
