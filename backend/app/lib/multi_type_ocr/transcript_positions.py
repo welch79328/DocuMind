@@ -9,6 +9,9 @@
 2. 沿 build_with_trace 的去處(trace)把每個輸出值對到原文 Located 的某一段字;
 3. 欄 → 原文字元(逐字 normalize_for_matching 累計長度)→ PyMuPDF rawdict 逐字框 → 同頁外接矩形 ÷ 頁寬高。
 任一步對不上 → 該值(或該頁全部)None。
+
+「(空白)」(BLK-1):謄本印了「(空白)」的欄位,值是 null、但讀到了那段字——位置框在「(空白)」那段字上,
+輸出 {路徑: (None, position)};完全沒印、讀不到的欄位照舊沒有位置(對不到就 None)。
 """
 
 import bisect
@@ -215,6 +218,18 @@ def _leaves(o: Any, path: str = ""):
         yield path, o
 
 
+def _none_leaves(o: Any, path: str = ""):
+    """值為 None 的純量葉子路徑(格式同 _leaves)。"""
+    if isinstance(o, dict):
+        for k, v in o.items():
+            yield from _none_leaves(v, f"{path}.{k}" if path else k)
+    elif isinstance(o, list):
+        for i, v in enumerate(o):
+            yield from _none_leaves(v, f"{path}[{i}]")
+    elif o is None:
+        yield path
+
+
 def _dest_candidates(path: str):
     """葉子路徑由長到短的去處前綴(只在 "." 與 "[" 邊界切)。"""
     yield path
@@ -249,6 +264,23 @@ def _sheet_positions(t: Dict[str, Any], rec: Dict[str, Any], trace: list, geos: 
             pos = _frame(cm, geos)
             if pos:
                 out[path] = (str(value) if isinstance(value, str) else value, pos)   # Located → 純 str
+    # 印「(空白)」的欄位:值為 None,位置框在那段字上(trace 方式「空白」＝原文讀到的整段值是空白記號)
+    nones = set(_none_leaves({k: v for k, v in rec.items() if k not in _SKIP_KEYS}))
+    for src, dest, how in trace:
+        if how != "空白" or dest not in nones or dest in out:
+            continue
+        try:
+            sv, _key = _node(t, src)
+        except (KeyError, IndexError, StopIteration, TypeError):
+            continue
+        if not isinstance(sv, Located):
+            continue
+        cm = [sv.cm[i] for i, ch in enumerate(sv) if not ch.isspace()]
+        if not cm or any(c is None for c in cm):
+            continue
+        pos = _frame(cm, geos)
+        if pos:
+            out[dest] = (None, pos)
     return out
 
 
@@ -323,6 +355,46 @@ def _sheet_page_sets(pages: List[Dict[str, Any]], records: List[Dict[str, Any]])
         return out
     except Exception:
         return None
+
+
+def _sheet_traces(pages: List[Dict[str, Any]], records: List[Dict[str, Any]]) -> Optional[list]:
+    """每張謄本的 trace(去處帳);重建的 records 與傳入的不同或解析失敗 → None(不讓位置對到另一份解析)。"""
+    try:
+        from .transcript_full_parser import parse_with_ledger
+        transcripts = parse_with_ledger([_page_text(p) for p in pages], track=True)[0]
+        rebuilt, traces = build_with_trace(transcripts)
+        return traces if rebuilt == records else None
+    except Exception:
+        return None
+
+
+def _blank_line_positions(rec: Dict[str, Any], trace: Optional[list], pool: List[tuple]) -> Dict[str, Tuple[Any, Dict[str, Any]]]:
+    """照片:印「(空白)」的欄位(補值後仍是 None)→ (None, 那一行的框)。
+    要框的欄位:trace 方式「空白」的;加上 trace 沒記到的 None 葉子(照片的讀字結果常解析不出結構,
+    整張是靠補值組的,trace 是空的)——這種只在標籤在這張只對到一個 None 葉子時才算(清單多筆同標籤不猜)。
+    候選行＝欄位標籤(前一字不是中文字,免得「類別」對到「使用地類別」)後面緊接空白記號的 OCR 行,
+    標籤與記號在同一行;剛好一行才框,0 行或多行一律不框(B3)。"""
+    nones = list(_none_leaves({k: v for k, v in rec.items() if k not in _SKIP_KEYS}))
+    label = lambda d: _n(re.sub(r"\[\d+\]", "", d).rsplit(".", 1)[-1])
+    traced = {dest for _src, dest, _how in (trace or [])}
+    n_label: Dict[str, int] = {}
+    for d in nones:
+        n_label[label(d)] = n_label.get(label(d), 0) + 1
+    want = [dest for _src, dest, how in (trace or []) if how == "空白"]
+    want += [d for d in nones if d not in traced and n_label[label(d)] == 1]
+    out: Dict[str, Tuple[Any, Dict[str, Any]]] = {}
+    for dest in want:
+        if dest not in nones or dest in out:
+            continue
+        lab = label(dest)
+        if not lab:
+            continue
+        pat = re.compile(r"(?<![\u3400-\u9fff])" + re.escape(lab) + r"[:.]{0,2}\(空白\)")
+        hits = [c for c in pool if pat.search(c[2])]
+        if len(hits) == 1:
+            pno, line, _ = hits[0]
+            out[dest] = (None, {"page": pno, "box": _clamp_box(line["box"]), "unit": "ratio"})
+    return out
 
 
 def _pick_line(value: Any, path: str, cands: List[tuple], rank: int = 0, sibs: Tuple[str, ...] = ()) -> tuple:
@@ -407,6 +479,7 @@ def compute_photo_positions(
     if not usable:
         return None
     sets = _sheet_page_sets(pages, records)
+    traces = _sheet_traces(pages, records)
     heads = {i: _page_head(usable[i]) for i in usable}
     out = []
     for si, rec in enumerate(filled):
@@ -440,5 +513,8 @@ def compute_photo_positions(
                              if x and x != nv)
             pno, line, _ = _pick_line(value, path, cands, rank, sibs)
             m[path] = (value, {"page": pno, "box": _clamp_box(line["box"]), "unit": "ratio"})
+        trace = traces[si] if traces is not None and si < len(traces) else None
+        for path, hit in _blank_line_positions(rec, trace, pool).items():
+            m.setdefault(path, hit)
         out.append(m)
     return out

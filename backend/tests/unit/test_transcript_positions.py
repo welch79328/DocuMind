@@ -5,6 +5,7 @@
 """
 
 import copy
+import os
 
 import pytest
 
@@ -229,3 +230,101 @@ class TestNull:
         before = copy.deepcopy(r)
         apply_transcript_format(r, b"%PDF")
         assert r == before
+
+
+# ---------------- 謄本印「(空白)」:{value: null, position} ----------------
+def _walk_null(o, path=""):
+    """沒包裝的 null 葉子路徑(位置表沒有的 null)。"""
+    if isinstance(o, dict):
+        if set(o) == {"value", "position"}:
+            return
+        for k, v in o.items():
+            if k not in ("判定", "部是否印出"):
+                yield from _walk_null(v, f"{path}.{k}" if path else k)
+    elif isinstance(o, list):
+        for i, v in enumerate(o):
+            yield from _walk_null(v, f"{path}[{i}]")
+    elif o is None:
+        yield path
+
+
+class TestBlank:
+    def test_blank_main_use_is_null_value_framed_on_the_blank_text(self, grid):
+        cell = positions()[0]["標示部"]["主要用途"]
+        assert cell["value"] is None
+        assert cell["position"] == {"page": 1, "box": expect_box(P1, "（空白）", 0), "unit": "ratio"}
+
+    def test_blank_zone_and_land_type_are_framed_each_on_its_own_blank(self, grid):
+        land = positions()[1]["標示部"]
+        assert land["使用分區"] == {"value": None, "position": {"page": 3, "box": expect_box(P3, "（空白）", 0), "unit": "ratio"}}
+        assert land["使用地類別"] == {"value": None, "position": {"page": 3, "box": expect_box(P3, "（空白）", 1), "unit": "ratio"}}
+
+    def test_blank_date_placeholder_is_framed_on_the_printed_placeholder(self, grid):
+        cell = positions()[0]["標示部"]["建築完成日期"]
+        assert cell == {"value": None, "position": {"page": 1, "box": expect_box(P1, "民國---年--月--日"), "unit": "ratio"}}
+
+    def test_unprinted_leaves_stay_plain_null(self, grid):
+        recs = positions()
+        nulls0 = set(_walk_null(recs[0]))
+        nulls1 = set(_walk_null(recs[1]))
+        # 謄本上根本沒印這幾格:B2 不給位置,整個葉子仍是 null
+        assert {"標示部.主要建材", "所有權部[0].權狀字號", "他項權利部[0].住址"} <= nulls0
+        assert {"標示部.地目", "標示部.等則", "標示部.登記日期"} <= nulls1
+        assert "標示部.主要用途" not in nulls0 and "標示部.使用分區" not in nulls1
+
+    def test_list_blank_marker_keeps_empty_list(self, grid):
+        # 其他登記事項 印「(空白)」:清單欄位,沒有葉子可包,維持 []
+        assert positions()[0]["所有權部"][0]["其他登記事項"] == []
+
+    def test_without_file_contents_blank_is_plain_null(self):
+        out = apply_transcript_format(result_for())["document_fields"]["transcript_records"]
+        assert out[0]["標示部"]["主要用途"] is None and out[1]["標示部"]["使用分區"] is None
+
+    def test_blank_value_filled_by_rules_keeps_value_without_position(self, grid):
+        r = result_for([P1, P2])
+        r["document_fields"]["main_usage"] = "住家用"
+        out = apply_transcript_format(r, b"%PDF")["document_fields"]["transcript_records"][0]["標示部"]
+        assert out["主要用途"] == {"value": "住家用", "position": None}
+
+    def test_existing_positions_unchanged_by_blank_support(self, grid):
+        m = positions()[0]["標示部"]
+        assert m["建物門牌"]["position"]["box"] == expect_box(P1, "忠孝東路四段285號五樓")
+        assert m["總面積"]["position"]["box"] == expect_box(P1, "193.02")
+
+
+# ---------------- 真電子謄本樣本(PyMuPDF 真實字框):框裡的字就是「(空白)」 ----------------
+REAL_PDF = os.path.join(os.path.dirname(__file__), "..", "..", "data", "建物土地謄本-杭州南路一段.pdf")
+
+
+def _real_records():
+    import fitz
+    data = open(REAL_PDF, "rb").read()
+    doc = fitz.open(stream=data, filetype="pdf")
+    texts = [p.get_text() for p in doc]
+    ts = parse_transcript_pages(texts)
+    res = {"document_fields": {"transcripts": ts, "transcript_records": build_transcript_records(ts)},
+           "pages": [{"page_number": i + 1, "ocr_raw": {"text": t}, "rule_postprocessed": {"text": t},
+                      "text_layer": True, "structured_data": None} for i, t in enumerate(texts)]}
+    return doc, apply_transcript_format(res, data)["document_fields"]["transcript_records"]
+
+
+def test_real_pdf_blank_cells_frame_exactly_the_blank_text():
+    doc, recs = _real_records()
+    land0, land1 = recs[0]["標示部"], recs[1]["標示部"]
+    cells = [land0["使用分區"], land0["使用地類別"], land1["使用分區"], land1["使用地類別"]]
+    assert len(cells) == 4
+    for c in cells:
+        assert c["value"] is None
+        pg = doc[c["position"]["page"] - 1]
+        x0, y0, x1, y1 = c["position"]["box"]
+        r = pg.rect
+        # 框內的字:字框中心落在框內者(頁面有一個大字浮水印「臺」,字框很大,中心不在框內)
+        got = "".join(ch["c"] for blk in pg.get_text("rawdict")["blocks"] if blk.get("type") == 0
+                      for ln in blk["lines"] for sp in ln["spans"] for ch in sp["chars"]
+                      if x0 * r.width <= (ch["bbox"][0] + ch["bbox"][2]) / 2 <= x1 * r.width
+                      and y0 * r.height <= (ch["bbox"][1] + ch["bbox"][3]) / 2 <= y1 * r.height)
+        assert got == "（空白）"
+    # 沒印的欄位仍是 null
+    assert land0["地目"] is None and land0["等則"] is None
+    assert recs[2]["標示部"]["主要建材"]["value"] == "加強磚造"        # 既有有值位置不變
+    assert recs[2]["標示部"]["主要建材"]["position"] is not None

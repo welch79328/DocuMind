@@ -2,7 +2,8 @@
 
 衍生規則(plan-s4.md §2 路徑 1):
 (a) 先套 AM-1(test_transcript_format_v2.v2_schema 同一放寬);
-(b) 每個葉子型別 T 換成「null,或 {value: T 去掉 null, position: Position 或 null}」
+(b) 每個葉子型別 T 換成「null,或 {value: T 或 null, position: Position 或 null}」
+    (value 為 null＝謄本印「(空白)」、position 框在那段字上;沒印、讀不到的葉子仍是整個 null)
     (additionalProperties false、兩鍵 required);判定、部是否印出 不換(transcript_records._UNWRAPPED_KEYS);
     類型 例外:土地、建物兩支的 類型 必須是包裝後物件、value 為該 const、不可為 null;null 支維持只能是 null;
     標示部 的 description 改寫(類型 已知時一律是物件,沒印時是全空骨架);
@@ -54,18 +55,23 @@ def _wrapped_obj(value_schema):
             "properties": {"value": value_schema, "position": copy.deepcopy(_POS_REF)}}
 
 
-def _strip_null(s):
+def _nullable(s):
+    """包裝後物件的 value:原型別加上 null(謄本印「(空白)」時 value 為 null)。"""
     s = copy.deepcopy(s)
     t = s.get("type")
-    if isinstance(t, list):
-        rest = [x for x in t if x != "null"]
-        s["type"] = rest[0] if len(rest) == 1 else rest
+    if t is not None:
+        ts = t if isinstance(t, list) else [t]
+        s["type"] = ts if "null" in ts else ts + ["null"]
+    if "enum" in s and None not in s["enum"]:
+        s["enum"] = s["enum"] + [None]
+    if t is None and "const" in s:
+        return {"anyOf": [{"type": "null"}, s]}
     return s
 
 
 def _wrap_schema(s):
     if _is_leaf(s):
-        return {"anyOf": [{"type": "null"}, _wrapped_obj(_strip_null(s))]}
+        return {"anyOf": [{"type": "null"}, _wrapped_obj(_nullable(s))]}
     s = copy.deepcopy(s)
     for k in ("anyOf", "oneOf"):
         if k in s:
@@ -82,8 +88,9 @@ def derive_v2(old):
     out = copy.deepcopy(s)
     out["$id"] = "https://documind/transcript_records_v2.schema.json"
     out["title"] = "document_fields.transcript_records(transcript_format=v2)"
-    out["description"] = ("帶 transcript_format=v2 時的謄本固定輸出格式:每張謄本一筆,鍵一律存在;每個非 null 葉子包成 "
-                          "{value, position},null 葉子照舊;判定、部是否印出 不包。由 transcript_records.schema.json "
+    out["description"] = ("帶 transcript_format=v2 時的謄本固定輸出格式:每張謄本一筆,鍵一律存在;有值的葉子包成 "
+                          "{value, position};null 葉子照舊,但謄本原文印「(空白)」且找得到位置的,包成 {value: null, position}"
+                          "(position 框在「(空白)」那段字上);判定、部是否印出 不包。由 transcript_records.schema.json "
                           "以固定規則衍生(backend/tests/unit/test_transcript_v2_schema.py)。見 docs/api/INTEGRATION.md §3.1.4。")
     unwrapped_refs = {s["items"]["oneOf"][0]["properties"][k]["$ref"].split("/")[-1] for k in _UNWRAPPED_KEYS}
     out["$defs"] = {k: (copy.deepcopy(v) if k in unwrapped_refs else _wrap_schema(v)) for k, v in s["$defs"].items()}
@@ -138,6 +145,19 @@ class TestV2Schema:
         recs = _wrapped_records()
         recs[0]["謄本"]["編號"]["position"] = {"page": 1, "box": [0.1, 0.2, 0.3, 0.25], "unit": "ratio"}
         assert validate(recs, _load(V2_PATH)) == []
+
+    def test_blank_cell_null_value_with_position_validates(self):
+        """謄本印「(空白)」:{value: null, position} 合格;型別為 const/enum 的葉子也一樣"""
+        pos = {"page": 1, "box": [0.1, 0.2, 0.3, 0.25], "unit": "ratio"}
+        recs = _wrapped_records()
+        recs[0]["標示部"]["主要用途"] = {"value": None, "position": dict(pos)}
+        recs[0]["謄本"]["編號"] = {"value": None, "position": dict(pos)}
+        assert validate(recs, _load(V2_PATH)) == []
+
+    def test_type_cannot_be_null_value(self):
+        recs = _wrapped_records()
+        recs[0]["類型"] = {"value": None, "position": None}
+        assert validate(recs, _load(V2_PATH)) != []
 
     def test_null_type_sheet_validates_once(self):
         """類型 為 null 的張只符合 null 支(oneOf 恰好 1 支;_validate 的 oneOf 不是恰好 1 支就報錯)"""

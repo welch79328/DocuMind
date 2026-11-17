@@ -384,3 +384,94 @@ def test_apply_format_wraps_photo_position_and_keeps_none_without_lines():
     assert ps and all(p["page"] == 1 and p["unit"] == "ratio" and len(p["box"]) == 4 for p in ps)
     out2 = apply_transcript_format(res, png())
     assert all(p is None for p in _all_positions(out2["document_fields"]["transcript_records"]))
+
+
+# ---------------- 照片:印「(空白)」→ 剛好一行才框 ----------------
+def _photo_apply(lines):
+    from app.lib.multi_type_ocr.transcript_full_parser import parse_transcript_pages
+    from app.lib.multi_type_ocr.transcript_records import build_transcript_records
+    text = "\n".join(l["text"] for l in lines)
+    ts = parse_transcript_pages([text])
+    res = {"document_fields": {"transcripts": ts, "transcript_records": build_transcript_records(ts)},
+           "pages": [{"page_number": 1, "ocr_raw": {"text": text, "confidence": 0.9},
+                      "rule_postprocessed": {"text": text}, "structured_data": None}]}
+    return apply_transcript_format(res, png(), ocr_lines={1: lines})["document_fields"]["transcript_records"]
+
+
+def _p1_lines(edit=None):
+    from tests.unit.test_transcript_full_parser import P1
+    texts = [t for t in P1.split("\n") if t.strip()]
+    if edit:
+        texts = edit(texts)
+    return [L(t, round(0.01 * i, 4)) for i, t in enumerate(texts)]
+
+
+def test_photo_blank_main_use_framed_when_exactly_one_line():
+    lines = _p1_lines()
+    idx = next(i for i, l in enumerate(lines) if l["text"].strip().startswith("主要用途"))
+    cell = _photo_apply(lines)[0]["標示部"]["主要用途"]
+    assert cell == {"value": None, "position": {"page": 1, "box": lines[idx]["box"], "unit": "ratio"}}
+
+
+def test_photo_blank_not_framed_when_two_lines_match():
+    def dup(texts):
+        i = next(i for i, t in enumerate(texts) if t.strip().startswith("主要用途"))
+        return texts[:i + 1] + [texts[i]] + texts[i + 1:]
+    assert _photo_apply(_p1_lines(dup))[0]["標示部"]["主要用途"] is None
+
+
+def test_photo_blank_not_framed_when_no_line_has_label_and_marker():
+    def no_marker(texts):                      # OCR 沒讀到「(空白)」(只剩標籤)→ 找不到就不框
+        return [t.replace("（空白）", "") if t.strip().startswith("主要用途") else t for t in texts]
+    assert _photo_apply(_p1_lines(no_marker))[0]["標示部"]["主要用途"] is None
+
+
+def test_photo_blank_label_and_marker_must_share_one_line():
+    def split(texts):                          # 標籤與記號被 OCR 拆成兩行 → 不框
+        out = []
+        for t in texts:
+            if t.strip().startswith("主要用途"):
+                out += ["    主要用途：", "    （空白）"]
+            else:
+                out.append(t)
+        return out
+    assert _photo_apply(_p1_lines(split))[0]["標示部"]["主要用途"] is None
+
+
+def test_photo_blank_land_zone_and_unprinted_leaves():
+    from tests.unit.test_transcript_full_parser import P3
+    texts = [t for t in P3.split("\n") if t.strip()]
+    lines = [L(t, round(0.01 * i, 4)) for i, t in enumerate(texts)]
+    idx = next(i for i, l in enumerate(lines) if "使用分區" in l["text"])
+    land = _photo_apply(lines)[0]["標示部"]
+    pos = {"page": 1, "box": lines[idx]["box"], "unit": "ratio"}
+    assert land["使用分區"] == {"value": None, "position": pos}
+    assert land["使用地類別"] == {"value": None, "position": pos}
+    assert land["地目"] is None and land["等則"] is None          # 沒印的欄位仍是 null,不框
+
+
+def test_photo_blank_framed_when_parse_has_no_structure():
+    # 真照片(Qwen 讀字)常解析不出結構,整張靠補值組、trace 是空的:仍照「剛好一行」框(BLK-1 A4)
+    lines = [L("建物標示部", 0.05), L("主要用途：（空白）", 0.1), L("總面積 123.45", 0.2)]
+    m = compute({1: lines}, [rec(標示部={"層次": [], "總面積": 123.45, "主要用途": None})])[0]
+    assert m["標示部.主要用途"] == (None, {"page": 1, "box": [0.1, 0.1, 0.9, 0.15], "unit": "ratio"})
+
+
+def test_photo_blank_no_trace_label_must_not_be_tail_of_longer_label():
+    # 「類別」不得對到「使用地類別：（空白）」那一行
+    lines = [L("使用地類別：（空白）", 0.1)]
+    m = compute({1: lines}, [rec(標示部={"層次": [], "總面積": None, "主要用途": None, "類別": None})])[0]
+    assert "標示部.類別" not in m
+
+
+def test_photo_blank_no_trace_same_label_in_two_list_items_not_framed():
+    # 清單兩筆都 None、標籤相同 → 不猜是哪一筆
+    lines = [L("出生日期：（空白）", 0.1)]
+    m = compute({1: lines}, [rec(所有權部=[{"出生日期": None}, {"出生日期": None}])])[0]
+    assert not any(k.endswith("出生日期") for k in m)
+
+
+def test_photo_existing_value_positions_unchanged():
+    lines = [L("主要用途 住家用", 0.1), L("總面積 123.45", 0.2)]
+    m = compute({1: lines}, [rec(標示部={"層次": [], "總面積": 123.45, "主要用途": "住家用"})])[0]
+    assert m["標示部.主要用途"][1]["box"][1] == 0.1 and m["標示部.總面積"][1]["box"][1] == 0.2

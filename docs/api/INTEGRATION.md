@@ -1,6 +1,6 @@
 # DocuMind OCR 對接規格（給外部系統開發者）
 
-> 版本 2.13.1 ／ 2026-11-16（2.13.1：回應格式不變——謄本的照片與無文字層 PDF 改由視覺模型 Qwen3 VL 讀字（伺服器 `OCR_ENGINES=["qwen"]`），不再跑本機 OCR；讀不到字或模型呼叫失敗時該頁文字為空、`needs_review: true`，不退回本機 OCR；`pages[].llm_calls` 多一種 `stage: "ocr_read"`；`transcript_format=v2` 照片的 `position` 改用模型回的框，見 §3.1.4、§6、§7；2.13.0：`bill` 新增 4 個鍵 `address`（用電地址）、`period_start`、`period_end`（計費期間，`YYYY-MM-DD`）、`kwh`（本期計費度數），一律帶鍵、讀不到回 `null`；`account_no` 也認台電的「電號」；既有 3 欄不變，見 §3.3；2.12.1：只改文件、回應不變——§2.5.3 第 1 點補寫：圖檔內容壞掉（副檔名正確但解不開）時那一筆仍是 `status: "ok"`，`structured_data`、`document_fields` 為 `null`，並會進複核佇列；2.12.0：`/analyze` 與 `/analyze/batch` 新增參數 `handover_format=v2`（只對點交照片）——`furniture`、`appliance` 每項改為 `{key, label, confidence, box, condition}`，`confidence` 是模型對該項的自評、沒給回 `null`，`box` 是 0～1 比例框，另有 `damages[]`；`field_confidences`、`needs_confirmation`、`extraction_confidence` 改依自評；`needs_review` 與複核佇列不變；不帶參數的回應不變（§3.5.1）；2.11.0：`/analyze` 新增參數 `contract_format=v2`（只對合約）——`document_fields.rental_terms` 的 `date_start`、`date_end`、`monthly_rent`、`deposit`、`rental_address`、`tenant_name` 各包成 `{value, position}`，電子 PDF 附值在原檔的位置，照片與掃描檔 `position` 為 `null`；不帶參數的回應不變（§3.2.1）；2.10.0：只影響帶參數 `transcript_format=v2`——照片讀不出結構時多補 `謄本.段`、`謄本.小段`（從全文以全國鄉鎮市區名稱切）、清單沒出來時用單值補第 1 筆 `標示部.層次` 與 `所有權部`、公設車位寫進 `共有部分[].其他登記事項`；`transcript_records` 是 `[]` 或不存在時依建號／地號組 1 張再補，不再回空；不帶參數的回應不變（§3.1.4）；2.9.0：`/analyze` 新增參數 `transcript_format=v2`（只對謄本）——`transcript_records` 每個值包成 `{value, position}`，附值在原檔的位置，照片的空格由 25 欄與清單補進，並拿掉 25 欄、6 種清單與 `transcripts`；不帶參數的回應不變；不帶參數的五種謄本舊格式公告棄用（§3.1.4、§3.1.5，新 schema `transcript_records_v2.schema.json`）；2.8.1：只改文件、回應不變——§3.1.3 的 jgb2 建物謄本表單對照表補「建議讀法」一欄：主建物層次 2–4、共有部分權利範圍與持分面積在清單 `floors`、`shared_parts` 就有，與 `transcript_records` 都有的值先讀清單；照片、掃描謄本的全文解析實測約 6%；§8 補 2026-11-09 另一批較難模擬照片的 25 欄本機實測 77%；2.8.0：欄位值一律是字串——模型補欄位時回的數字（如帳單 `amount` `714`、合約 `deposit` `50000`）改回字串 `"714"`、`"50000"`，見 §3；2.7.1：只改文件、回應不變——§3.5 點交照片範例改為實際格式（`furniture`、`appliance` 是物件陣列，8 個鍵與降級值寫明）；§3.2、§3.3 補金額欄位型別說明；2.7.0：`document_fields` 固定帶鍵——各頁 `structured_data` 有的鍵一律出現，各頁都是空值時回空值本身（`null`、`[]`、`""`），不再省略，見 §2；2.6.0：新增文件類型 `receipt`（收據、發票，回 `amount`、`date`），見 §3.3.1；修繕照片新增 `damaged_items`，見 §3.4；`/classify` 能回 `receipt`；帳單、合約的影像與掃描 PDF 可改由視覺模型直讀、不跑本機 OCR（伺服器設定 `DIRECT_READ_DOCUMENT_TYPES`，預設不列），直讀類與照片類一律呼叫模型、不看 `enable_llm`，見 §2.1、§6；2.5.0：每頁新增 `llm_calls`，列出這一頁每次 LLM 呼叫送到哪個供應商、模型、服務等級、成功或錯誤類別，見 §2.4；LLM 補欄位呼叫失敗時 `llm_used_for_extraction` 為 `false`；2.4.0：謄本新增固定輸出格式 `transcript_records`，每張謄本的鍵固定、沒印回 `null`／`[]`，附 JSON Schema，見 §3.1.3；2.3.0：謄本新增 `transcripts`，謄本上印的每一項都依原文標籤回傳，見 §3.1.2；2.2.0：謄本新增 `print_date`；原文印空白的欄位回 `null`；土地／建物專屬的必要欄位只在該部存在時要求，見 §3.1；2.1.2：合約欄位的值改為半形數字與標點、帶框字還原，見 §3.2；2.1.1：持分欄位的值統一為「分數」或「全部」，見 §3.1；2.1.0：謄本新增 6 個清單欄位與 `land_rights_scope`，並寫明各單值欄位的取值範圍）
+> 版本 2.14.0 ／ 2026-11-17（2.14.0：只影響帶參數 `transcript_format=v2`——謄本原文印「(空白)」的欄位，值仍是 `null`，但改回 `{"value": null, "position": 框在「(空白)」那段字上}`；原文沒印、讀不到的欄位照舊整個是 `null`；`transcript_records_v2.schema.json` 的 `value` 因此可為 `null`；不帶參數的回應不變，見 §3.1.4；2.13.1：回應格式不變——謄本的照片與無文字層 PDF 改由視覺模型 Qwen3 VL 讀字（伺服器 `OCR_ENGINES=["qwen"]`），不再跑本機 OCR；讀不到字或模型呼叫失敗時該頁文字為空、`needs_review: true`，不退回本機 OCR；`pages[].llm_calls` 多一種 `stage: "ocr_read"`；`transcript_format=v2` 照片的 `position` 改用模型回的框，見 §3.1.4、§6、§7；2.13.0：`bill` 新增 4 個鍵 `address`（用電地址）、`period_start`、`period_end`（計費期間，`YYYY-MM-DD`）、`kwh`（本期計費度數），一律帶鍵、讀不到回 `null`；`account_no` 也認台電的「電號」；既有 3 欄不變，見 §3.3；2.12.1：只改文件、回應不變——§2.5.3 第 1 點補寫：圖檔內容壞掉（副檔名正確但解不開）時那一筆仍是 `status: "ok"`，`structured_data`、`document_fields` 為 `null`，並會進複核佇列；2.12.0：`/analyze` 與 `/analyze/batch` 新增參數 `handover_format=v2`（只對點交照片）——`furniture`、`appliance` 每項改為 `{key, label, confidence, box, condition}`，`confidence` 是模型對該項的自評、沒給回 `null`，`box` 是 0～1 比例框，另有 `damages[]`；`field_confidences`、`needs_confirmation`、`extraction_confidence` 改依自評；`needs_review` 與複核佇列不變；不帶參數的回應不變（§3.5.1）；2.11.0：`/analyze` 新增參數 `contract_format=v2`（只對合約）——`document_fields.rental_terms` 的 `date_start`、`date_end`、`monthly_rent`、`deposit`、`rental_address`、`tenant_name` 各包成 `{value, position}`，電子 PDF 附值在原檔的位置，照片與掃描檔 `position` 為 `null`；不帶參數的回應不變（§3.2.1）；2.10.0：只影響帶參數 `transcript_format=v2`——照片讀不出結構時多補 `謄本.段`、`謄本.小段`（從全文以全國鄉鎮市區名稱切）、清單沒出來時用單值補第 1 筆 `標示部.層次` 與 `所有權部`、公設車位寫進 `共有部分[].其他登記事項`；`transcript_records` 是 `[]` 或不存在時依建號／地號組 1 張再補，不再回空；不帶參數的回應不變（§3.1.4）；2.9.0：`/analyze` 新增參數 `transcript_format=v2`（只對謄本）——`transcript_records` 每個值包成 `{value, position}`，附值在原檔的位置，照片的空格由 25 欄與清單補進，並拿掉 25 欄、6 種清單與 `transcripts`；不帶參數的回應不變；不帶參數的五種謄本舊格式公告棄用（§3.1.4、§3.1.5，新 schema `transcript_records_v2.schema.json`）；2.8.1：只改文件、回應不變——§3.1.3 的 jgb2 建物謄本表單對照表補「建議讀法」一欄：主建物層次 2–4、共有部分權利範圍與持分面積在清單 `floors`、`shared_parts` 就有，與 `transcript_records` 都有的值先讀清單；照片、掃描謄本的全文解析實測約 6%；§8 補 2026-11-09 另一批較難模擬照片的 25 欄本機實測 77%；2.8.0：欄位值一律是字串——模型補欄位時回的數字（如帳單 `amount` `714`、合約 `deposit` `50000`）改回字串 `"714"`、`"50000"`，見 §3；2.7.1：只改文件、回應不變——§3.5 點交照片範例改為實際格式（`furniture`、`appliance` 是物件陣列，8 個鍵與降級值寫明）；§3.2、§3.3 補金額欄位型別說明；2.7.0：`document_fields` 固定帶鍵——各頁 `structured_data` 有的鍵一律出現，各頁都是空值時回空值本身（`null`、`[]`、`""`），不再省略，見 §2；2.6.0：新增文件類型 `receipt`（收據、發票，回 `amount`、`date`），見 §3.3.1；修繕照片新增 `damaged_items`，見 §3.4；`/classify` 能回 `receipt`；帳單、合約的影像與掃描 PDF 可改由視覺模型直讀、不跑本機 OCR（伺服器設定 `DIRECT_READ_DOCUMENT_TYPES`，預設不列），直讀類與照片類一律呼叫模型、不看 `enable_llm`，見 §2.1、§6；2.5.0：每頁新增 `llm_calls`，列出這一頁每次 LLM 呼叫送到哪個供應商、模型、服務等級、成功或錯誤類別，見 §2.4；LLM 補欄位呼叫失敗時 `llm_used_for_extraction` 為 `false`；2.4.0：謄本新增固定輸出格式 `transcript_records`，每張謄本的鍵固定、沒印回 `null`／`[]`，附 JSON Schema，見 §3.1.3；2.3.0：謄本新增 `transcripts`，謄本上印的每一項都依原文標籤回傳，見 §3.1.2；2.2.0：謄本新增 `print_date`；原文印空白的欄位回 `null`；土地／建物專屬的必要欄位只在該部存在時要求，見 §3.1；2.1.2：合約欄位的值改為半形數字與標點、帶框字還原，見 §3.2；2.1.1：持分欄位的值統一為「分數」或「全部」，見 §3.1；2.1.0：謄本新增 6 個清單欄位與 `land_rights_scope`，並寫明各單值欄位的取值範圍）
 > 本文件由 `docs/API_INTEGRATION.md` 與 `docs/api/02-INTEGRATION-API.md` 合併而成。
 > 標示「實測」的數字皆取自線上環境(`54.248.201.66`),日期各自註明。
 > 唯一需要串的端點是 `POST /api/v1/analyze`；其餘為輔助。
@@ -522,10 +522,11 @@ curl -X POST "http://54.248.201.66:8085/api/v1/analyze/batch" \
 
 ##### 形狀：每個值包成 `{value, position}`
 
-- `document_fields.transcript_records` 每張謄本一筆，鍵與 §3.1.3 相同；每個不是 `null` 的值（字串、數字、布林，含空字串 `""`）換成 `{"value": 值, "position": 位置或 null}`，`null` 照舊是 `null`〔V2-08〕
+- `document_fields.transcript_records` 每張謄本一筆，鍵與 §3.1.3 相同；每個不是 `null` 的值（字串、數字、布林，含空字串 `""`）換成 `{"value": 值, "position": 位置或 null}`；`null` 照舊是 `null`，唯一例外是謄本原文印了「(空白)」（見下方〈原文印「(空白)」的欄位〉），那種格子是 `{"value": null, "position": 框}`〔V2-08〕
 - `判定`、`部是否印出` 兩個區塊不包，值照舊是字串與布林；`類型` 會包〔V2-08〕
 - 包裝後的值只有 `value`、`position` 兩鍵，不附信心度或來源〔V2-27〕
 - 逐鍵定義見 [`transcript_records_v2.schema.json`](transcript_records_v2.schema.json)，由 §3.1.3 的舊 schema 以固定規則衍生，單元測試鎖住兩檔同步；土地、建物、`類型` 為 `null` 三支互斥〔V2-23〕
+- 因為「(空白)」，包裝後物件的 `value` 在 schema 裡可為 `null`（`類型` 除外，一律有值）；下游只取 `value` 時行為不變，`{"value": null, ...}` 取到的仍是 `null`
 - 與舊 schema 不同處：`標示部.層次[].層次`、`層次[].面積`、`附屬建物[].用途`、`附屬建物[].面積` 可為 `null`（補值時名稱沒配上，面積照補）〔政策：AM-1〕
 
 ```jsonc
@@ -534,7 +535,8 @@ curl -X POST "http://54.248.201.66:8085/api/v1/analyze/batch" \
     "謄本": { "編號": { "value": "02080-000", "position": { "page": 1, "box": [0.62, 0.11, 0.71, 0.125], "unit": "ratio" } },
              "頁數": { "value": 2, "position": null }, … },
     "類型": { "value": "建物", "position": { "page": 1, "box": [0.3, 0.05, 0.6, 0.07], "unit": "ratio" } },
-    "標示部": { "建物門牌": { "value": "長春路14之1號", "position": { … } }, "主要用途": null,
+    "標示部": { "建物門牌": { "value": "長春路14之1號", "position": { … } }, "主要用途": { "value": null, "position": { … } },   // 謄本印「(空白)」:值是 null,框在「(空白)」上
+              "主要建材": null,                                   // 謄本沒印:整個是 null
               "層次": [{ "層次": { "value": "一層", "position": { … } }, "面積": { "value": 96.51, "position": { … } } }], … },
     "所有權部": [{ "所有權人": { "value": "新華開發股份有限公司", "position": { … } }, … }],
     "判定": { "他項權利": "有", "限制登記": "未見", "信託": "未見" },        // 不包
@@ -543,6 +545,16 @@ curl -X POST "http://54.248.201.66:8085/api/v1/analyze/batch" \
   }
 ]
 ```
+
+##### 原文印「(空白)」的欄位：`{"value": null, "position": 框}`
+
+- 地政謄本把沒有內容的欄位印成「主要用途：（空白）」「使用分區：（空白）」；這是讀到了「空」，不是讀不到。帶 v2 時這種單值欄位回 `{"value": null, "position": {…}}`，`position` 框在「(空白)」那幾個字上，下游照一般欄位畫框即可，不必判斷是不是空白〔BLK-1：`test_transcript_positions.py` `TestBlank`〕
+- 判斷依據同 `text_normalize.is_blank_marker`：整段值是括號註記（例：「(空白)」）、日期只剩補位字元（例：「民國---年--月--日」框在那段印出來的字上）、只有補位字元；標籤後面什麼都沒印的格子沒有字可框，不算〔BLK-1〕
+- 原文沒印、讀不到的欄位，照舊整個是 `null`，沒有位置（不給近似框）〔BLK-1〕
+- 清單型欄位（例：`其他登記事項` 印「(空白)」）沒有單值可包，維持 `[]`
+- 規則補值補進來的值不是從這段「(空白)」讀的，仍是 `{"value": 補進的值, "position": null}`〔V2-16〕
+- 電子 PDF：框到「(空白)」那段字（逐字框，與有值的欄位相同做法）；照片與無文字層 PDF：框到「同一行裡，欄位標籤後面緊接著印了(空白)」的那一行讀字結果，且只有剛好一行符合才框，0 行或多行都不框；標籤前一個字是中文字的不算（「類別」不對到「使用地類別」）；照片解析不出謄本結構時，同一張裡有兩個以上同標籤的 `null` 欄位（例：兩筆所有權部的出生日期）也不框，`value` 照舊是 `null`〔BLK-1：`test_transcript_positions_photo.py`〕
+- 不帶參數時沒有位置，回應與 2.13.1 相同
 
 ##### `position`：電子檔框到值，照片框到整行
 
@@ -560,6 +572,7 @@ curl -X POST "http://54.248.201.66:8085/api/v1/analyze/batch" \
 
 - 電子 PDF：對不到值本身；`謄本.頁數`；某一頁對位不一致時該頁全部；重建的紀錄與回應不同或組裝失敗時整份全部〔V2-18〕
 - 電子 PDF 補進的值（見下方補值）〔V2-16〕
+- 原文沒印的欄位（沒有「(空白)」可框）：整個欄位是 `null`，不是 `{"value": null, "position": null}`；照片找不到唯一一行時，印「(空白)」的欄位也是整個 `null`〔BLK-1〕
 - 照片與無文字層 PDF：找不到含該值的行；值是布林，或正規化後是空字串；圖片 EXIF 方向不是 1；頁文字與行框對不上；沒有行框（OCR 用到 Tesseract，或伺服器開了多引擎共識 `OCR_CONSENSUS_ENABLED`／`OCR_FUSION_METHOD=cross_check`）；組裝失敗〔V2-21〕
 - `position` 為 `null` 只表示沒有框，不表示值錯〔V2-18〕〔V2-21〕
 

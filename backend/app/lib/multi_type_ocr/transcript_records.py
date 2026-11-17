@@ -836,14 +836,16 @@ def fill_from_rules(records: List[Dict[str, Any]], fields: Dict[str, Any],
 
 
 def _wrap(o: Any, path: str = "", pos: Optional[Dict[str, Any]] = None) -> Any:
-    """每個有值葉子包成 {value, position}。pos={葉子路徑: (值, position)}(S2),路徑與值都對上才附位置,否則 None。"""
+    """每個有值葉子包成 {value, position}。pos={葉子路徑: (值, position)}(S2),路徑與值都對上才附位置,否則 None。
+    值為 None 的葉子:位置表裡這條路徑的值也是 None(謄本印「(空白)」,BLK-1)→ {"value": None, "position": {...}};
+    其他 None 照舊輸出 None。"""
     if isinstance(o, dict):
         return {k: _wrap(v, f"{path}.{k}" if path else k, pos) for k, v in o.items()}
     if isinstance(o, list):
         return [_wrap(v, f"{path}[{i}]", pos) for i, v in enumerate(o)]
-    if o is None:
-        return None
     hit = (pos or {}).get(path)
+    if o is None:
+        return {"value": None, "position": hit[1]} if hit and hit[0] is None else None
     p = hit[1] if hit and type(hit[0]) is type(o) and hit[0] == o else None
     return {"value": o, "position": p}
 
