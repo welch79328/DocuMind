@@ -333,6 +333,14 @@ class TestRunQwen:
             ("ocr_read", "bedrock", "qwen.qwen3-vl-235b-a22b", True)
         ]
 
+    async def test_flex_waits_full_timeout_for_whole_page_read(self, bedrock):
+        """整頁讀字一頁正常 30–40 秒,flex 不套 20 秒的短逾時,等滿 BEDROCK_TIMEOUT_SECONDS"""
+        from app.lib.llm_service import providers
+
+        await EngineManager(engines=["qwen"]).extract_text_multi_engine(BGR)
+        assert bedrock.bodies[0]["service_tier"] == "flex"
+        assert bedrock.requests[0].extensions["timeout"]["read"] == providers.BEDROCK_TIMEOUT_SECONDS
+
 
 # --------------------------------------------------------------------------- #
 # 失敗:空結果、不退回本機 OCR(R6、A7)

@@ -259,7 +259,7 @@ c 系列非 burstable)等**系統穩定後**再討論。
 `bedrock` 是 AWS Bedrock 東京區的 OpenAI 相容端點(`bedrock-runtime.ap-northeast-1`),預設模型 Qwen3 VL 235B:
 - 金鑰 `BEDROCK_API_KEY`(只從設定讀取),模型 `BEDROCK_MODEL`(預設 `qwen.qwen3-vl-235b-a22b`)。
   區域寫死東京;model ID 帶 `jp.`／`global.`(跨區推論設定檔)會直接報錯。
-- 每次呼叫先送 `service_tier: "flex"`;遇 429、503 或逾時(單次 90 秒),同模型同區改 `"default"` 重送一次;
+- 每次呼叫先送 `service_tier: "flex"`;遇 429、503 或逾時,同模型同區改 `"default"` 重送一次。逾時:flex 那次 20 秒(`BEDROCK_FLEX_TIMEOUT_SECONDS`;flex 排隊時會等滿,jgb2 點交 AI 畫面不到 78 秒就斷線),default 那次 90 秒(`BEDROCK_TIMEOUT_SECONDS`);謄本整頁讀字一頁正常 30–40 秒,flex 也等 90 秒(`engine_manager._run_qwen` 設 `provider.flex_timeout_seconds`);
   仍失敗就走既有降級(規則結果或低信心進複核),**不會改送 OpenAI**。
 - 送 Bedrock 的影像與送 OpenAI 的相同;只有超過單張 3.75MB 上限時,才為 Bedrock 請求以同尺寸 JPEG 重新編碼。
 - 每次呼叫實際送到哪、服務等級、成功或錯誤類別,寫在回應每頁的 `llm_calls`(見 `docs/api/INTEGRATION.md` §2.4)。

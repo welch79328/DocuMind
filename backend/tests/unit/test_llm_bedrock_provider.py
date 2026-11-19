@@ -207,6 +207,24 @@ class TestA7_5_FlexThenDefaultOnce:
         assert result["account_no"] is not None            # 規則結果保留
         assert result["llm_used_for_extraction"] is False
 
+    async def test_flex_uses_short_timeout_then_default_uses_full(
+        self, monkeypatch, no_network, openai_must_not_be_called
+    ):
+        """flex 只等 BEDROCK_FLEX_TIMEOUT_SECONDS(20 秒),逾時改送 default 等 BEDROCK_TIMEOUT_SECONDS"""
+        from app.lib.llm_service import providers
+
+        recorder = install_bedrock(
+            monkeypatch, BedrockRecorder([httpx.ReadTimeout("t"), bedrock_ok("ok", tier="default")])
+        )
+        assert await create_provider("bedrock").call("hello") == "ok"
+        assert [b["service_tier"] for b in recorder.bodies] == ["flex", "default"]
+        assert [r.extensions["timeout"]["read"] for r in recorder.requests] == [
+            providers.BEDROCK_FLEX_TIMEOUT_SECONDS, providers.BEDROCK_TIMEOUT_SECONDS,
+        ]
+        assert providers.BEDROCK_FLEX_TIMEOUT_SECONDS == 20.0
+        # 正對照:兩個值確實不同,上面的比對才分得出誰用了哪個
+        assert providers.BEDROCK_FLEX_TIMEOUT_SECONDS < providers.BEDROCK_TIMEOUT_SECONDS
+
     def test_timeout_and_retry_budget_are_explicit(self):
         """SR-9:逾時 ≤120 秒;用 httpx(不會自動重試),不經會自己重試的 OpenAI SDK"""
         import inspect

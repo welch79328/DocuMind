@@ -441,6 +441,11 @@ BEDROCK_REENCODE_JPEG_QUALITY = 92
 # 單次請求的逾時(秒)。flex 失敗只再送一次 default,最壞情況一次呼叫約 2 倍;
 # 線上 nginx 讀取逾時 600 秒,單 worker,不能讓一次呼叫無限等(SR-9)。
 BEDROCK_TIMEOUT_SECONDS = 90.0
+# flex 那一次的逾時(秒),等不到就改送 default。flex 正常回應很快(點交照片 14 天中位 3.7 秒、
+# 帳單 3.0 秒、合約 9.0 秒),排隊時卻會等滿 90 秒;jgb2 點交 AI 畫面不到 78 秒就斷線
+# (2026-11-19 15:40:46 收到、15:42:04 畫面已報錯),所以 flex 只等 20 秒。
+# 謄本讀字一頁正常要 30–40 秒,由呼叫端改回 BEDROCK_TIMEOUT_SECONDS(engine_manager)。
+BEDROCK_FLEX_TIMEOUT_SECONDS = 20.0
 # 這三種失敗才改用標準等級重送一次(R2、D-3);其他錯誤不重送
 _BEDROCK_RETRYABLE_STATUS = (429, 503)
 _BEDROCK_FORBIDDEN_MODEL_PREFIXES = ("jp.", "global.")
@@ -488,6 +493,8 @@ class BedrockProvider(LLMProvider):
     ENDPOINT = "https://bedrock-runtime.ap-northeast-1.amazonaws.com/openai/v1"
     # 測試注入 httpx.MockTransport 用;正式環境為 None(httpx 預設傳輸)
     _transport = None
+    # flex 那一次等多久;回應本來就長的呼叫端(謄本讀字)可改成 BEDROCK_TIMEOUT_SECONDS
+    flex_timeout_seconds: float = BEDROCK_FLEX_TIMEOUT_SECONDS
 
     def __init__(self, model: Optional[str] = None):
         if not settings.LLM_CLOUD_ENABLED:
@@ -543,7 +550,9 @@ class BedrockProvider(LLMProvider):
         return value
 
     # -- 呼叫 ------------------------------------------------------------- #
-    async def _post(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+    async def _post(
+        self, payload: Dict[str, Any], timeout: float = BEDROCK_TIMEOUT_SECONDS
+    ) -> Dict[str, Any]:
         """送一次請求;失敗一律轉成只帶類別的 BedrockCallError。"""
         import asyncio
 
@@ -552,14 +561,14 @@ class BedrockProvider(LLMProvider):
         headers = {"Authorization": f"Bearer {self._api_key()}"}
         try:
             async with httpx.AsyncClient(
-                timeout=httpx.Timeout(BEDROCK_TIMEOUT_SECONDS, connect=10.0),
+                timeout=httpx.Timeout(timeout, connect=10.0),
                 transport=self._transport,
             ) as client:
                 response = await asyncio.wait_for(
                     client.post(
                         f"{self.ENDPOINT}/chat/completions", json=payload, headers=headers
                     ),
-                    timeout=BEDROCK_TIMEOUT_SECONDS,
+                    timeout=timeout,
                 )
         except (httpx.TimeoutException, asyncio.TimeoutError):
             raise BedrockCallError("timeout", retryable=True) from None
@@ -582,7 +591,8 @@ class BedrockProvider(LLMProvider):
 
     async def _attempt(self, payload: Dict[str, Any], tier: str) -> Dict[str, Any]:
         try:
-            data = await self._post({**payload, "service_tier": tier})
+            timeout = self.flex_timeout_seconds if tier == "flex" else BEDROCK_TIMEOUT_SECONDS
+            data = await self._post({**payload, "service_tier": tier}, timeout)
         except BedrockCallError as exc:
             record_llm_call(
                 provider="bedrock", model=self.model, ok=False,

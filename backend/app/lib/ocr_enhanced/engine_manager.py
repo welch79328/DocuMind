@@ -581,6 +581,8 @@ class EngineManager:
         start_time = time.time()
         try:
             provider = providers.create_provider("bedrock")
+            # 整頁讀字回應長,一頁正常 30–40 秒;flex 用預設的 20 秒會每頁都白等再重送
+            provider.flex_timeout_seconds = providers.BEDROCK_TIMEOUT_SECONDS
             image_data = await asyncio.to_thread(_encode_qwen_image, image)
             with llm_stage(STAGE_OCR_READ):
                 response = await provider.call(
