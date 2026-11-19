@@ -221,6 +221,10 @@ class Settings(BaseSettings):
     # 2. **提高解析度換不到品質。** 102 DPI 與 114 DPI 在同一頁上行數相同(33)、
     #    信心度 0.9826 vs 0.9837,差異在雜訊範圍內;而 0.98 已高於謄本基準的 0.927。
     #    這條管線的瓶頸不在解析度。
+    #
+    # 例外:謄本在 OCR_ENGINES 只有 qwen 時不受此上限與下方 OCR_MAX_IMAGE_PIXELS 約束,
+    # PDF 頁與照片都改長邊 2000(本機不跑 OCR;低解析度下 qwen 的行框會偏行,
+    # 見 TranscriptProcessor._cap_upload_image)。
     OCR_MAX_RENDER_PIXELS: int = 1_000_000                  # A4 約 102 DPI
     OCR_RENDER_DPI: int = 300                               # 目標 DPI,受上方像素上限約束
 

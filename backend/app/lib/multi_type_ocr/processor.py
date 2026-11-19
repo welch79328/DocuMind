@@ -101,8 +101,25 @@ def _cap_image_pixels(image: Image.Image) -> Image.Image:
     return image
 
 
+def _cap_long_edge(image: Image.Image, long_edge: int) -> Image.Image:
+    """把影像長邊縮到 long_edge 以內(等比例,就地修改並回傳同一物件);沒超過就不動。"""
+    width, height = image.size
+    if max(width, height) <= long_edge:
+        return image
+    image.thumbnail((long_edge, long_edge), Image.LANCZOS)
+    logger.info(
+        "上傳影像長邊超過 %d,已縮小:%dx%d → %dx%d",
+        long_edge, width, height, image.size[0], image.size[1],
+    )
+    return image
+
+
 class DocumentProcessor(ABC):
     """文件處理器共同基類:定義 analyze 契約與 process 模板"""
+
+    def _cap_upload_image(self, image: Image.Image) -> Image.Image:
+        """上傳影像進 analyze 前的尺寸上限;預設是 OCR_MAX_IMAGE_PIXELS 的面積上限。"""
+        return _cap_image_pixels(image)
 
     @abstractmethod
     async def analyze(
@@ -132,7 +149,7 @@ class DocumentProcessor(ABC):
         logger.info(f"開始處理頁面 {page_number}/{total_pages}: {filename}")
         try:
             loaded_image = Image.open(io.BytesIO(file_contents))
-            loaded_image = _cap_image_pixels(loaded_image)
+            loaded_image = self._cap_upload_image(loaded_image)
             image = loaded_image.convert("RGB") if loaded_image.mode != "RGB" else loaded_image
 
             original_image_bytes = io.BytesIO()

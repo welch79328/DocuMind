@@ -13,7 +13,7 @@ from PIL import Image
 from .processor import OcrDocumentProcessor
 from ..ocr_enhanced.config import PreprocessConfig
 from ..ocr_enhanced.preprocessor import TranscriptPreprocessor
-from ..ocr_enhanced.engine_manager import EngineManager
+from ..ocr_enhanced.engine_manager import EngineManager, is_qwen_only
 from ..ocr_enhanced.postprocessor import TranscriptPostprocessor
 from .transcript_field_extractor import TranscriptFieldExtractor
 
@@ -79,6 +79,21 @@ class TranscriptProcessor(OcrDocumentProcessor):
 
         logger.info("TranscriptProcessor 初始化完成")
 
+    def _cap_upload_image(self, image: Image.Image) -> Image.Image:
+        """引擎只有 qwen:照片縮到長邊 2000(同 PDF 頁 analyze_service._page_render_scale),
+        不用 OCR_MAX_IMAGE_PIXELS 的 1.0M 面積上限。
+
+        那個上限是為 PaddleOCR 的記憶體設的;只送 qwen 時本機不跑 OCR。
+        2026-11-19 惠文路謄本第 1 頁,同一頁各送 2 次:880×1138 的行框上下偏移中位
+        0.37／0.33 行、12 個已知行只有 3／4 個在 1/4 行內;長邊 2000 是 0.15／0.19 行、
+        9／11 個,讀字時間都約 52 秒。
+        """
+        if is_qwen_only(self.engine_manager.engines):
+            from .direct_read_processor import DIRECT_READ_LONG_EDGE
+            from .processor import _cap_long_edge
+            return _cap_long_edge(image, DIRECT_READ_LONG_EDGE)
+        return super()._cap_upload_image(image)
+
     async def preprocess(self, image: Image.Image) -> Image.Image:
         """
         預處理圖像
@@ -100,7 +115,7 @@ class TranscriptProcessor(OcrDocumentProcessor):
         # 引擎只有 qwen:送原圖,不做浮水印移除、二值化、解析度調整。
         # 2026-11-09 評估 C2 量的就是原圖;那些前處理是為 PaddleOCR 調的。
         # qwen 回的框是相對整張圖的比例座標,不受影響。
-        if set(self.engine_manager.engines) == {"qwen"}:
+        if is_qwen_only(self.engine_manager.engines):
             return image
 
         try:

@@ -73,6 +73,21 @@ def _direct_read_scale(rect) -> float:
     return DIRECT_READ_LONG_EDGE / long_edge_pt
 
 
+def _page_render_scale(rect, document_type: str, direct_read: bool) -> float:
+    """PDF 單頁渲染倍率。
+
+    直讀,或謄本在引擎只有 qwen 時,渲染到長邊 2000;其餘受 OCR_MAX_RENDER_PIXELS 約束。
+    謄本 qwen 用長邊 2000 的理由見 TranscriptProcessor._cap_upload_image:
+    1.0M 像素上限(A4 約 880×1138)下 qwen 回的行框上下會偏,位置對不到該行。
+    """
+    from app.config import settings
+    from app.lib.ocr_enhanced.engine_manager import is_qwen_only
+
+    if direct_read or (document_type == "transcript" and is_qwen_only(settings.OCR_ENGINES)):
+        return _direct_read_scale(rect)
+    return _render_scale(rect)
+
+
 def _merge_page_structured_data(
     pages: List[dict], keep_empty_keys: bool = True
 ) -> Optional[Dict[str, Any]]:
@@ -598,9 +613,7 @@ class AnalyzeService:
                 if is_pdf:
                     doc = fitz.open(stream=file_contents, filetype="pdf")
                     page = doc[page_num - 1]
-                    scale = (
-                        _direct_read_scale(page.rect) if direct_read else _render_scale(page.rect)
-                    )
+                    scale = _page_render_scale(page.rect, document_type, direct_read)
                     mat = fitz.Matrix(scale, scale)
                     pix = page.get_pixmap(matrix=mat)
                     page_bytes = pix.tobytes("png")

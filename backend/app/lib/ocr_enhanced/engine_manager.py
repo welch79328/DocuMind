@@ -181,6 +181,11 @@ def build_qwen_engine_result(
     }
 
 
+def is_qwen_only(engines) -> bool:
+    """引擎清單只有 qwen(不跑本機 OCR)。"""
+    return set(engines or []) == {"qwen"}
+
+
 class EngineManager:
     """
     OCR 引擎管理器

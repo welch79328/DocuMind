@@ -119,7 +119,7 @@ load average (2 vCPU)            →  51.35
 |---|---|---|
 | 1 | 容器記憶體上限 backend 2g / postgres 512m / frontend 256m / nginx 128m | `docker-compose.yml` |
 | 2 | 可用記憶體低於 `OCR_PARALLEL_MIN_AVAILABLE_MB`(預設 1024)時,並行自動退回循序 | `lib/ocr_enhanced/memory_guard.py` |
-| 3 | 單頁渲染像素上限 `OCR_MAX_RENDER_PIXELS`(預設 1.0M);A4 由 300 DPI/8.7M 降為約 102 DPI/1.0M;上傳影像另有 `OCR_MAX_IMAGE_PIXELS`(預設 1.0M) | `app/config.py`、`services/analyze_service.py` |
+| 3 | 單頁渲染像素上限 `OCR_MAX_RENDER_PIXELS`(預設 1.0M);A4 由 300 DPI/8.7M 降為約 102 DPI/1.0M;上傳影像另有 `OCR_MAX_IMAGE_PIXELS`(預設 1.0M);謄本在 `OCR_ENGINES=["qwen"]` 時兩者都不套,PDF 頁與照片改長邊 2000(本機不跑 OCR) | `app/config.py`、`services/analyze_service.py`、`multi_type_ocr/transcript_processor.py` |
 
 
 ### 2026-09-03 的實測與變更
